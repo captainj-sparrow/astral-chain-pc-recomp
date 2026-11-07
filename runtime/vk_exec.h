@@ -154,7 +154,7 @@ typedef struct {
                                                                // their pass, in-pass barriers, pass restarts, layout
                                                                // transitions
     uint64_t dropped[VK_DROP_N];         // VK_DROP_*: no program bound, render disabled, empty scissor, zero count,
-                                         // other (no vertex stage, untranslatable shader, AC_SKIP_*, FXAA off)
+                                         // other (no vertex stage, untranslatable shader, AC_SKIP_*, SMAA off)
 } VkExecFrame;
 extern VkExecFrame vk_exec_frame;
 void vk_exec_frame_written(const tex_t *t);                    // vk_texture_gpu_written: t rendered or copied into
@@ -180,6 +180,11 @@ void vk_dump_present(uint64_t frame);    // vk_be_present: waits for the dump fr
 #define VK_C0_BYTES 0x800u
 void vk_c0_fill(uint8_t bank[VK_C0_BYTES], int stage, const p_bind_buf ssbo[16], const p_bind_buf ubo[16],
                 const uint32_t dispatch[3], uint32_t base_instance);
+
+// vk_dlaa.c: once DLSS has scaled the scene this frame, passes larger than the scene's composite target vk_dlaa_swap_img
+// sample DLSS's output vk_dlaa_swap_view in its place, so the game's scaling draw scales DLSS's picture.
+extern const VkTexImage *vk_dlaa_swap_img;
+extern VkImageView vk_dlaa_swap_view;
 
 // Handler hooks. vk_exec.c defines both WEAK: they stop with rt_fatal naming the op.
 // vk_exec_draw.c: OP_DRAW, OP_DRAW_IDX, OP_DISPATCH, OP_BIND_* (program, state, vattr, vstream, vbuf, ubo, ssbo, tex,

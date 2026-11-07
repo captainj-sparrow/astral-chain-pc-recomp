@@ -225,6 +225,7 @@ void vk_usnap_end(uint64_t fence);
 int vk_usnap_find(uint64_t addr, uint64_t n, uint64_t align, VkDescriptorBufferInfo *out);
 void vk_usnap_drop(uint64_t addr, uint64_t n);   // the replay makes the GPU write [addr, addr+n) of guest memory
 uint64_t vk_usnap_gen(void);                      // changes whenever a binding may resolve differently
+const uint8_t *vk_usnap_bytes(uint64_t addr, uint64_t n);   // the snapshot's copy for the CPU, NULL: not in it
 void vk_usnap_shutdown(void);                     // vk_exec_draw_shutdown: frees the arenas
 void vk_mem_mirror_begin(void);
 int vk_mem_mirror_end(VkCommandBuffer cb, uint64_t fence);
@@ -390,6 +391,7 @@ void vk_texture_new_submit(void);                   // a queue submit starts: dr
 uint32_t vk_texture_epoch(void);                    // the write-watch snapshot epoch vk_texture_new_submit started
 VkSampler vk_sampler_by_id(int id);                 // VK_NULL_HANDLE for an empty slot
 VkSampler vk_sampler_for(const samp_par *s);        // cached by content
+void vk_sampler_dlss_bias(float b);                 // vk_dlaa.c: LOD bias of the scene's material textures (<= 0)
 int vk_sampler_params(int id, samp_par *out);       // parameters of a sampler slot; 0 for an empty slot
 
 // 8-bit RGBA PNG with stored deflate blocks (boot.c); stops with rt_fatal when the file cannot be written.

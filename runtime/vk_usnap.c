@@ -301,6 +301,15 @@ void vk_usnap_drop(uint64_t addr, uint64_t n) {
 
 uint64_t vk_usnap_gen(void) { return U.gen; }
 
+// The snapshot's bytes of [addr, addr+n) for the CPU, as the submission's GPU reads them (vk_dlaa.c reads the camera's
+// view-projection). The arena may be write-combined video memory: fine for a few reads a frame, not for bulk.
+const uint8_t *vk_usnap_bytes(uint64_t addr, uint64_t n) {
+    VkDescriptorBufferInfo bi;
+    if (!vk_usnap_find(addr, n, 1, &bi)) return NULL;
+    U.hits--;   // a CPU read, not a binding
+    return U.arena->map + bi.offset;
+}
+
 // The arenas back on the free list (vk_exec_draw_shutdown: the device is idle, every completion ran).
 void vk_usnap_shutdown(void) {
     plat_mutex_lock(&free_lock);

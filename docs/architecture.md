@@ -115,10 +115,39 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   HUD's white. Without an HDR10 surface format (Windows with "Use HDR" off, a compositor without colour management)
   the swapchain stays SDR. `AC_SHOTS` reads the window texture, so its pictures clip highlights in HDR.
 - DLAA (`vk_dlaa.c`, `dlaa`, off by default). NVIDIA DLSS at the scene's own size, through the driver's NGX core loaded
-  at run time (no SDK code compiled in). It runs on the R11G11B10F light target right before the bloom chain's first
-  pass, so post effects and the HUD read the anti-aliased picture. The scene's draws get a sub-pixel Halton viewport
-  jitter; motion vectors are camera-only, reprojected from the scene depth through this and last frame's
-  view-projection of the scene camera block (constant bank c4). `fxaa` switches the game's own FXAA pass.
+  at run time (no SDK code compiled in; `_nvngx.dll` on Windows, `libnvidia-ngx.so.1` on Linux). It runs on the R11G11B10F light target at the bloom chain's third level, after
+  the light target's last pass, so the composite, post effects and the HUD read the anti-aliased picture. The scene's
+  draws get a sub-pixel Halton viewport jitter (16 phases for DLAA, 8 x the squared upscaling ratio otherwise); motion
+  vectors are the camera's, reprojected from the scene depth through one matrix, last frame's view-projection of the
+  scene camera block (constant bank c3) times the inverse of this frame's, made in double precision on the CPU. Over
+  them goes what moves on its own (`AC_DLAA_OBJMV`, on): the depth prepass's draws whose position reads an object's
+  blocks (place c14, bones and such) are drawn again into the motion image with a last-frame variant of their vertex
+  shader (translator patch 0012) and last frame's blocks. Astral Chain hands those blocks out at new addresses every
+  frame, so `vk_mvprev.c` keeps its own copy of each object's blocks and finds the object again next frame by its draw
+  (program, index and vertex buffers, counts) and position; objects whose blocks did not change are left to the camera's
+  vectors. The scene camera is the `c3` block most scene draws bind (a few bind another camera); a camera cut (the view
+  turns over 30 degrees or moves over 5 units in a frame) starts a new DLSS history. `dlss_preset` picks the DLSS model
+  (default: NVIDIA's per mode, K for DLAA); `AC_DLAA_TIMES=1` logs its GPU and CPU cost and `AC_DLAA_MVDEBUG=1` shows
+  the motion vectors in place of the picture. `dlss_char_mask` (off by default) adds DLSS's bias mask where pixels move
+  on their own and where they were last frame. `AC_MV_CHECK=<frames>` measures how well the vectors explain the picture
+  (warp and end-point errors of the camera's and the final vectors). `smaa` switches the game's own SMAA (its edge,
+  weight and blending passes; an old `fxaa` line is read as `smaa`).
+- DLSS upscaling (`dlss = quality | balanced | performance | ultra_performance`, live, as in the TotK Recomp). The game
+  keeps three dynamic-resolution levels, each with its own scene targets, and draws its output and HUD at the render
+  size `res1080` sets. With DLSS able to run (`dlaa = 1`, `nvngx_dlss.dll` there) the `scene` patch set
+  (`recomp/patches-v101.txt`) gives every level the size `resolution.c` writes on the patch page: 1920x1080 for `dlaa`,
+  1280x720, 1120x630, 960x540 or 640x360 for the others. The scene must be 32n x 18n both as the game sees it and after
+  `ssaa`, or the first 3D frame loses the device, with or without DLSS evaluating (the failing pass is not identified:
+  `resolution.c` `scene_for` lists the measured sizes). So at `ssaa = 1440p` the modes render 1248x702, 1152x648, 960x540
+  and 672x378, and with `res1062` and `ssaa`, where no smaller size fits, DLSS runs as DLAA. A mode change in the menu
+  makes the framework's per-frame window update (0x9db520), on the game's thread, write the new size and report a display
+  change, so the game runs its own docked / handheld sequence, which rebuilds the scene targets at the next frame
+  (`AC_DLSS_CYCLE=<frames>` steps through the modes for tests). With `dlaa` switched off, NGX not up or DLSS failed in the
+  run, the scene goes back to the game's size the same way. The whole scene chain, bloom and composite
+  included, then runs at that size and the game's SMAA blending pass scales it to the output. DLSS runs on the
+  composite at the begin of that pass, and the pass samples DLSS's output in the composite's place (`vk_dlaa_swap_img`);
+  SMAA is off meanwhile and material textures take a mip bias of log2(scene / output). `ssaa` multiplies both sizes
+  (2160p performance: 1920x1080 to 3840x2160). With `dlaa = 0` the set is off and the game renders as before.
 - Occlusion queries never block the CPU; a result that is not ready counts as visible.
 - ASTC textures are uploaded as they are where the device reports `textureCompressionASTC_LDR`, and decoded by a
   compute shader everywhere else (`vk_astc.c`, `AC_ASTC`), then re-encoded on the GPU: the alpha scan of the raw

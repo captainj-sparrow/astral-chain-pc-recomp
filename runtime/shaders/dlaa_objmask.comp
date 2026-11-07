@@ -1,0 +1,38 @@
+#version 450
+// DLSS's bias mask for moving objects (vk_dlaa.c, dlss_char_mask): where the mask is high DLSS takes more of this
+// frame's colour and less of its history, which shortens the faint trails animated characters leave, at the cost of
+// some anti-aliasing on them. As the TotK Recomp's dlaa_mv.comp mask, with Astral Chain's object pixels in place of
+// TotK's G-buffer classes: a pixel whose final vector (after the per-object motion pass, vk_exec_draw.c) differs from
+// the camera's by more than OBJ_MIN render pixels moves on its own (the TotK Recomp's vk_mvcheck.c uses the same
+// rule). It is marked in obj_cur for the next frame. A pixel gets pc.bias when it moves on its own now, or when the
+// place its surface came from did last frame (last frame's marks at p + mv, 3x3): there the history holds the
+// object, which is the trail.
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(binding = 0, rg16f) uniform readonly image2D cam;      // the camera's vectors (a copy before the object pass)
+layout(binding = 1, r8) uniform readonly image2D obj_prev;    // last frame's marks
+layout(binding = 2, rg16f) uniform readonly image2D mv;       // the final vectors, last frame's position minus this
+layout(binding = 3, r8) uniform writeonly image2D mask_out;
+layout(binding = 4, r8) uniform writeonly image2D obj_cur;    // this frame's marks
+layout(push_constant) uniform P {
+    vec2 size;       // render size in pixels
+    float bias;      // the mask value on object pixels
+    float prev_ok;   // 1: obj_prev holds last frame's marks at this size
+} pc;
+
+const float OBJ_MIN = 0.25;
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= int(pc.size.x) || p.y >= int(pc.size.y)) return;
+    vec2 v = imageLoad(mv, p).xy;
+    vec2 d = v - imageLoad(cam, p).xy;
+    float now = dot(d, d) > OBJ_MIN * OBJ_MIN ? 1.0 : 0.0, was = 0.0;
+    imageStore(obj_cur, p, vec4(now));
+    if (pc.prev_ok > 0.5) {
+        ivec2 q = ivec2(floor(vec2(p) + 0.5 + v)), hi = ivec2(pc.size) - 1;
+        for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++)
+                was = max(was, imageLoad(obj_prev, clamp(q + ivec2(dx, dy), ivec2(0), hi)).r);
+    }
+    imageStore(mask_out, p, vec4(max(now, was) * pc.bias));
+}

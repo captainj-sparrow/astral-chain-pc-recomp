@@ -87,6 +87,7 @@ struct GfxShader {
     uint32_t in_mask, out_mask;                            // user Locations of Input / Output variables
     GfxShaderIo in[32], out[32];
     uint32_t local[3];
+    uint32_t mvprev_banks;                                 // .res.json "mvprev_banks" (translator patch 0012), 0 none
 };
 
 static PlatMutex cache_lock = PLAT_MUTEX_INIT;                  // memory cache
@@ -601,6 +602,27 @@ static GfxShader *disk_load(const uint8_t key[32], const uint8_t *iid) {
     return s ? s : disk_load_from(key, iid, 0);
 }
 
+// A shader the runtime made itself (vk_mvobj.c's motion fragment shader): its key is the sha256 of SPIR-V and
+// reflection, so the pipeline caches tell it apart. (As the TotK Recomp's gfx_shader.c gfx_shader_own.)
+const GfxShader *gfx_shader_own(const uint32_t *spirv, uint64_t words, const char *res_json) {
+    if (words < 5 || spirv[0] != 0x07230203 || !spirv_complete(spirv, words) ||
+        !reflection_valid(res_json, strlen(res_json)))
+        return NULL;
+    GfxShader *s = calloc(1, sizeof *s);
+    if (!s) return NULL;
+    size_t rn = strlen(res_json);
+    uint8_t *buf = malloc(words * 4 + rn);
+    s->spirv = malloc(words * 4), s->reflection = malloc(rn + 1);
+    if (!buf || !s->spirv || !s->reflection) rt_fatal("gfx_shader: out of memory");
+    memcpy(buf, spirv, words * 4), memcpy(buf + words * 4, res_json, rn);
+    rt_sha256(buf, words * 4 + rn, s->key);
+    free(buf);
+    memcpy(s->spirv, spirv, words * 4), memcpy(s->reflection, res_json, rn + 1);
+    s->words = words, s->reflection_size = rn;
+    reflect(s);
+    return s;
+}
+
 // ---- request building
 
 static const char *const tex_names[] = {NULL, "1d", "1darray", "buffer", "2d", "2darray", "2dms", "2dmsarray", "3d",
@@ -766,6 +788,7 @@ static void reflect(GfxShader *s) {
     char stage[8];
     json_str(js, js + strlen(js), "stage", stage, sizeof stage);
     s->stage = !strcmp(stage, "cs") ? GFX_STAGE_CS : !strcmp(stage, "ps") ? GFX_STAGE_FS : GFX_STAGE_VS;
+    s->mvprev_banks = (uint32_t)json_int(js, js + strlen(js), "mvprev_banks", 0);
     for (int k = 0; k < GFX_RES_KINDS; k++) {
         int count = json_objects(js, kinds[k], NULL, s, k);
         s->res[k] = calloc(count ? count : 1, sizeof *s->res[k]);
@@ -984,7 +1007,7 @@ static size_t pack_answers(uint8_t *o, const GfxShaderAnswers *a) {
     memcpy(p, a->frag_out_type, 8), p += 8;
     for (int i = 0; i < 3; i++) *p++ = (uint8_t)a->local[i], *p++ = (uint8_t)(a->local[i] >> 8);
     put_u32(&p, a->shared_bytes);
-    *p++ = a->depth_minus_w;
+    *p++ = (uint8_t)(a->depth_minus_w | (a->mvprev ? 0x80 : 0));
     *p++ = a->alpha_func;
     memcpy(p, &a->alpha_ref, 4), p += 4;
     return (size_t)(p - o);
@@ -1019,6 +1042,7 @@ static void mask_answers(const GfxShaderAnswers *a, const UseMask *m, GfxShaderA
     memcpy(o->local, a->local, sizeof o->local);
     o->shared_bytes = a->shared_bytes;
     o->alpha_func = a->alpha_func, o->alpha_ref = a->alpha_ref;   // set for fragment shaders only (vk_pipeline_answers)
+    o->mvprev = a->mvprev;   // another translation, not an answer the use mask covers
 }
 
 // The cache key of an input id under the current translator.
@@ -1107,6 +1131,7 @@ static size_t build_request(char *o0, const char *hex, const char *stage, const 
     if (!strcmp(stage, "ps") && (control[0x718] & 1)) o += sprintf(o, ",\"early_fragment_tests\":true");
     int si = !strcmp(stage, "vs") ? 0 : !strcmp(stage, "cs") ? 2 : 1;   // gfx_shader_set_host answers
     if (!host_f64) o += sprintf(o, ",\"softfloat64\":true");
+    if (a && a->mvprev && !strcmp(stage, "vs")) o += sprintf(o, ",\"mvprev\":true");
     if (host_sbuf) o += sprintf(o, ",\"sbuf_align\":%u", host_sbuf);
     if (host_sg[si] != 32) o += sprintf(o, ",\"subgroup\":%u", host_sg[si]);
     if (host_gather) o += sprintf(o, ",\"gather_bias\":%u", host_gather);
@@ -1665,6 +1690,8 @@ uint32_t gfx_shader_inputs(const GfxShader *s, GfxShaderIo io[32]) {
     return s->in_mask;
 }
 
+uint32_t gfx_shader_mvprev_banks(const GfxShader *s) { return s->mvprev_banks; }
+
 uint32_t gfx_shader_outputs(const GfxShader *s, GfxShaderIo io[32]) {
     if (io) memcpy(io, s->out, sizeof s->out);
     return s->out_mask;
@@ -1754,7 +1781,7 @@ static void unpack_answers(const uint8_t *p, GfxShaderAnswers *a) {
     memcpy(a->frag_out_type, p, 8), p += 8;
     for (int i = 0; i < 3; i++) a->local[i] = (uint16_t)(p[0] | p[1] << 8), p += 2;
     memcpy(&a->shared_bytes, p, 4), p += 4;
-    a->depth_minus_w = *p++;
+    a->depth_minus_w = *p & 0x7f, a->mvprev = *p >> 7, p++;
     a->alpha_func = *p++;
     memcpy(&a->alpha_ref, p, 4);
 }

@@ -35,7 +35,9 @@ typedef struct {                                           // the translator's a
     uint8_t attr_type[32], frag_out_type[8];               // GFX_TYPE_*
     uint16_t local[3]; uint32_t shared_bytes;
     uint8_t depth_minus_w;
-    uint8_t alpha_func;                                    // FS: NVN_ALPHA_FUNC_* of the alpha test, 0 = none (ALWAYS)
+    uint8_t mvprev;                                        // VS: also write last frame's position (translator patch
+                                                           // 0012, vk_mvobj.c); packed as bit 7 of the depth_minus_w byte
+    uint8_t alpha_func;                                   // FS: NVN_ALPHA_FUNC_* of the alpha test, 0 = none (ALWAYS)
     float alpha_ref;                                       // FS: its reference; 0 without a comparing function
 } GfxShaderAnswers;
 typedef struct GfxShader GfxShader;                        // SPIR-V words + parsed reflection; owned by the cache
@@ -102,6 +104,10 @@ int gfx_shader_resources(const GfxShader *s, int kind, const GfxShaderRes **res)
 uint32_t gfx_shader_slot_mask(const GfxShader *s);                    // texture/image slots whose type its translation read
 uint32_t gfx_shader_inputs(const GfxShader *s, GfxShaderIo io[32]);    // Input Locations (VS attributes, FS varyings) as a mask
 uint32_t gfx_shader_outputs(const GfxShader *s, GfxShaderIo io[32]);   // Output Locations (VS varyings, FS colour targets)
+uint32_t gfx_shader_mvprev_banks(const GfxShader *s);   // a last-frame variant: the banks (bit n: cn) its position reads
+// A shader of the runtime's own (SPIR-V and a .res.json of the translator's form), outside the caches; NULL when
+// malformed. The caller keeps it for the run.
+const GfxShader *gfx_shader_own(const uint32_t *spirv, uint64_t words, const char *res_json);
 void gfx_shader_local_size(const GfxShader *s, uint32_t local[3]);     // CS: the LocalSize execution mode; 1, 1, 1 otherwise
 
 // ---- back end (gfx_null.c, vk_*.c). Called by the NVN front end (nvn_api_*.c, nvn_ext.c) on guest threads.

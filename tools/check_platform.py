@@ -15,9 +15,9 @@ from pathlib import Path
 
 # Per-file allowlist of shared files that still use Win32, with the reason. Empty: every shared file is portable.
 ALLOWED = {
-    # NGX loader: Windows-only by design (registry + _nvngx.dll through the MSVC vtable ABI); the #else branch
-    # off _WIN32 is a stub, so nothing of it runs elsewhere.
-    "vk_dlaa.c": "Windows-only NVIDIA NGX loader, inert off _WIN32",
+    # NGX loader: the Windows core is found through the registry and loaded by path in an _WIN32 branch, for the
+    # load error; on Linux the dynamic loader finds libnvidia-ngx.so.1 (plat_lib_open).
+    "vk_dlaa.c": "NGX core through the registry in an _WIN32 branch, plat_lib_open elsewhere",
     # Device-lost exit: TerminateProcess in an _WIN32 branch (ExitProcess would hang on a lost device), _Exit
     # elsewhere.
     "vk_device.c": "device-lost TerminateProcess in an _WIN32 branch, _Exit elsewhere",

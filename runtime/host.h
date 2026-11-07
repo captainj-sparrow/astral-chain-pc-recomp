@@ -263,6 +263,7 @@ int res_heapdef_build(const void *in, size_t n, void **out, size_t *out_n);   //
 void res_heapdef_served(void);                             // romfs.c serves the grown table
 void res_init(void);                                       // after rt_patches_init: the patch page and the sets
 float res_dlss_lod_bias(void);                             // AC_DLSS upscaling: texture LOD bias (<= 0)
+int res_dlss_mode(const char *mode);                       // AC_DLSS changed while running: new scene size
 void res_sizes(unsigned out[2], unsigned scene[2]);      // the output and scene sizes in effect (the game's own
                                                            // until res_init switched the sets on)
 int res_is_16x9(unsigned w, unsigned h);                   // within 1% of 16:9 (the test res_init and romfs.c share)

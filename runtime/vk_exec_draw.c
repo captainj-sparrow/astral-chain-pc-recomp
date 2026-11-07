@@ -682,8 +682,11 @@ static uint8_t type_of_handle(uint64_t h) {   // texture lock held
 }
 
 // The answers of stage st for the slots in mask; the types of other slots stay zero.
+static int sf_mvprev;   // shader_for asks for the vertex shader's last-frame variant (per-object motion)
+
 static void answers_for(VkExec *ex, int st, const uint8_t *ctl, uint32_t mask, GfxShaderAnswers *a) {
     memset(a, 0, sizeof *a);
+    a->mvprev = (uint8_t)(sf_mvprev && st == NVN_STAGE_VS);
     if (st == NVN_STAGE_VS) vk_pipeline_answers(&ex->pipe, a, NULL);
     else if (st == NVN_STAGE_FS) vk_pipeline_answers(&ex->pipe, NULL, a);
     else
@@ -898,7 +901,14 @@ static void limits_init(void) {
     __atomic_store_n(&LIM.ubo_max, l->maxUniformBufferRange, __ATOMIC_RELEASE);
 }
 
+// Per-object motion draws (section at the end): while it lists a draw again, these replace the uniform bindings of the
+// vertex shader variant's last-frame slots (bank + 15) and the motion fragment shader's parameters.
+static int mo_ovr_on;
+static VkDescriptorBufferInfo mo_ovr[2][32];   // [vertex, fragment][slot]; buffer 0: not replaced
+
 static VkDescriptorBufferInfo ubo_info(VkExec *ex, int st, int slot) {
+    if (mo_ovr_on && (st == NVN_STAGE_VS || st == NVN_STAGE_FS) && slot >= 0 && slot < 32 && mo_ovr[st][slot].buffer)
+        return mo_ovr[st][slot];
     if (!__atomic_load_n(&LIM.ubo_max, __ATOMIC_ACQUIRE)) limits_init();
     uint64_t max = LIM.ubo_max, align = LIM.ubo_align;
     VkDescriptorBufferInfo bi;
@@ -1402,9 +1412,13 @@ static Twin *twin_update(VkExec *ex, const VkTexImage *img) {
 }
 
 // The image descriptor of slot h; in a dispatch, a compare-sampled colour image the driver cannot compare is swapped
-// for its depth twin.
+// for its depth twin; in a pass larger than it, the scene's composite target, once DLSS scaled it this frame, for
+// DLSS's output (vk_dlaa.c; after the TotK Recomp's vk_exec_draw.c tex_info, same author, MIT).
 static void tex_info(VkExec *ex, const GfxShaderRes *r, uint64_t h, int storage, int separate, VkDescriptorImageInfo *out) {
     tex_info_lookup(ex, r, h, storage, separate, out);
+    if (h && !storage && vk_dlaa_swap_img && ex->in_pass && ex->pass_w > vk_dlaa_swap_img->width + 1 &&
+        vk_texture_by_id_locked((int)(h & 0xfffff), NULL, NULL) == vk_dlaa_swap_img)
+        out->imageView = vk_dlaa_swap_view, out->imageLayout = VK_IMAGE_LAYOUT_GENERAL;
     if (!twin_dispatch || storage || separate || !h || !(r->type & 0x400)) return;
     VkImageViewType vt = res_view_type(r->type);
     if (vt != VK_IMAGE_VIEW_TYPE_2D && vt != VK_IMAGE_VIEW_TYPE_2D_ARRAY) return;
@@ -1966,18 +1980,24 @@ static void bind_pipeline(VkExec *ex, VkPipelineBindPoint bp, VkPipeline p) {
     if (!k) B.st_valid = 0;
 }
 
+// The draw's viewport as recorded (the per-object motion draws take it again).
+static VkViewport draw_viewport(VkExec *ex) {
+    float x = 0, y = 0, w = (float)ex->pass_w, h = (float)ex->pass_h;
+    if (ex->has_vp) {
+        float k = ex->pass_scale > 1 ? (float)ex->pass_scale : 1.0f;
+        x = ex->vp[0][0] * k, y = ex->vp[0][1] * k, w = ex->vp[0][2] * k, h = ex->vp[0][3] * k;
+    }
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    VkViewport v = {x, y + h, w, -h, ex->depth_range[0], ex->depth_range[1]};   // the y flip: negative height
+    vk_dlaa_viewport(ex, &v);   // the scene's draws move by the DLAA jitter
+    return v;
+}
+
 static void record_fixed(VkExec *ex) {
     VkCommandBuffer cb = ex->cb;
     if (ex->dirty & VK_EXEC_DIRTY_VIEWPORT) {
-        float x = 0, y = 0, w = (float)ex->pass_w, h = (float)ex->pass_h;
-        if (ex->has_vp) {
-            float k = ex->pass_scale > 1 ? (float)ex->pass_scale : 1.0f;
-            x = ex->vp[0][0] * k, y = ex->vp[0][1] * k, w = ex->vp[0][2] * k, h = ex->vp[0][3] * k;
-        }
-        if (w < 1) w = 1;
-        if (h < 1) h = 1;
-        VkViewport v = {x, y + h, w, -h, ex->depth_range[0], ex->depth_range[1]};   // the y flip: negative height
-        vk_dlaa_viewport(ex, &v);   // the scene's draws move by the DLAA jitter
+        VkViewport v = draw_viewport(ex);
         vkCmdSetViewportWithCount(cb, 1, &v);
         ex->recorded++;
     }
@@ -2226,7 +2246,7 @@ static int prepare_draw(VkExec *ex, int prim, int32_t count, int restart) {
         if (fs_wait) fs = shader_for(ex, NVN_STAGE_FS, &has_fs, NULL, 1);
     }
     if (!vs || (has_fs && !fs)) return drop_draw(ex, VK_DROP_OTHER, "a shader failed to translate");
-    if (vk_dlaa_skip_draw(ex, fs)) return drop_draw(ex, VK_DROP_OTHER, "FXAA off or replaced");   // vk_dlaa.c
+    if (vk_dlaa_skip_draw(ex, fs)) return drop_draw(ex, VK_DROP_OTHER, "SMAA off or replaced");   // vk_dlaa.c
     uint32_t fbl = feedback_prepare(ex, fs);
     VkPipeState s = ex->pipe;
     // AC_FORCE_BLEND=<prog>: debug switch, the enemy-death effect (prog 268) is opaque at 1x and 2x; force
@@ -2324,6 +2344,500 @@ static int prepare_draw(VkExec *ex, int prim, int32_t count, int restart) {
     vk_dump_draw(ex, &s, p, info);
     if (vk_hdr_track) vk_hdr_draw(ex, info);
     vk_exec_oq_draw(ex);
+    return 1;
+}
+
+// ---- per-object motion
+// After the TotK Recomp's vk_exec_draw.c "per-object motion" section (same author, MIT). The camera pass (vk_dlaa.c
+// mv_pass) gives every pixel the camera's motion, so a character that moves on its own gets the wrong one and DLSS
+// drops its history there. Each solid scene draw that writes the scene depth (Astral Chain's depth prepass) and whose
+// position reads a uniform block besides the camera's (c3) is therefore listed during the replay and drawn a second
+// time at the DLAA point (vk_mvobj_execute, recorded by mv_pass) with its vertex shader's last-frame variant
+// (translator patch 0012: the position again from slots bank + 15, written to a spare output) and the fragment shader
+// of vk_mvobj_fs.h, which writes last frame's window position minus this frame's. The draw keeps everything else of
+// the original: vertex and index buffers, the other uniform blocks, the jittered viewport and the scene depth, tested
+// with the game's own test and its equal case (LESS -> LEQUAL) without writes, so only the visible surface writes its
+// vector. Last frame's blocks, camera included, come from vk_mvprev.c's copies. A draw whose variant or pipeline is
+// still building, that has no last-frame object, or whose blocks did not change (held still: the camera's motion is
+// right) is not drawn again. AC_DLAA_OBJMV=0 turns it off.
+#include "vk_mvobj_fs.h"
+static const char MO_FS_RES[] = "{\"key\":\"mvobj\",\"stage\":\"ps\",\"notes\":[],\"cbufs\":[{\"binding\":1,\"slot\":3}],"
+                                "\"sbufs\":[],\"textures\":[],\"images\":[]}";
+static struct {
+    const GfxShader *fs[32];     // per input Location
+    int failed;
+    uint64_t cand, still, draws, nodata, building, ran, dropped, no_out, storage, no_fs, other_cam;
+    uint64_t ns_list, ns_emit;
+} MO;
+
+// The motion draws of the frame, kept as a list while the scene replays and recorded into the replay's own command
+// buffer by vk_mvobj_execute, through the recorder thread (vk_rec.h) like every other draw. What a draw shares with the
+// one before it (pipeline, dynamic state, viewport, buffers, descriptors) is recorded once; a push descriptor set is
+// pushed again only where a binding changed.
+typedef struct {
+    VkPipeline pipe;
+    const VkPipeInfo *info;
+    uint32_t st, desc, vb;       // indices into MQ.st, MQ.desc (the draw's packed descriptors) and MQ.vb
+    VkDescriptorSet set[2];      // allocated sets; VK_NULL_HANDLE for a pushed one
+    VkViewport v;
+    VkRect2D sc;
+    float bias[3];
+    VkBuffer ib;
+    VkDeviceSize ib_off;
+    VkIndexType it;
+    uint32_t count, instances, base_instance;
+    int32_t base_vertex;
+    uint64_t cam;                // the draw's camera block (c3), this frame's
+} MoDraw;
+typedef struct { VkBuffer b[17]; VkDeviceSize o[17], sz[17], str[17]; } MoVb;
+static struct {
+    uint64_t frame, fence;       // the frame and submission the list belongs to
+    VkImage depth;               // the scene depth it was listed against
+    MoDraw *d;
+    VkPipeState *st;
+    VkDescSlot *desc;
+    MoVb *vb;
+    int n, cap, nst, cst, nvb, cvb;
+    uint32_t ndesc, cdesc;
+    NVNbufferRange vin[16];      // the vertex ranges MQ.vb[nvb - 1] was resolved from, under vk_mem_gen vgen
+    uint64_t vgen;
+    float sup_in[3];             // the support buffer last filled for the list and its inputs
+    SupScales sup_sc;
+    VkDescriptorBufferInfo sup;
+    float par_in[4];             // the fragment shader's parameters last written and their inputs
+    VkDescriptorBufferInfo par;
+    VkDescriptorSetLayout aset_layout[2];   // the last allocated set per set number, with its descriptors
+    VkDescriptorSet aset[2];
+    uint32_t aset_n[2];
+    VkDescSlot aset_d[2][MAX_DESC];
+} MQ;
+
+static void *mo_grow(void *p, int *cap, int need, size_t elem) {
+    if (need <= *cap) return p;
+    int c = *cap ? *cap : 256;
+    while (c < need) c *= 2;
+    if (!(p = realloc(p, elem * (size_t)c))) rt_fatal("vk_exec: out of memory");
+    *cap = c;
+    return p;
+}
+
+static void mo_drop(void) {
+    if (MQ.n) MO.dropped++;
+    MQ.n = MQ.nst = MQ.nvb = 0, MQ.ndesc = 0, MQ.frame = 0;
+}
+
+// Starts this frame's list (the old one, never executed, is dropped).
+static void mo_begin(VkExec *ex, uint64_t frame) {
+    mo_drop();
+    MQ.frame = frame, MQ.fence = ex->fence, MQ.depth = ex->depth.image;
+    memset(MQ.vin, 0, sizeof MQ.vin);
+    MQ.vgen = 0, MQ.sup.buffer = MQ.par.buffer = VK_NULL_HANDLE;
+    memset(MQ.aset, 0, sizeof MQ.aset);
+}
+
+static const GfxShader *mo_fs(int loc) {
+    if (loc < 0 || loc >= 32) return NULL;
+    if (!MO.fs[loc]) {
+        uint32_t w[sizeof mvobj_fs_spv / 4];
+        memcpy(w, mvobj_fs_spv, sizeof w);
+        w[MVOBJ_FS_LOCATION_WORD] = (uint32_t)loc;
+        MO.fs[loc] = gfx_shader_own(w, sizeof w / 4, MO_FS_RES);
+        if (!MO.fs[loc]) MO.failed = 1, rt_log("vk_exec: the per-object motion fragment shader is malformed: off");
+    }
+    return MO.fs[loc];
+}
+
+// The write of binding b from its packed descriptors.
+static VkWriteDescriptorSet mo_write(const VkPipeBinding *b, const VkDescSlot *d) {
+    VkWriteDescriptorSet w = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = b->binding,
+                              .descriptorCount = b->count ? b->count : 1, .descriptorType = b->type};
+    if (b->type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || b->type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ||
+        b->type == VK_DESCRIPTOR_TYPE_SAMPLER)
+        w.pImageInfo = &d->image;
+    else
+        w.pBufferInfo = &d->buffer;   // VkDescSlot is 24 bytes, as VkDescriptorBufferInfo: arrays line up
+    return w;
+}
+
+// The descriptors of a motion draw, packed into MQ.desc at q->desc without the binding caches of the command buffer
+// being replayed (B, DS, RS), which then stay true for its next draw: uniform buffers (through ubo_info, so with
+// mo_ovr), the support buffer, read-only storage buffers and sampled textures. An allocated set is written here (or the
+// last one reused when it would hold the same); a pushed set is pushed by mo_emit. 0 for a pipeline with storage
+// images, written storage buffers or texel buffers (not drawn again).
+static int mo_desc(VkExec *ex, const VkPipeInfo *info, MoDraw *q) {
+    if (info->n_bindings > MAX_BINDINGS) return 0;
+    uint32_t total = 0;
+    for (uint32_t i = 0; i < info->n_bindings; i++) total += info->bindings[i].count ? info->bindings[i].count : 1;
+    if (total > MAX_DESC) return 0;
+    int cdesc = (int)MQ.cdesc;
+    MQ.desc = mo_grow(MQ.desc, &cdesc, (int)(MQ.ndesc + total), sizeof *MQ.desc);
+    MQ.cdesc = (uint32_t)cdesc;
+    VkDescSlot *d = MQ.desc + MQ.ndesc;
+    memset(d, 0, total * sizeof *d);   // unused bytes zero: equal descriptors compare equal
+    for (uint32_t i = 0, nd = 0; i < info->n_bindings; i++) {
+        const VkPipeBinding *b = &info->bindings[i];
+        const GfxShaderRes *r = b->res;
+        uint32_t cnt = b->count ? b->count : 1;
+        VkDescSlot *o = &d[nd];
+        int st = nvn_stage_of(b->stage);
+        if (b->kind == VK_PIPE_SUPPORT) {
+            float in[3];
+            SupScales sc;
+            support_in(ex, in);
+            support_scales(ex, info, &sc);
+            if (!MQ.sup.buffer || memcmp(in, MQ.sup_in, sizeof in) || memcmp(&sc, &MQ.sup_sc, sizeof sc)) {
+                VkBuffer sb;
+                VkDeviceSize so;
+                support_fill(scratch(ex, SUPPORT_BYTES, &sb, &so), in[0], in[1], in[2], &sc);
+                MQ.sup = (VkDescriptorBufferInfo){sb, so, SUPPORT_BYTES};
+                memcpy(MQ.sup_in, in, sizeof in), MQ.sup_sc = sc;
+            }
+            o->buffer = MQ.sup;
+        } else if (b->kind == GFX_RES_UBO) {
+            for (uint32_t k = 0; k < cnt; k++) o[k].buffer = ubo_info(ex, st, r->slot + (int)k);
+        } else if (b->kind == GFX_RES_SSBO && !(r->flags & 1)) {   // read only: instance data and such
+            for (uint32_t k = 0; k < cnt; k++) o[k].buffer = ssbo_info(ex, st, r, 0);
+        } else if (b->kind == GFX_RES_TEX && b->type != VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER) {
+            vk_texture_lock();
+            for (uint32_t k = 0; k < cnt; k++) {
+                int slot = r->slot + (int)k;
+                tex_info(ex, r, slot >= 0 && slot < 128 ? ex->tex[st][slot] : 0, 0, r->separate, &o[k].image);
+            }
+            vk_texture_unlock();
+        } else {
+            return 0;
+        }
+        nd += cnt;
+    }
+    uint32_t n_sets = info->n_sets ? info->n_sets : 1;
+    q->set[0] = q->set[1] = VK_NULL_HANDLE;
+    for (uint32_t s = 0, i0 = 0, k0 = 0; s < n_sets && s < 2; s++) {
+        uint32_t i1 = i0, k1 = k0;
+        while (i1 < info->n_bindings && (n_sets == 1 || info->bindings[i1].set == s))
+            k1 += info->bindings[i1].count ? info->bindings[i1].count : 1, i1++;
+        if (i1 > i0 && !(s ? info->push1 : info->push)) {
+            VkDescriptorSetLayout sl = s ? info->set_layout1 : info->set_layout;
+            if (MQ.aset[s] && MQ.aset_layout[s] == sl && MQ.aset_n[s] == k1 - k0 &&
+                !memcmp(MQ.aset_d[s], d + k0, (k1 - k0) * sizeof *d)) {
+                q->set[s] = MQ.aset[s];
+            } else {
+                static VkWriteDescriptorSet w[MAX_BINDINGS];
+                VkDescriptorSet set = alloc_set(ex, sl);
+                for (uint32_t i = i0, k = k0; i < i1; k += info->bindings[i].count ? info->bindings[i].count : 1, i++)
+                    w[i - i0] = mo_write(&info->bindings[i], d + k), w[i - i0].dstSet = set;
+                vkUpdateDescriptorSets(vk_ctx()->device, i1 - i0, w, 0, NULL);
+                q->set[s] = MQ.aset[s] = set, MQ.aset_layout[s] = sl, MQ.aset_n[s] = k1 - k0;
+                memcpy(MQ.aset_d[s], d + k0, (k1 - k0) * sizeof *d);
+            }
+        }
+        i0 = i1, k0 = k1;
+    }
+    q->desc = MQ.ndesc;
+    MQ.ndesc += total;
+    return 1;
+}
+
+// The draw's vertex buffers as bind_vertex_buffers resolves them, into MQ.vb; the previous entry again while the
+// ranges and vk_mem_gen are the same (most motion draws in a row are one model's parts).
+static uint32_t mo_vertex_buffers(VkExec *ex) {
+    uint64_t gen = vk_mem_gen();
+    if (MQ.nvb && MQ.vgen == gen && !memcmp(MQ.vin, ex->vbuf, sizeof MQ.vin)) {
+        const MoVb *l = &MQ.vb[MQ.nvb - 1];
+        int same = 1;
+        if (!vk_pipeline_vertex_input_dynamic())
+            for (int b = 0; b < 16 && same; b++) same = l->str[b] == ex->pipe.vstream[b].stride;
+        if (same) return (uint32_t)MQ.nvb - 1;
+    }
+    MQ.vb = mo_grow(MQ.vb, &MQ.cvb, MQ.nvb + 1, sizeof *MQ.vb);
+    MoVb *v = &MQ.vb[MQ.nvb];
+    for (int b = 0; b < 17; b++) {
+        v->b[b] = Z.zbuf, v->o[b] = 0, v->sz[b] = ZERO_BYTES, v->str[b] = b < 16 ? ex->pipe.vstream[b].stride : 0;
+        if (b == VK_PIPE_ZERO_BINDING) continue;
+        const NVNbufferRange *r = &ex->vbuf[b];
+        VkMemSpan sp;
+        if (!r->address || !vk_mem_resolve(r->address, 1, &sp)) continue;
+        VK_MEM_USE(sp);
+        v->b[b] = sp.buffer, v->o[b] = sp.offset, v->sz[b] = r->size && r->size < sp.avail ? r->size : sp.avail;
+    }
+    memcpy(MQ.vin, ex->vbuf, sizeof MQ.vin);
+    MQ.vgen = gen;
+    return (uint32_t)MQ.nvb++;
+}
+
+// Records the list into cb (the replay's command buffer, inside the motion pass's rendering), skipping what the draw
+// before already set.
+static void mo_emit(VkCommandBuffer cb) {
+    int dyn_vi = vk_pipeline_vertex_input_dynamic();
+    VkPipeline pipe = VK_NULL_HANDLE;
+    uint32_t st = UINT32_MAX, vb = UINT32_MAX;
+    VkPipelineLayout lay[2] = {0};
+    const VkPipeInfo *pinfo[2] = {0};
+    int pdesc[2] = {-1, -1};      // the pushed set's descriptors (MQ.desc index) under lay/pinfo, -1 none
+    VkDescriptorSet bound[2] = {0};
+    const MoDraw *p = NULL;
+    for (int n = 0; n < MQ.n; p = &MQ.d[n++]) {
+        const MoDraw *q = &MQ.d[n];
+        const VkPipeInfo *info = q->info;
+        if (q->pipe != pipe) vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, q->pipe), pipe = q->pipe;
+        if (q->st != st) vk_pipeline_set_dynamic(cb, &MQ.st[q->st]), st = q->st;
+        if (!p || memcmp(&q->v, &p->v, sizeof q->v)) vkCmdSetViewportWithCount(cb, 1, &q->v);
+        if (!p || memcmp(&q->sc, &p->sc, sizeof q->sc)) vkCmdSetScissorWithCount(cb, 1, &q->sc);
+        if (!p || memcmp(q->bias, p->bias, sizeof q->bias)) vkCmdSetDepthBias(cb, q->bias[0], q->bias[1], q->bias[2]);
+        uint32_t n_sets = info->n_sets ? info->n_sets : 1;
+        const VkDescSlot *d = MQ.desc + q->desc;
+        for (uint32_t s = 0, i0 = 0, k0 = 0; s < n_sets && s < 2; s++) {
+            uint32_t i1 = i0, k1 = k0;
+            while (i1 < info->n_bindings && (n_sets == 1 || info->bindings[i1].set == s))
+                k1 += info->bindings[i1].count ? info->bindings[i1].count : 1, i1++;
+            if (i1 > i0) {
+                if (s ? info->push1 : info->push) {
+                    // the bindings that differ from the last push of this layout and pipeline (all after another)
+                    int same = lay[s] == info->layout && pinfo[s] == info && pdesc[s] >= 0;
+                    const VkDescSlot *pd = same ? MQ.desc + pdesc[s] : NULL;
+                    VkWriteDescriptorSet w[MAX_BINDINGS];
+                    uint32_t nw = 0;
+                    for (uint32_t i = i0, k = k0; i < i1; i++) {
+                        uint32_t cnt = info->bindings[i].count ? info->bindings[i].count : 1;
+                        if (!same || memcmp(d + k, pd + k, cnt * sizeof *d)) w[nw++] = mo_write(&info->bindings[i], d + k);
+                        k += cnt;
+                    }
+                    if (nw) rec_push(vk_pipeline_push_fn(), cb, VK_PIPELINE_BIND_POINT_GRAPHICS, info->layout, s, nw, w);
+                    lay[s] = info->layout, pinfo[s] = info, pdesc[s] = (int)q->desc, bound[s] = VK_NULL_HANDLE;
+                } else if (q->set[s] != bound[s] || lay[s] != info->layout) {
+                    vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, info->layout, s, 1, &q->set[s], 0, NULL);
+                    bound[s] = q->set[s], lay[s] = info->layout, pinfo[s] = info, pdesc[s] = -1;
+                }
+            }
+            i0 = i1, k0 = k1;
+        }
+        if (q->vb != vb) {
+            const MoVb *v = &MQ.vb[q->vb];
+            vkCmdBindVertexBuffers2(cb, 0, 17, v->b, v->o, v->sz, dyn_vi ? NULL : v->str);
+            vb = q->vb;
+        }
+        if (!p || q->ib != p->ib || q->ib_off != p->ib_off || q->it != p->it) vkCmdBindIndexBuffer(cb, q->ib, q->ib_off, q->it);
+        vkCmdDrawIndexed(cb, q->count, q->instances, 0, q->base_vertex, q->base_instance);
+    }
+}
+
+static void mvobj_draw_(VkExec *ex, const p_draw_idx *d, VkBuffer ib, VkDeviceSize ib_off);
+static void mvobj_draw(VkExec *ex, const p_draw_idx *d, VkBuffer ib, VkDeviceSize ib_off) {
+    if (MO.failed || !B.st_valid || !vk_dlaa_scene_draw(ex) || !vk_mvprev_on()) return;
+    uint64_t t0 = kern_now_ns();
+    mvobj_draw_(ex, d, ib, ib_off);
+    MO.ns_list += kern_now_ns() - t0;
+}
+
+static void mvobj_draw_(VkExec *ex, const p_draw_idx *d, VkBuffer ib, VkDeviceSize ib_off) {
+    const VkExecTarget *z = &ex->depth;
+    if (B.st.samples > 1 || B.st.raster_discard) return;
+    // solid geometry only, which tests and writes the scene depth (the depth prepass): effects, particles and screen
+    // quads write none, and drawn again they would put their motion on the surfaces behind them
+    if (!B.st.ds.dt || !B.st.ds.dw) return;
+    // a vertex shader that reads a user bank besides the camera's (c3) may move on its own
+    const GfxShaderRes *ur;
+    int nu = gfx_shader_resources(B.st.vs, GFX_RES_UBO, &ur), reads = 0;
+    for (int i = 0; i < nu; i++) reads |= ur[i].slot >= 4 && ur[i].slot <= 16;
+    if (!reads) return;
+    MO.cand++;
+    uint64_t frame = __atomic_load_n(&gfx_counters.frames, __ATOMIC_RELAXED);
+    if (MQ.frame != frame || MQ.fence != ex->fence || MQ.depth != z->image) mo_begin(ex, frame);
+    if (!__atomic_load_n(&LIM.ubo_max, __ATOMIC_ACQUIRE)) limits_init();
+    // the variant: the translation of the same code and answers, kept per shader once found; it names the banks the
+    // position depends on (0: none, the shader is skipped from then on)
+    static struct { const GfxShader *of, *vs; uint32_t banks; } vmemo[1024];
+    uint32_t vi = (uint32_t)((uintptr_t)B.st.vs * 0x9E3779B97F4A7C15ull >> 54);
+    if (vmemo[vi].of != B.st.vs) {
+        int has, pending = 0;
+        sf_mvprev = 1;
+        const GfxShader *v = shader_for(ex, NVN_STAGE_VS, &has, &pending, 0);
+        sf_mvprev = 0;
+        if (!v || pending) {
+            MO.building++;
+            return;
+        }
+        GfxShaderIo io[32];
+        uint32_t extra = gfx_shader_outputs(v, io) & ~gfx_shader_outputs(B.st.vs, io);
+        uint32_t banks = extra ? gfx_shader_mvprev_banks(v) & 0x1fff8u : 0;
+        vmemo[vi].of = B.st.vs, vmemo[vi].vs = v, vmemo[vi].banks = banks;
+    }
+    const GfxShader *vs = vmemo[vi].vs;
+    uint32_t banks = vmemo[vi].banks;
+    // a position without the scene camera (c3) has a view of its own: drawn again it would get no camera motion
+    if (!(banks >> 3 & 1) || !(banks & ~(1u << 3))) {
+        MO.no_out++;
+        return;
+    }
+    // the draw's identity, for last frame's copy of its blocks (vk_mvprev.c)
+    uint64_t key = (uint64_t)ex->prog->serial * 0x100000001b3ull;
+    key = (key ^ d->ibuf) * 0x100000001b3ull, key = (key ^ (uint32_t)d->base_vertex) * 0x100000001b3ull;
+    key = (key ^ (uint32_t)d->count ^ (uint64_t)(uint32_t)d->instances << 32) * 0x100000001b3ull;
+    key = (key ^ ex->vbuf[0].address) * 0x100000001b3ull;
+    VkDescriptorBufferInfo prevb[17];
+    uint32_t have, moving;
+    if (!vk_mvprev_blocks(key | 1, banks, ex->ubo[NVN_STAGE_VS], LIM.ubo_max, prevb, &have, &moving) ||
+        !(have >> 3 & 1)) {
+        MO.nodata++;
+        return;
+    }
+    if (!(moving & ~(1u << 3))) return (void)MO.still++;   // held still: the camera's motion is right
+    GfxShaderIo io[32];
+    uint32_t extra = gfx_shader_outputs(vs, io) & ~gfx_shader_outputs(B.st.vs, io);
+    const GfxShaderRes *r;
+    if (gfx_shader_resources(vs, GFX_RES_IMG, &r)) {
+        MO.storage++;
+        return;
+    }
+    const GfxShader *fs = mo_fs(31 - __builtin_clz(extra));
+    if (!fs) {
+        MO.no_fs++;
+        return;
+    }
+    VkPipeState ms = B.st;
+    ms.vs = vs, ms.fs = fs, ms.feedback = 0;
+    memset(ms.color_fmt, 0, sizeof ms.color_fmt);
+    ms.color_fmt[0] = NVN_FORMAT_RG16F;
+    // blending and the alpha test off (the factors stay the game's, valid NVN values)
+    ms.color.blend_en = 0, ms.color.logic_op = 0, ms.color.alpha_func = 0, ms.alpha_ref = 0;
+    ms.chmask.mask = 0x3;   // r and g of target 0
+    ms.ms.a2c = 0;
+    // the game's own test with its equal case (LESS -> LEQUAL, GREATER -> GEQUAL): the surface the draw left in the
+    // scene depth passes, anything nearer hides it
+    int df = B.st.ds.df;
+    df = df == NVN_DEPTH_FUNC_LESS ? NVN_DEPTH_FUNC_LEQUAL : df == NVN_DEPTH_FUNC_GREATER ? NVN_DEPTH_FUNC_GEQUAL
+       : df == NVN_DEPTH_FUNC_LEQUAL || df == NVN_DEPTH_FUNC_GEQUAL ? df : NVN_DEPTH_FUNC_EQUAL;
+    ms.ds.dt = 1, ms.ds.dw = 0, ms.ds.df = (uint64_t)df, ms.ds.st = 0;
+    // the pipeline per state, kept: the lookup hashes and locks the whole state
+    static struct { VkPipeState st; const VkPipeInfo *info; int used; } pmemo[64];
+    static int plast = -1;   // the entry of the last draw: a model's parts in a row share the state, no hash then
+    uint32_t pi;
+    if (plast >= 0 && pmemo[plast].used && !memcmp(&pmemo[plast].st, &ms, sizeof ms)) {
+        pi = (uint32_t)plast;
+    } else {
+        uint64_t ph = 0xcbf29ce484222325ull;
+        for (size_t i = 0; i < sizeof ms; i += 8) {
+            uint64_t w8 = 0;
+            memcpy(&w8, (const uint8_t *)&ms + i, sizeof ms - i < 8 ? sizeof ms - i : 8);
+            ph = (ph ^ w8) * 0x100000001b3ull;
+        }
+        pi = (uint32_t)(ph >> 58);
+    }
+    const VkPipeInfo *info = NULL;
+    VkPipeline pipe;
+    int pending = 0;
+    if (pmemo[pi].used && !memcmp(&pmemo[pi].st, &ms, sizeof ms)) {
+        info = pmemo[pi].info;
+        pipe = __atomic_load_n(&info->pipeline, __ATOMIC_ACQUIRE);   // its optimised build once swapped in
+        if (!pipe) return;
+    } else {
+        pipe = vk_pipeline_graphics_async(&ms, &info, &pending, 0);
+        if (pending || !pipe || !info) {
+            MO.building += pending != 0;
+            return;
+        }
+        pmemo[pi].st = ms, pmemo[pi].info = info, pmemo[pi].used = 1;
+    }
+    plast = (int)pi;
+    // into the frame's list, past the primary's binding caches (mo_desc); mo_emit records it
+    MQ.d = mo_grow(MQ.d, &MQ.cap, MQ.n + 1, sizeof *MQ.d);
+    MoDraw *q = &MQ.d[MQ.n];
+    float jit[2];
+    vk_dlaa_jitter(jit);
+    float par_in[4] = {(float)z->width, (float)z->height, jit[0], jit[1]};
+    if (!MQ.par.buffer || memcmp(par_in, MQ.par_in, sizeof par_in)) {
+        VkBuffer pbuf;
+        VkDeviceSize poff;
+        memcpy(scratch(ex, 16, &pbuf, &poff), par_in, sizeof par_in);
+        MQ.par = (VkDescriptorBufferInfo){pbuf, poff, 16};
+        memcpy(MQ.par_in, par_in, sizeof par_in);
+    }
+    memset(mo_ovr, 0, sizeof mo_ovr);
+    for (int bk = 3; bk <= 16; bk++)   // last frame's block, or this frame's where none was found
+        mo_ovr[NVN_STAGE_VS][bk + 15] = have >> bk & 1 ? prevb[bk] : ubo_info(ex, NVN_STAGE_VS, bk);
+    mo_ovr[NVN_STAGE_FS][3] = MQ.par;
+    mo_ovr_on = 1;
+    int bound = mo_desc(ex, info, q);
+    mo_ovr_on = 0;
+    if (!bound) {
+        MO.storage++;
+        return;
+    }
+    q->pipe = pipe, q->info = info;
+    if (!MQ.nst || memcmp(&MQ.st[MQ.nst - 1], &ms, sizeof ms)) {
+        MQ.st = mo_grow(MQ.st, &MQ.cst, MQ.nst + 1, sizeof *MQ.st);
+        MQ.st[MQ.nst++] = ms;
+    }
+    q->st = (uint32_t)MQ.nst - 1;
+    q->v = draw_viewport(ex), q->sc = vk_exec_scissor(ex);
+    q->bias[0] = ex->poly_offset.units, q->bias[1] = ex->poly_offset.clamp, q->bias[2] = ex->poly_offset.factor;
+    q->vb = mo_vertex_buffers(ex);
+    q->ib = ib, q->ib_off = ib_off;
+    q->it = d->itype == NVN_INDEX_TYPE_UNSIGNED_SHORT ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+    q->count = (uint32_t)d->count, q->instances = d->instances > 0 ? (uint32_t)d->instances : 1;
+    q->base_vertex = d->base_vertex, q->base_instance = (uint32_t)d->base_instance;
+    q->cam = ex->ubo[NVN_STAGE_VS][0].addr;
+    MQ.n++;
+    MO.draws++;
+}
+
+static char fm_last[32];   // the last executed list's draw count, for AC_MV_CHECK's lines (vk_mvobj_frame_masks)
+const char *vk_mvobj_frame_masks(void) { return fm_last; }
+
+int vk_mvobj_execute(VkExec *ex, uint64_t cam, VkImageView mv, const VkExecTarget *z, uint32_t w, uint32_t h) {
+    fm_last[0] = 0;
+    static uint64_t frames;
+    if (++frames % 600 == 0)
+        rt_log("vk_exec: per-object motion: %.2f ms a frame listing, %.2f ms recording; %llu draws considered, %llu "
+               "still, %llu drawn again, %llu without last frame's object, %llu waiting for a shader or pipeline; %llu "
+               "frames ran, %llu lists dropped (variant without its output or the camera %llu, with storage %llu, no "
+               "fragment shader %llu; another camera %llu)",
+               MO.ns_list / 1e6 / 600, MO.ns_emit / 1e6 / 600, (unsigned long long)MO.cand, (unsigned long long)MO.still,
+               (unsigned long long)MO.draws, (unsigned long long)MO.nodata, (unsigned long long)MO.building,
+               (unsigned long long)MO.ran, (unsigned long long)MO.dropped, (unsigned long long)MO.no_out,
+               (unsigned long long)MO.storage, (unsigned long long)MO.no_fs, (unsigned long long)MO.other_cam),
+        MO.ns_list = MO.ns_emit = 0;
+    if (!MQ.n) return 0;
+    uint64_t frame = __atomic_load_n(&gfx_counters.frames, __ATOMIC_RELAXED);
+    if (MQ.frame != frame || MQ.fence != ex->fence || MQ.depth != z->image) {
+        mo_drop();
+        return 0;
+    }
+    // only draws with the scene camera block (vk_dlaa.c mv_pass's): a draw of another view would move by the
+    // difference between the two views
+    int kept = 0;
+    for (int i = 0; i < MQ.n; i++)
+        if (MQ.d[i].cam == cam) MQ.d[kept++] = MQ.d[i];
+        else MO.other_cam++;
+    MQ.n = kept;
+    snprintf(fm_last, sizeof fm_last, " %d", MQ.n);
+    if (!MQ.n) {
+        mo_drop();
+        return 0;
+    }
+    uint64_t t0 = kern_now_ns();
+    VkCommandBuffer cb = ex->cb;
+    // the scene depth with its stencil when it has one: the motion pipelines are made for the game pass's formats
+    VkImageView zv = vk_exec_target_view(z->img, z->format, VK_IMAGE_VIEW_TYPE_2D, z->aspect, z->level, z->base_layer, 1, 0);
+    VkRenderingAttachmentInfo ca = {.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO, .imageView = mv,
+                                    .imageLayout = VK_IMAGE_LAYOUT_GENERAL, .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+                                    .storeOp = VK_ATTACHMENT_STORE_OP_STORE};
+    VkRenderingAttachmentInfo da = {.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO, .imageView = zv,
+                                    .imageLayout = VK_IMAGE_LAYOUT_GENERAL, .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+                                    .storeOp = VK_ATTACHMENT_STORE_OP_STORE};
+    VkRenderingInfo ri = {.sType = VK_STRUCTURE_TYPE_RENDERING_INFO, .renderArea = {{0, 0}, {w, h}}, .layerCount = 1,
+                          .colorAttachmentCount = 1, .pColorAttachments = &ca,
+                          .pDepthAttachment = z->aspect & VK_IMAGE_ASPECT_DEPTH_BIT ? &da : NULL,
+                          .pStencilAttachment = z->aspect & VK_IMAGE_ASPECT_STENCIL_BIT ? &da : NULL};
+    vkCmdBeginRendering(cb, &ri);   // through the recorder (vk_rec.h), in order with the draws and the end
+    mo_emit(cb);
+    vkCmdEndRendering(cb);
+    // the draws left their pipeline, descriptors, buffers and dynamic state bound: the next game draw sets everything
+    vk_exec_draw_new_cb();
+    ex->dirty = VK_EXEC_DIRTY_ALL;
+    ex->recorded += MQ.n;
+    MQ.n = MQ.nst = MQ.nvb = 0, MQ.ndesc = 0, MQ.frame = 0;
+    MO.ran++;
+    MO.ns_emit += kern_now_ns() - t0;
     return 1;
 }
 
@@ -2425,6 +2939,7 @@ static void op_draw_idx(VkExec *ex, const p_draw_idx *d) {
         vk_dump_after_draw(ex, d->itype == NVN_INDEX_TYPE_UNSIGNED_SHORT ? "indexed16"
                                : d->itype == NVN_INDEX_TYPE_UNSIGNED_INT ? "indexed32" : "indexed8",
                            d->count, d->instances > 0 ? d->instances : 1, 0, d->base_vertex, d->ibuf);
+    if (d->itype != NVN_INDEX_TYPE_UNSIGNED_BYTE) mvobj_draw(ex, d, sp.buffer, sp.offset);   // per-object motion
 }
 
 // DrawElementsIndirect: the arguments are read by the GPU from the pool buffer (they are often written by an earlier

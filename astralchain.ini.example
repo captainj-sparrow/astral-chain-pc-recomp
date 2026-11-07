@@ -186,13 +186,27 @@
 # NVIDIA DLSS / DLAA for the 3D scene, on NVIDIA RTX GPUs with nvngx_dlss.dll (from NVIDIA's DLSS SDK) next to
 # astralchain.exe; elsewhere the setting does nothing. The HUD is drawn after it and is not touched. Read at start.
 # dlaa = 0
-# What DLSS works from: dlaa (the 3D scene at full size), quality, balanced or performance (the scene at 67, 58 or
-# 50 % of the output, scaled up by DLSS; these replace render_scale and sharpen texture filtering to match). With dlaa
-# = 0 the game's own scaling is used at that size. Read at start.
+# What DLSS works from: dlaa (the 3D scene at full size), quality, balanced, performance or ultra_performance (the
+# scene at 1280x720, 1120x630, 960x540 or 640x360 of the game's 1920x1080, about 67, 58, 50 and 33 %, scaled up by
+# DLSS to the output, for more frames per second; they sharpen texture filtering to match and turn the game's SMAA off
+# while DLSS runs). ssaa scales both: at 2160p performance renders 1920x1080 and DLSS outputs 3840x2160; at 1440p the
+# scene takes the nearest size the game can render scaled (65, 60, 50 and 35 %). They apply
+# only with dlaa = 1 and nvngx_dlss.dll next to astralchain.exe (on Linux libnvidia-ngx-dlss.so.<version> next to the
+# executable), on a GPU where DLSS comes up; otherwise the scene keeps the game's size. Changes
+# while the game runs take effect at once (the game rebuilds its scene targets at the next frame).
 # dlss = dlaa
-# The game's own FXAA after the post effects; with DLAA on it is not needed. Changes while the game runs take effect at
-# once.
-# fxaa = 1
+# The DLSS model: default (NVIDIA's advice per mode: K for dlaa, quality and balanced, M for performance), k (K in
+# every mode, the sharpest) or j (slightly less ghosting behind moving characters, a little more flicker). Any single
+# letter a to m picks that model. Changes while the game runs take effect at once.
+# dlss_preset = default
+# Trails behind moving characters, Legions and enemies: how strongly DLSS favours the current frame where they are and
+# just were, in percent: 0 (off), 35, 65 or 100. Stronger removes more of the faint trails and leaves those edges a
+# little less smooth. Off by default: with the per-object motion vectors DLSS already follows them. Changes while the
+# game runs take effect at once.
+# dlss_char_mask = 0
+# The game's own SMAA anti-aliasing after the post effects; with DLAA on it is not needed, and 0 saves its three
+# passes. An older file's fxaa line is read as smaa. Changes while the game runs take effect at once.
+# smaa = 1
 
 # HDR output: hdr = 1 sends the picture as HDR10 (needs HDR on in Windows, "Use HDR", or a Wayland compositor with
 # colour management; without it the picture stays SDR). The game's tonemap keeps highlights up to hdr_peak_nits (your
