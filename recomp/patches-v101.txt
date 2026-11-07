@@ -75,7 +75,12 @@ site res1080 main 40f1a8 5280b409 5280f009   # mov w9, #1440 -> #1920
 site res1080 main 40f1ac 7119001f 711e001f   # cmp w0, #1600 -> #1920
 site res1080 main 40f1b0 52804ed4 52808714   # mov w20, #630 -> #1080
 site res1080 main 40f1b4 52806556 52808716   # mov w22, #810 -> #1080
-site res1080 main 40f1d0 7119001f 711e001f   # cmp w0, #1600 -> #1920
+# The third dynamic-resolution level takes its width from w19 (1280) when the compare matches, and its height from the
+# patched w22, so the compare is made never to match and the width comes from w8 instead. Left alone, the game makes
+# that level 1280x1080 and draws its first lit frame in it, which AC_SSAA=1440p enlarges to 1707x1440 and which then
+# lost the device.
+site res1080 main 40f1d0 7119001f 710007ff   # cmp w0, #1600 -> cmp wsp, #1 (the aligned stack pointer never equals 1)
+site res1080 main 40f1d4 52806408 5280f008   # mov w8, #800 -> #1920
 site res1080 main 9ed178 bc687920 1e2e1000   # ldr s0, [x9,x8,lsl #2] -> fmov s0, #1.0 (mipmap bias, as res1062)
 
 # Dynamic frame rate for the 60 fps mode (the menu's AC_FPS: 30 = shipping 30 fps, 60 = 60 fps with the fix).
