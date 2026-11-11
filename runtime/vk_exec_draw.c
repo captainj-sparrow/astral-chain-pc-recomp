@@ -2613,7 +2613,9 @@ static int mo_desc(VkExec *ex, const VkPipeInfo *info, MoDraw *q) {
         uint32_t i1 = i0, k1 = k0;
         while (i1 < info->n_bindings && (n_sets == 1 || info->bindings[i1].set == s))
             k1 += info->bindings[i1].count ? info->bindings[i1].count : 1, i1++;
-        if (i1 > i0 && !(s ? info->push1 : info->push)) {
+        // an empty fragment set too under the validation layer: mo_emit binds it ahead of set 0's push (see there)
+        int empty1 = s == 1 && i1 == i0 && info->push && vk_ctx()->validation;
+        if ((i1 > i0 || empty1) && !(s ? info->push1 : info->push)) {
             VkDescriptorSetLayout sl = s ? info->set_layout1 : info->set_layout;
             if (MQ.aset[s] && MQ.aset_layout[s] == sl && MQ.aset_n[s] == k1 - k0 &&
                 !memcmp(MQ.aset_d[s], d + k0, (k1 - k0) * sizeof *d)) {
@@ -2673,6 +2675,8 @@ static void mo_emit(VkCommandBuffer cb) {
     int pdesc[2] = {-1, -1};      // the pushed set's descriptors (MQ.desc index) under lay/pinfo, -1 none
     VkDescriptorSet bound[2] = {0};
     const MoDraw *p = NULL;
+    VkPipelineLayout last_layout = VK_NULL_HANDLE;
+    const int validation = vk_ctx()->validation;
     for (int n = 0; n < MQ.n; p = &MQ.d[n++]) {
         const MoDraw *q = &MQ.d[n];
         const VkPipeInfo *info = q->info;
@@ -2683,11 +2687,25 @@ static void mo_emit(VkCommandBuffer cb) {
         if (!p || memcmp(q->bias, p->bias, sizeof q->bias)) vkCmdSetDepthBias(cb, q->bias[0], q->bias[1], q->bias[2]);
         uint32_t n_sets = info->n_sets ? info->n_sets : 1;
         const VkDescSlot *d = MQ.desc + q->desc;
-        for (uint32_t s = 0, i0 = 0, k0 = 0; s < n_sets && s < 2; s++) {
-            uint32_t i1 = i0, k1 = k0;
-            while (i1 < info->n_bindings && (n_sets == 1 || info->bindings[i1].set == s))
-                k1 += info->bindings[i1].count ? info->bindings[i1].count : 1, i1++;
-            if (i1 > i0) {
+        uint32_t lo[2] = {0, 0}, hi[2] = {0, 0}, klo[2] = {0, 0}, khi[2] = {0, 0};   // each set's bindings and slots
+        for (uint32_t s = 0, i = 0, k = 0; s < n_sets && s < 2; s++) {
+            lo[s] = i, klo[s] = k;
+            while (i < info->n_bindings && (n_sets == 1 || info->bindings[i].set == s))
+                k += info->bindings[i].count ? info->bindings[i].count : 1, i++;
+            hi[s] = i, khi[s] = k;
+        }
+        // Under the validation layer, a new layout binds set 1 before set 0 is pushed, as the replay's own draws do
+        // (bind_resources): the layer takes any two INDEPENDENT_SETS layouts as compatible and would push into the set
+        // it made for the layout before, which lacks this one's bindings (a crash inside the layer at the first
+        // motion draw). The bind at set 1 drops that push set. mo_desc allocated an empty set 1 for this.
+        int set1_first = validation && n_sets == 2 && info->push && info->layout != last_layout;
+        last_layout = info->layout;
+        for (uint32_t j = 0; j < n_sets && j < 2; j++) {
+            uint32_t s = set1_first ? 1 - j : j, i0 = lo[s], i1 = hi[s], k0 = klo[s], k1 = khi[s];
+            if (s && i1 == i0 && set1_first && q->set[1]) {   // empty: bound only to drop the layer's push set
+                vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, info->layout, 1, 1, &q->set[1], 0, NULL);
+                bound[1] = q->set[1], lay[1] = info->layout, pinfo[1] = info, pdesc[1] = -1;
+            } else if (i1 > i0) {
                 if (s ? info->push1 : info->push) {
                     // The whole set, unless it holds what the last push of this layout and pipeline held. Pushing only
                     // the bindings that changed lost the others on an Intel Arc 140T (driver 101.8991): of a
@@ -2707,7 +2725,6 @@ static void mo_emit(VkCommandBuffer cb) {
                     bound[s] = q->set[s], lay[s] = info->layout, pinfo[s] = info, pdesc[s] = -1;
                 }
             }
-            i0 = i1, k0 = k1;
         }
         if (q->vb != vb) {
             const MoVb *v = &MQ.vb[q->vb];
