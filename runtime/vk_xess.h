@@ -1,10 +1,11 @@
 // XeSS (vk_xess.c): Intel XeSS Super Resolution as the scene's temporal anti-aliasing at its own size (Native AA),
-// behind AC_XESS (astralchain.ini xess = 1). vk_dlaa.c finds the scene, jitters it, makes its motion vectors and calls
-// vk_xess_evaluate where DLAA would run; this file only talks to libxess.dll.
+// behind AC_ANTI_ALIASING=xess (astralchain.ini anti_aliasing = xess). vk_dlaa.c finds the scene, jitters it, makes its
+// motion vectors and calls vk_xess_evaluate where DLAA would run; this file only talks to libxess.dll.
 #pragma once
 #include "vk.h"
 
 int vk_xess_wanted(void);   // the setting is on at start (the device may still lack what XeSS needs)
+int vk_xess_tried(void);    // the library was looked for in this run (it was chosen at start)
 // vk_device.c, before the instance and device exist: XeSS's instance and device extensions join the lists (room for
 // max names) once vk_xess_device_exts has checked that the device supports every extension and feature XeSS asks for. A
 // device that lacks any of them keeps XeSS off and is made exactly as without it.

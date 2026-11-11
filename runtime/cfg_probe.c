@@ -461,6 +461,32 @@ int probe_cfg(void) {
     CHECK(plat_file_write(path, old_layout_own, sizeof old_layout_own - 1) && cfg_load(path) == 1 &&
               EQ(cfg_get("AC_PAD_LAYOUT"), "nintendo") && EQ(cfg_get("AC_PROMPTS"), "nintendo"),
           "a prompts line of the file's own wins over 0.1.9's pad_layout = xbox_prompts");
+    // 1.10.1's dlaa = 1 / xess = 1 switches (cfg.c migrate_aa): read as anti_aliasing, saved in their place, on Windows;
+    // elsewhere neither ran, and the game's SMAA stays
+    plat_setenv("AC_ANTI_ALIASING", NULL);
+    static const char old_dlaa[] = "[display]\r\ndlaa = 1\r\nxess = 1\r\n", old_xess[] = "[display]\nxess = 1\n";
+    static const char old_aa_own[] = "[display]\nxess = 1\nanti_aliasing = fsr3\n";
+#ifdef _WIN32
+    CHECK(plat_file_write(path, old_dlaa, sizeof old_dlaa - 1) && cfg_load(path) == 1 &&
+              EQ(cfg_value("AC_ANTI_ALIASING"), "dlaa"),
+          "1.10.1's dlaa = 1 (with xess = 1, as DLAA ran then) reads as anti_aliasing = dlaa");
+    CHECK(cfg_save_to(path) == 1, "the read anti-aliasing saves");
+    saved = (char *)plat_file_read(path, &saved_n);
+    CHECK(saved && strstr(saved, "anti_aliasing = dlaa") && !strstr(saved, "dlaa = 1") && !strstr(saved, "xess = 1"),
+          "the next save writes anti_aliasing in place of dlaa and xess");
+    free(saved);
+    CHECK(plat_file_write(path, old_xess, sizeof old_xess - 1) && cfg_load(path) == 1 &&
+              EQ(cfg_value("AC_ANTI_ALIASING"), "xess"),
+          "1.10.1's xess = 1 reads as anti_aliasing = xess");
+#else
+    CHECK(plat_file_write(path, old_dlaa, sizeof old_dlaa - 1) && cfg_load(path) == 1 &&
+              EQ(cfg_value("AC_ANTI_ALIASING"), "smaa"),
+          "off Windows 1.10.1's dlaa = 1 and xess = 1 leave anti_aliasing = smaa");
+    (void)old_xess;
+#endif
+    CHECK(plat_file_write(path, old_aa_own, sizeof old_aa_own - 1) && cfg_load(path) == 1 &&
+              EQ(cfg_value("AC_ANTI_ALIASING"), "fsr3"),
+          "an anti_aliasing line of the file's own wins over 1.10.1's xess = 1");
     // The Steam Deck's one-time move from a stored 1080p output_res to the profile's 1280x720 (cfg.c cfg_migrate_deck_res)
     plat_setenv("AC_OUTPUT_RES", NULL);
     static const char deck_1080[] = "[display]\noutput_res = 1920x1080\n";

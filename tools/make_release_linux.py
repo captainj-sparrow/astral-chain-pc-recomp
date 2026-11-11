@@ -40,6 +40,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_game  # noqa: E402
+import ffx_sdk  # noqa: E402
 import make_release as mr  # noqa: E402
 
 ROOT = mr.ROOT
@@ -497,6 +498,7 @@ def collect_licenses(out, sysroot):
         (WORK / 'zstd' / 'LICENSE', 'zstd-LICENSE.txt'),
         (out / 'python' / 'lib' / f'python{sys_version(out)}' / 'LICENSE.txt', 'python-LICENSE.txt'),
         (ROOT / 'runtime' / 'shaders' / 'ffx' / 'LICENSE.txt', 'FidelityFX-FSR-LICENSE.txt'),
+        (ffx_sdk.license_path(), 'FidelityFX-SDK-LICENSE.txt'),   # FSR 3's passes (runtime/vk_fsr3.c)
         (WORK / 'hactool-linux' / 'LICENSE', 'hactool-LICENSE.txt'),
         (MAIN_ROOT / 'refs' / 'MacNativeGames' / 'LICENSE', 'MacNativeGames-LICENSE.txt'),
     ]

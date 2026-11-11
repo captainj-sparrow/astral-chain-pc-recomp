@@ -1,6 +1,9 @@
-// The scene's temporal anti-aliasing at its own size: NVIDIA DLAA (AC_DLAA, astralchain.ini dlaa) or Intel XeSS Native
-// AA (AC_XESS, xess; vk_xess.c). This file finds the scene in Astral Chain's frame, jitters its draws, makes the motion
-// vectors (the camera's, then what moves on its own over them) and runs the chosen library on the scene's light target before the bloom; the sections below say how.
+// The scene's temporal anti-aliasing at its own size, chosen by AC_ANTI_ALIASING (astralchain.ini anti_aliasing):
+// NVIDIA DLAA (dlaa), Intel XeSS Native AA (xess; vk_xess.c) or AMD FSR 3 Native AA (fsr3; vk_fsr3.c); smaa leaves the
+// game's own SMAA. This file finds the scene in Astral Chain's frame, jitters its draws, makes the motion vectors (the
+// camera's, then what moves on its own over them) and runs the chosen backend on the scene's light target before the
+// bloom; the sections below say how. All of it is portable Vulkan except loading NGX, which is Windows-only (core_load);
+// XeSS's library is Windows-only as well (vk_xess.c), while FSR 3's passes are compiled in and run everywhere.
 //
 // NGX is loaded at run time from the driver's NGX core (_nvngx.dll), which sits beside NVIDIA's Vulkan driver: once
 // the instance exists that driver is in the process and its module gives the folder (core_load). The registry key older
@@ -13,6 +16,7 @@
 // layout with a set-then-get round trip before anything relies on it.
 #ifdef _WIN32
 #include <windows.h>
+#endif
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,6 +29,7 @@
 #include "vk_dlaa.h"
 #include "vk_exec.h"
 #include "vk_rec.h"
+#include "vk_fsr3.h"
 #include "vk_xess.h"
 #include "nvn_api.h"
 #include "platform/platform.h"
@@ -63,7 +68,7 @@ typedef NgxResult (*PFN_Release)(NgxHandle *);
 typedef NgxResult (*PFN_Shutdown)(VkDevice);
 
 static struct {
-    HMODULE core;
+    void *core;              // the NGX core's module (HMODULE)
     PFN_Init init;
     PFN_ReqExt req_ext;
     PFN_Params caps, alloc_params;
@@ -100,7 +105,7 @@ static int p_getp(const NgxParam *p, const char *n, void **v) { return NGX_OK(((
 // dlaa applies after a restart; switched off, nothing else of DLAA runs.
 int vk_dlaa_wanted(void) {
     static int wanted = -1;
-    if (wanted < 0) wanted = cfg_bool("AC_DLAA");
+    if (wanted < 0) wanted = !strcmp(cfg_value("AC_ANTI_ALIASING"), "dlaa");
     return wanted;
 }
 
@@ -110,6 +115,10 @@ int vk_dlaa_wanted(void) {
 static int core_load(void) {
     if (N.tried) return N.loaded;
     N.tried = 1;
+#ifndef _WIN32
+    rt_log("dlaa: NGX is loaded on Windows only: DLAA off");
+    return 0;
+#else
     wchar_t path[MAX_PATH * 2 + 32] = {0};
     HMODULE icd = GetModuleHandleW(L"nvoglv64.dll");
     DWORD len = icd ? GetModuleFileNameW(icd, path, MAX_PATH * 2) : 0;
@@ -131,7 +140,7 @@ static int core_load(void) {
                icd ? "" : " (not loaded: no NVIDIA GPU?)");
         return 0;
     }
-#define FN(f, name) N.f = (void *)GetProcAddress(N.core, name)
+#define FN(f, name) N.f = (void *)GetProcAddress((HMODULE)N.core, name)
     FN(init, "NVSDK_NGX_VULKAN_Init_Ext2");
     FN(req_ext, "NVSDK_NGX_VULKAN_RequiredExtensions");
     FN(caps, "NVSDK_NGX_VULKAN_GetCapabilityParameters");
@@ -149,6 +158,7 @@ static int core_load(void) {
     N.loaded = 1;
     rt_log("dlaa: NGX core %ls", path);
     return 1;
+#endif
 }
 
 static int listed(const char *const *list, uint32_t n, const char *s) {
@@ -175,6 +185,7 @@ void vk_dlaa_device_exts(const VkExtensionProperties *have, uint32_t nhave, cons
     }
 }
 
+__attribute__((unused))   // called from vk_dlaa_init on Windows only
 static int vtable_ok(void) {
     NgxParam *p = NULL;
     if (!NGX_OK(N.alloc_params(&p)) || !p) return 0;
@@ -195,6 +206,7 @@ static int vtable_ok(void) {
 
 void vk_dlaa_init(void) {
     if (!vk_dlaa_wanted() || !core_load()) return;
+#ifdef _WIN32   // core_load loads nothing elsewhere
     wchar_t wdir[MAX_PATH];
     DWORD len = GetModuleFileNameW(NULL, wdir, MAX_PATH);
     while (len && wdir[len - 1] != L'\\') len--;
@@ -218,6 +230,7 @@ void vk_dlaa_init(void) {
     N.available = avail != 0;
     rt_log("dlaa: NGX up; DLSS %s%s", avail ? "available" : "NOT available (is nvngx_dlss.dll next to astralchain.exe?)",
            driver ? "; the driver needs an update" : "");
+#endif
 }
 
 // ---------------------------------------------------------------- where the temporal AA runs in Astral Chain's frame
@@ -289,13 +302,18 @@ static struct {
     int blit_ok;                 // -1 not checked; the light target's format takes a blit
     uint64_t mv_frames, mv_none, cuts;
     uint64_t why[4];             // history resets: scene size changed, no camera, scene target changed, gap
-    uint64_t last_eval_ns;       // plat_now_ns of the previous DLSS evaluation (FrameTimeDeltaInMsec)
+    uint64_t last_eval_ns;       // plat_now_ns of the previous evaluation (DLSS's FrameTimeDeltaInMsec, FSR 3's dt)
+    float proj[16];              // the last camera's projection (rows 4-7 of its block): FSR 3's near, far and fov
+    int proj_ok;
 } D = {.mv_ok = -1, .blit_ok = -1};
 
-enum { BK_NONE, BK_DLSS, BK_XESS };
+enum { BK_NONE, BK_DLSS, BK_XESS, BK_FSR3 };
 
 static int dl_active(void) {
-    return D.backend == BK_DLSS ? N.available && !D.failed : D.backend == BK_XESS ? vk_xess_available() : 0;
+    return D.backend == BK_DLSS   ? N.available && !D.failed
+           : D.backend == BK_XESS ? vk_xess_available()
+           : D.backend == BK_FSR3 ? vk_fsr3_available()
+                                  : 0;
 }
 
 static void dl_fail(const char *what, NgxResult r) {
@@ -532,6 +550,7 @@ static int mv_pass(VkExec *ex, const struct Size *e, VkImageView zv, float jx, f
         return 0;
     }
     const float *vw = cam, *pj = cam + 16, *vp = cam + 32;
+    memcpy(D.proj, pj, sizeof D.proj), D.proj_ok = 1;
     // its y scale, a diagonal element and so the same in either matrix order; the jitter moves the viewport, not this
     double focal = isfinite(pj[5]) ? fabs((double)pj[5]) : 0;
     double cur_vp[16], ci[16], m[16];
@@ -682,7 +701,29 @@ static int blit_ok(VkFormat f) {
     return D.blit_ok;
 }
 
-static const char *backend_name(int b) { return b == BK_DLSS ? "DLAA" : b == BK_XESS ? "XeSS Native AA" : "off"; }
+static const char *backend_name(int b) {
+    return b == BK_DLSS ? "DLAA" : b == BK_XESS ? "XeSS Native AA" : b == BK_FSR3 ? "FSR 3 Native AA" : "off";
+}
+
+// The scene camera's near and far plane distance and vertical field of view, for FSR 3's depth to view distance: the
+// projection (kept by mv_pass) taken back from the depth buffer's nearest and farthest value at the centre of the view,
+// as the depth buffer holds them (0..1, or -1..1 as z_ndc with NEAR_IS_MINUS_W). Without a camera, a plausible one (0.1
+// to 1000 units, 60 degrees): FSR then only misjudges distances in its disocclusion test.
+static void camera_planes(float *near_z, float *far_z, float *fov_y) {
+    *near_z = 0.1f, *far_z = 1000.0f, *fov_y = 1.0471976f;
+    double m[16], inv[16];
+    for (int i = 0; i < 16; i++) m[i] = D.proj[i];
+    if (!D.proj_ok || !isfinite(m[5]) || fabs(m[5]) < 1e-6 || !inv4(m, inv)) return;
+    double d[2], zn[2] = {nvn_depth_minus_w() ? -1.0 : 0.0, 1.0};
+    for (int k = 0; k < 2; k++) {   // the view-space point of ndc (0, 0, z): row 2 over row 3 of the inverse
+        double vz = inv[2 * 4 + 2] * zn[k] + inv[2 * 4 + 3], vw = inv[3 * 4 + 2] * zn[k] + inv[3 * 4 + 3];
+        d[k] = fabs(vw) > 1e-12 ? fabs(vz / vw) : 1e9;
+    }
+    if (!(d[0] > 0) || !isfinite(d[0])) return;
+    *near_z = (float)d[0];
+    *far_z = (float)(d[1] > d[0] && d[1] < 1e9 ? d[1] : d[0] * 1e6);   // an infinite projection: far enough
+    *fov_y = (float)(2.0 * atan(1.0 / fabs(m[5])));
+}
 
 // The AA on the armed light target, in place: motion vectors, the backend's evaluation into the size's output image,
 // then a blit of it back over the light target, which the bloom, the composite and the HUD then read and draw over.
@@ -719,8 +760,21 @@ static int evaluate_(VkExec *ex) {
     if (t->image != D.last_color[0]) D.last_color[1] = D.last_color[0], D.last_color[0] = t->image;
     VkImageView cv = vk_exec_target_view(t->img, t->format, VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_COLOR_BIT, t->level,
                                          t->base_layer, 1, 0);
-    rec_drain();   // the backend records into the command buffer itself: the recorder thread must have made every call
-    if (D.backend == BK_DLSS) {
+    // The time since the previous evaluation, which DLSS and FSR 3 weigh their history by (33 ms at 30 fps); 60 fps
+    // before the first and after a gap (a pause, a load), where no history carries over anyway.
+    uint64_t now = plat_now_ns();
+    double dt = D.last_eval_ns ? (double)(now - D.last_eval_ns) / 1e6 : 0;
+    D.last_eval_ns = now;
+    float dt_ms = dt > 0 && dt < 100 ? (float)dt : 16.67f;
+    // NGX and XeSS record into the command buffer themselves: the recorder thread must have made every call so far.
+    // FSR 3's passes go through the recorder like the replay's own commands.
+    if (D.backend != BK_FSR3) rec_drain();
+    if (D.backend == BK_FSR3) {
+        Fsr3Eval f = {.color = cv, .depth = zv, .mv = e->mv_view, .out = e->out_view, .w = w, .h = h, .jx = jx, .jy = jy,
+                      .phases = 16, .dt_ms = dt_ms, .reset = D.reset};   // next_jitter's 16 phases
+        camera_planes(&f.near_z, &f.far_z, &f.fov_y);
+        if (!vk_fsr3_evaluate(cb, &f)) return 0;   // off for the rest of the run (vk_fsr3.c)
+    } else if (D.backend == BK_DLSS) {
         if (!D.params && !NGX_OK(N.alloc_params(&D.params))) return dl_fail("parameter allocation", 0), 0;
         NgxParam *p = D.params;
         if (!e->feat) {
@@ -761,12 +815,7 @@ static int evaluate_(VkExec *ex) {
         p_setu(p, "DLSS.Render.Subrect.Dimensions.Height", h);
         p_setf(p, "DLSS.Pre.Exposure", 1.0f);
         p_setf(p, "DLSS.Exposure.Scale", 1.0f);
-        // The time since the previous evaluation, which DLSS weighs its history by (33 ms at 30 fps); 60 fps before the
-        // first and after a gap (a pause, a load), where no history carries over anyway.
-        uint64_t now = plat_now_ns();
-        double dt = D.last_eval_ns ? (double)(now - D.last_eval_ns) / 1e6 : 0;
-        D.last_eval_ns = now;
-        p_setf(p, "FrameTimeDeltaInMsec", dt > 0 && dt < 100 ? (float)dt : 16.67f);
+        p_setf(p, "FrameTimeDeltaInMsec", dt_ms);
         NgxResult r = N.evaluate(cb, e->feat, p, NULL);
         if (!NGX_OK(r)) return dl_fail("DLSS evaluation", r), 0;
     } else {
@@ -856,10 +905,15 @@ void vk_dlaa_pass(VkExec *ex) {
 // point (the title, loading) show nothing. Written at each present on the replay thread, read by the menu's.
 static const char *running;
 
-// The backend, chosen at each present (the menu switches dlaa and xess live, once their library is up): DLSS where NGX
-// came up and dlaa is on, else XeSS where it came up and xess is on.
+// The backend, chosen at each present from anti_aliasing (the menu switches it live): DLSS where NGX came up, XeSS
+// where libxess.dll came up (each is loaded at start when chosen then), FSR 3 where its pipelines could be made (at the
+// first present that asks, vk_fsr3_available); none, so the game's SMAA, for smaa or a backend that cannot run.
 void vk_dlaa_frame(void) {
-    int bk = N.available && cfg_bool("AC_DLAA") ? BK_DLSS : vk_xess_available() && cfg_bool("AC_XESS") ? BK_XESS : BK_NONE;
+    const char *aa = cfg_value("AC_ANTI_ALIASING");
+    int bk = !strcmp(aa, "dlaa") && N.available        ? BK_DLSS
+             : !strcmp(aa, "xess") && vk_xess_available() ? BK_XESS
+             : !strcmp(aa, "fsr3") && vk_fsr3_available() ? BK_FSR3
+                                                          : BK_NONE;
     static uint64_t evals_seen;   // an evaluation that completed this frame, not only the AA point reached
     int resolved = D.evals != evals_seen;
     evals_seen = D.evals;
@@ -867,11 +921,13 @@ void vk_dlaa_frame(void) {
                      __ATOMIC_RELAXED);
     // What no longer runs gives its video memory back after OFF_PRESENTS presents (not at once: a click through the
     // menu's choices would make and free the work images per click). Without DLSS (XeSS, nothing, or DLSS failed) the
-    // sizes' DLSS features go; with no temporal AA at all their work images too. XeSS keeps its context until exit:
-    // making it again needs the device idle.
-    static uint32_t no_dlss, no_taa;
+    // sizes' DLSS features go, without FSR 3 its internal images; with no temporal AA at all the sizes' work images too.
+    // XeSS keeps its context until exit: making it again needs the device idle.
+    static uint32_t no_dlss, no_fsr3, no_taa;
     no_dlss = D.backend == BK_DLSS && dl_active() ? 0 : no_dlss + 1;
+    no_fsr3 = D.backend == BK_FSR3 && dl_active() ? 0 : no_fsr3 + 1;
     no_taa = dl_active() ? 0 : no_taa + 1;
+    if (no_fsr3 == OFF_PRESENTS) vk_fsr3_release();
     if (no_dlss == OFF_PRESENTS)
         for (int i = 0; i < 3; i++)
             if (D.sizes[i].feat) retire_feature(D.sizes[i].feat), D.sizes[i].feat = NULL;
@@ -908,11 +964,21 @@ void vk_dlaa_frame(void) {
 
 const char *vk_dlaa_running(void) { return __atomic_load_n(&running, __ATOMIC_RELAXED); }
 
+// For the menu's anti-aliasing row (any thread; it only reads flags): 0 the choice runs or can at once, 1 it waits for a
+// restart (DLAA or XeSS chosen after the start, so its library was not loaded), 2 it cannot run here (its library did
+// not come up, or FSR 3 failed), so the game's SMAA runs.
+int vk_dlaa_choice_state(const char *aa) {
+    if (!strcmp(aa, "dlaa")) return !N.tried ? 1 : N.available && !D.failed ? 0 : 2;
+    if (!strcmp(aa, "xess")) return !vk_xess_tried() ? 1 : vk_xess_available() ? 0 : 2;
+    if (!strcmp(aa, "fsr3")) return vk_fsr3_failed() ? 2 : 0;
+    return 0;
+}
+
 // ---------------------------------------------------------------- the game's SMAA while a temporal AA runs
 // Astral Chain anti-aliases with SMAA 1x, three full-screen passes after the composite: edge detection into an RGBA8
 // target, blend weights from those edges and SMAA's area (160x560) and search (64x16) textures, then neighbourhood
 // blending of the composite by the weights, which also writes the 8-bit picture the HUD is drawn over (measured in the
-// dump above, passes 44-46). While DLAA or XeSS runs the edge pass is skipped and the weights pass clears its target
+// dump above, passes 44-46). While a temporal AA runs the edge pass is skipped and the weights pass clears its target
 // instead of drawing, so the blending pass, which still runs, passes the anti-aliased picture through unchanged: SMAA
 // on a temporally resolved picture only softens it. Shaders are known by the FNV-1a hash of their SPIR-V, as vk_dump.c
 // names them (this runtime's translator's); a translator change gives other hashes and SMAA then stays on, which the
@@ -966,7 +1032,7 @@ int vk_dlaa_skip_draw(VkExec *ex, const GfxShader *fs) {
 
 // Before the device goes away (vk_device.c destroy_all, the device idle): the work images, every DLSS feature and the
 // parameter object are released and NGX is shut down, so the driver's NGX core does not outlive the device it was
-// started on with features still alive; then XeSS's context. The motion pass's pipeline and buffer are left to the
+// started on with features still alive; then XeSS's context and FSR 3's objects. The motion pass's pipeline and buffer are left to the
 // process's end, like the back end's other pipelines.
 void vk_dlaa_release(void) {
     const VkCtx *c = vk_ctx();
@@ -988,25 +1054,6 @@ void vk_dlaa_release(void) {
         N.inited = N.available = 0;
     }
     vk_xess_release();
+    vk_fsr3_shutdown();
 }
 
-#else
-// NGX and XeSS are Windows libraries; elsewhere the temporal AA does nothing.
-#include "vk_dlaa.h"
-
-int vk_dlaa_wanted(void) { return 0; }
-void vk_dlaa_device_exts(const VkExtensionProperties *have, uint32_t nhave, const char **ext, uint32_t *n, uint32_t max) {
-    (void)have, (void)nhave, (void)ext, (void)n, (void)max;
-}
-void vk_dlaa_init(void) {}
-void vk_dlaa_pass(VkExec *ex) { (void)ex; }
-void vk_dlaa_frame(void) {}
-void vk_dlaa_draw(VkExec *ex) { (void)ex; }
-void vk_dlaa_viewport(VkExec *ex, VkViewport *v) { (void)ex, (void)v; }
-int vk_dlaa_skip_draw(VkExec *ex, const GfxShader *fs) { (void)ex, (void)fs; return 0; }
-const char *vk_dlaa_running(void) { return NULL; }
-void vk_dlaa_release(void) {}
-int vk_dlaa_available(void) { return 0; }
-int vk_dlaa_scene_draw(const VkExec *ex) { (void)ex; return 0; }
-void vk_dlaa_jitter(const VkExec *ex, float j[2]) { (void)ex, j[0] = j[1] = 0; }
-#endif

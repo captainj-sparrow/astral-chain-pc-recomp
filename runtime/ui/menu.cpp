@@ -56,6 +56,7 @@ double frame_step_limit_hz(void);
 extern const int rt_game_version;
 extern const char rt_port_version[];
 void cheats_frame(uint64_t frame);   // cheats.c
+extern "C" int vk_dlaa_choice_state(const char *aa);   // vk_dlaa.h: 0 runs, 1 after restart, 2 not available
 bool tab_cheats(float scale);        // ui/cheats_tab.cpp; true: restart into the rebuild
 }
 
@@ -371,6 +372,8 @@ extern "C" void menu_vk_release(void) {
 // TOTK_MENU_TEST=<frame>[:<frames per page>]: at that presented frame the menu opens on its first tab; each tab stays
 // <frames per page> frames (default 30) and its last frame's swapchain image goes to TOTK_MENU_TEST_DIR (default: the
 // working directory) as menu-test-<frame>-<page>.png; after the last tab the menu closes.
+// TOTK_MENU_TEST_FOCUS=<key>: the cursor starts on that setting's row (opt_focus_key), so the shot of its tab shows
+// rows further down the page.
 // TOTK_MENU_TEST_SET=<frame>:<key>=<value>[,<key>=<value>...][;<frame>:...]: cfg_set of each key (TOTK_ prefix
 // optional) at that presented frame; changes live settings with no input, menu open or not. totk.ini is written only by
 // the pseudo-key SAVE=1 (cfg_save, as a row change does; a failed write shows the menu's save note).
@@ -652,21 +655,26 @@ static void tab_screen(float scale) {
     row_shadow_range();
     opt_slider("AC_PCSS", UI_MENU_PCSS, 0, 200, UI_MENU_PCSS_DESC, 10, "%.0f %%");
     opt_slider("AC_CONTACT_SHADOWS", UI_MENU_CONTACT_SHADOWS, 0, 100, UI_MENU_CONTACT_SHADOWS_DESC, 10, "%.0f %%");
-    // One temporal AA at a time: DLSS's row is greyed out while XeSS is on and XeSS's while DLAA is on (both on from
-    // astralchain.ini: DLAA runs, so only XeSS's row is greyed and DLAA can still be switched off). NGX and XeSS are
-    // Windows libraries (vk_dlaa.c): elsewhere both rows are. DLSS's upscaling modes (AC_DLSS) have no row: the temporal
-    // AA runs at the scene's own size only.
+    // One anti-aliasing for the scene (vk_dlaa.c vk_dlaa_frame): the game's SMAA or one temporal AA in its place. NGX
+    // and libxess.dll are Windows libraries, loaded at start for the choice made then: chosen later, the row says
+    // "after restart"; where one could not come up (no NVIDIA RTX GPU, a missing DLL) or FSR 3 failed, "not available
+    // here", and SMAA runs. Elsewhere only SMAA and FSR 3 are offered. DLSS's upscaling modes (AC_DLSS) have no row:
+    // the temporal AA runs at the scene's own size only.
 #ifdef _WIN32
-    bool dlaa_on = cfg_bool("AC_DLAA") != 0, xess_on = cfg_bool("AC_XESS") != 0;
-    UiTextId dlss_off = xess_on && !dlaa_on ? UI_MENU_TAA_XESS_ON : UI_TEXT_COUNT;
-    UiTextId xess_off = dlaa_on ? UI_MENU_TAA_DLAA_ON : UI_TEXT_COUNT;
+    static const char *const aa_values[] = {"smaa", "dlaa", "xess", "fsr3"};
+    static const char *const aa_names[] = {"SMAA", "NVIDIA DLAA", "Intel XeSS AA", "AMD FSR 3"};
+    const UiTextId aa_desc = UI_MENU_AA_DESC;
 #else
-    UiTextId dlss_off = UI_MENU_TAA_WINDOWS, xess_off = UI_MENU_TAA_WINDOWS;
+    static const char *const aa_values[] = {"smaa", "fsr3"};
+    static const char *const aa_names[] = {"SMAA", "AMD FSR 3"};
+    const UiTextId aa_desc = UI_MENU_AA_DESC_OTHER;
 #endif
-    if (dlss_off != UI_TEXT_COUNT) opt_disable_next(dlss_off);
-    opt_toggle("AC_DLAA", UI_MENU_DLAA, UI_MENU_DLAA_DESC);
-    if (xess_off != UI_TEXT_COUNT) opt_disable_next(xess_off);
-    opt_toggle("AC_XESS", UI_MENU_XESS, UI_MENU_XESS_DESC);
+    int aa_state = vk_dlaa_choice_state(cfg_value("AC_ANTI_ALIASING"));
+    const char *aa_note = aa_state == 1   ? menu_text(UI_MENU_AFTER_RESTART)
+                          : aa_state == 2 ? menu_text(UI_MENU_AA_UNAVAILABLE)
+                                          : nullptr;
+    opt_choice_list("AC_ANTI_ALIASING", UI_MENU_AA, aa_values, aa_names, (int)(sizeof aa_values / sizeof *aa_values),
+                    aa_desc, -1, aa_note);
     rows_color();
     opt_group(UI_MENU_HDR_GROUP);
     opt_toggle("AC_HDR", UI_MENU_HDR, UI_MENU_HDR_DESC);
@@ -1140,7 +1148,7 @@ static void perf_label(UiTextId label, const ImVec4 &c) {
 
 static float perf_gb(float mb) { return mb < 0 ? -1 : mb / 1024; }
 
-extern "C" const char *vk_dlaa_running(void);   // vk_dlaa.h (which needs vk.h): DLAA or XeSS, NULL when off
+extern "C" const char *vk_dlaa_running(void);   // vk_dlaa.h (which needs vk.h): the temporal AA's name, NULL when off
 
 // The picture lines: the window, the game image the present shows and the 3D scene it holds (resolution.c), the
 // temporal AA that resolved the scene (vk_dlaa.c) and how the present scales the image to the window (gfx_present.c,
@@ -1298,6 +1306,7 @@ extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const cha
             g_test.opened = frame;
             g_test.page = 0;
             g_tab_request = 0;
+            if (const char *f = cfg_get("AC_MENU_TEST_FOCUS")) opt_focus_key(f);
             set_open(1);
             open = true;
         } else if (!g_perf_mode) {

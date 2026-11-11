@@ -31,7 +31,7 @@ static int save_ok = 1;                         // the last cfg_save_to wrote (o
 // logged as unknown. A new variable goes here too, or its ini key logs a harmless "unknown key" line. FXAA stays known
 // though nothing reads it any more (it switched TotK's FXAA, which Astral Chain does not have): older files carry it.
 static const char *const known[] = {
-    "AB", "AMIIBO_DIR", "ANISO", "APP_POOL", "ASPECT", "ASPECT_PATCH", "ASSUME_FOCUS", "ASTC", "ASTC_BC", "ASTC_TIME", "ASYNC_PREEMPT", "AUDIO", "AUDIO_OFF", "AUDIO_PREFILL_MS",
+    "AB", "AMIIBO_DIR", "ANISO", "ANTI_ALIASING", "APP_POOL", "ASPECT", "ASPECT_PATCH", "ASSUME_FOCUS", "ASTC", "ASTC_BC", "ASTC_TIME", "ASYNC_PREEMPT", "AUDIO", "AUDIO_OFF", "AUDIO_PREFILL_MS",
     "BACKGROUND_WINDOW", "BIND_A", "BIND_B", "BIND_DOWN", "BIND_L", "BIND_LCLICK", "BIND_LEFT", "BIND_LSTICK_DOWN", "BIND_LSTICK_LEFT",
     "BIND_LSTICK_RIGHT", "BIND_LSTICK_UP", "BIND_MINUS",
     "BIND_PLUS", "BIND_R", "BIND_RCLICK", "BIND_RIGHT", "BIND_RSTICK_DOWN", "BIND_RSTICK_LEFT", "BIND_RSTICK_RIGHT", "BIND_RSTICK_UP",
@@ -44,7 +44,7 @@ static const char *const known[] = {
     "FULLSCREEN", "FXAA", "GPL", "GPL_DRAW_BUILD", "GPU", "GPU_INDEX", "GPU_NAME", "GPU_PASSES", "HDR", "HDR_GAME_NITS",
     "HDR_HUE", "HDR_PEAK_NITS", "HDR_UI_NITS", "HIGHFPS_FIX", "INPUT", "INPUT_RECORD", "INPUT_SCRIPT", "LANG", "LIB_PREBUILD",
     "LIB_PREBUILD_KEEP", "LIB_PREBUILD_THREADS", "LOCALE", "LOD_GUARD", "LSTICK_DEADZONE", "MEMORY", "MENU_LANG", "MENU_TEST",
-    "MENU_TEST_DIR", "MENU_TEST_SET", "MINIMAL_LAYOUT", "MIRROR_GAP", "MODS_DIR", "MODS_DISABLED", "MODS_ORDER", "MODS_REBUILD", "MOTION", "MOUSE_SENS", "MOVIE_HOST", "MOVIE_PACE", "MOVIE_TRACK",
+    "MENU_TEST_DIR", "MENU_TEST_FOCUS", "MENU_TEST_SET", "MINIMAL_LAYOUT", "MIRROR_GAP", "MODS_DIR", "MODS_DISABLED", "MODS_ORDER", "MODS_REBUILD", "MOTION", "MOUSE_SENS", "MOVIE_HOST", "MOVIE_PACE", "MOVIE_TRACK",
     "ONE_PER_CORE", "OPERATION_MODE", "OUTPUT_RES", "PAD_LAYOUT", "PATCH_OUTPUT", "PATCH_SCENE", "PCSS", "PCSS_K", "PERF_OVERLAY", "PERF_SLOW_MS", "PIPELINE_CACHE", "PIPE_MEMO", "PIPE_PREBUILD", "PIPE_SKIP", "PIPE_SYNC", "PIPE_WAIT",
     "PRESENT_SHOT", "PREWARM_XLATE", "PROFILE", "PROFILE_CHAINS", "PROFILE_DIR", "PROFILE_FRAMES",
     "PROFILE_MAIN", "PROFILE_RENDER", "PROMPTS", "PUSH_SKIP", "PUSH_STAGE", "RDOC", "RDOC_DIR", "RDOC_DLL", "REALTIME", "REC_END", "REEXEC",
@@ -72,7 +72,7 @@ static const struct { const char *key, *section; } sections[] = {
     {"COLOR_BRIGHTNESS", "display"}, {"COLOR_CONTRAST", "display"}, {"COLOR_SATURATION", "display"},
     {"COLOR_GAMMA", "display"}, {"HDR", "display"}, {"HDR_PEAK_NITS", "display"}, {"HDR_GAME_NITS", "display"},
     {"HDR_UI_NITS", "display"}, {"HDR_HUE", "display"}, {"SHADOW_RES", "display"},
-    {"DLAA", "display"}, {"DLSS", "display"}, {"XESS", "display"},
+    {"ANTI_ALIASING", "display"}, {"DLAA", "display"}, {"DLSS", "display"}, {"XESS", "display"},
     {"DEVICE_PROFILE", "display"}, {"DECK_RES_MIGRATED", "display"}, {"ASSUME_FOCUS", "display"},
     {"SHADOW_SCALE", "display"}, {"SHADOW_RANGE", "display"}, {"CONTACT_SHADOWS", "display"},
     {"PCSS", "display"},
@@ -115,8 +115,11 @@ static const CfgMeta metas[] = {
     // the size the game renders itself (resolution.c: TotK's output set, or on 1.0.1 the res set, res_pick)
     {"OUTPUT_RES", "1920x1080", NULL, RESTART}, {"RENDER_SCALE", "game", "game|50|67|75|100|125|150|200", RESTART},
     {"UPSCALER", "fsr", "fsr|bilinear", LIVE}, {"SHARPNESS", "80", "0..100", LIVE},
-    {"DLAA", "0", "0|1", RESTART}, {"DLSS", "dlaa", "dlaa|quality|balanced|performance", RESTART},
-    {"XESS", "0", "0|1", RESTART},   // vk_xess.c: libxess.dll is loaded at start; once up it switches live
+    // the scene's anti-aliasing (vk_dlaa.c vk_dlaa_frame): the game's SMAA, or a temporal AA in its place. Live: NGX
+    // (dlaa) and libxess.dll (xess) are loaded at start for the choice made then, and the menu says when one waits for a
+    // restart; FSR 3 is built in.
+    {"ANTI_ALIASING", "smaa", "smaa|dlaa|xess|fsr3", LIVE},
+    {"DLSS", "dlaa", "dlaa|quality|balanced|performance", RESTART},
     {"ASPECT", "fit", "fit|stretch", LIVE}, {"FOV", "100", "70..140", LIVE},
     {"ANISO", "auto", "auto|game|2|4|8|16", RESTART},   // vk_texture.c sampler_features
     // colour adjustment (vk_color.c); the preset is the menu's, the four values are what the present uses
@@ -242,11 +245,32 @@ static void migrate_ssaa(void) {
     }
 }
 
+// Up to 1.10.1 DLAA and XeSS were two switches, dlaa = 1 and xess = 1 (with both on, DLAA ran). They are read as
+// anti_aliasing = dlaa or xess, which the next cfg_save writes in their place; an anti_aliasing line of the file's own
+// wins. Windows only: elsewhere neither ever ran, and the file keeps the game's SMAA.
+static void migrate_aa(void) {
+#ifdef _WIN32
+    CfgEntry *dlaa = NULL, *xess = NULL, *aa = NULL;
+    for (int i = 0; i < n_entries; i++) {
+        if (!strcmp(entries[i].key, "DLAA")) dlaa = &entries[i];
+        if (!strcmp(entries[i].key, "XESS")) xess = &entries[i];
+        if (!strcmp(entries[i].key, "ANTI_ALIASING")) aa = &entries[i];
+    }
+    const char *to = dlaa && !strcmp(dlaa->value, "1") ? "dlaa" : xess && !strcmp(xess->value, "1") ? "xess" : NULL;
+    if (aa || !to || n_entries == CFG_MAX_KEYS) return;
+    entries[n_entries++] = (CfgEntry){strdup("ANTI_ALIASING"), strdup(to), 1, 0};
+    if (dlaa) dlaa->removed = 1;   // cfg_save_to deletes their lines
+    if (xess) xess->removed = 1;
+    rt_log("cfg: astralchain.ini %s = 1 is read as anti_aliasing = %s", to, to);
+#endif
+}
+
 // 0.1.9 had the Xbox prompts as a pad layout: pad_layout = xbox_prompts is pad_layout = nintendo with prompts = xbox.
 // Read as those two, which the menu shows and the next cfg_save writes; a prompts line of the file's own wins. The
 // value still works from the environment (input_pad_layout_pick, input_prompts_pick).
 static void migrate(void) {
     migrate_ssaa();
+    migrate_aa();
     CfgEntry *layout = NULL, *prompts = NULL;
     for (int i = 0; i < n_entries; i++) {
         if (!strcmp(entries[i].key, "PAD_LAYOUT")) layout = &entries[i];

@@ -211,20 +211,18 @@
 # patch 0010), so the shader cache is rebuilt once after an update. Read at start.
 # pcss = 0
 
-# NVIDIA DLSS / DLAA for the 3D scene, on NVIDIA RTX GPUs with nvngx_dlss.dll (from NVIDIA's DLSS SDK) next to
-# astralchain.exe; elsewhere the setting does nothing. The HUD is drawn after it and is not touched, and the game's
-# SMAA is set aside while it runs. Read at start.
-# dlaa = 0
+# The 3D scene's anti-aliasing: smaa (the game's own), dlaa (NVIDIA DLAA: NVIDIA RTX GPUs, with nvngx_dlss.dll from
+# NVIDIA's DLSS SDK next to astralchain.exe), xess (Intel XeSS Native AA: most GPUs of the last years, with libxess.dll
+# next to astralchain.exe, which the installer puts there, and the Microsoft Visual C++ runtime) or fsr3 (AMD FSR 3
+# Native AA: any GPU, built in). dlaa and xess are Windows only; the three temporal ones give smoother edges and less
+# shimmer for some GPU time (XeSS and FSR 3 about 5 to 6 ms a frame at 2560x1440 on an Arc 140T). The HUD is not touched.
+# smaa and fsr3 take effect at once; dlaa and xess load their library at start, so choosing one later waits for a
+# restart. One that cannot run here leaves SMAA on. Up to 1.10.1 this was dlaa = 1 / xess = 1, read as this setting.
+# anti_aliasing = smaa
 # What DLSS works from: dlaa (the 3D scene at full size), quality, balanced or performance (the scene at 67, 58 or
-# 50 % of the output, scaled up by DLSS; these replace render_scale and sharpen texture filtering to match). With dlaa
-# = 0 the game's own scaling is used at that size. Read at start.
+# 50 % of the output, scaled up by DLSS; these replace render_scale and sharpen texture filtering to match). Without
+# DLAA the game's own scaling is used at that size. Read at start.
 # dlss = dlaa
-# Intel XeSS anti-aliasing (XeSS Native AA) for the 3D scene: smoother edges and less shimmer, on most GPUs of the last
-# years (Intel Arc and Iris Xe, recent AMD and NVIDIA), for some GPU time (about 2.5 ms a frame at 2560x1440 on an Arc
-# 140T). Needs libxess.dll next to astralchain.exe (the installer puts it there) and the Microsoft Visual C++ runtime;
-# Windows only. The HUD is not touched and the game's SMAA is set aside while it runs; with dlaa on as well, DLAA runs.
-# Read at start; once on, it can be switched off and on again in the menu.
-# xess = 0
 
 # HDR output: hdr = 1 sends the picture as HDR10 (needs HDR on in Windows, "Use HDR", or a Wayland compositor with
 # colour management; without it the picture stays SDR). The game's tonemap keeps highlights up to hdr_peak_nits (your

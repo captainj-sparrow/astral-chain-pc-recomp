@@ -1,5 +1,6 @@
-// The scene's temporal anti-aliasing (vk_dlaa.c): NVIDIA DLAA behind AC_DLAA (astralchain.ini dlaa = 1) or Intel XeSS
-// Native AA behind AC_XESS (xess = 1, vk_xess.c), at the scene's own size.
+// The scene's temporal anti-aliasing (vk_dlaa.c) at the scene's own size, chosen by AC_ANTI_ALIASING (astralchain.ini
+// anti_aliasing = smaa, dlaa, xess or fsr3): NVIDIA DLAA, Intel XeSS Native AA (vk_xess.c) or AMD FSR 3 Native AA
+// (vk_fsr3.c) in place of the game's SMAA.
 #pragma once
 #include "vk.h"
 #include "vk_exec.h"   // VkExec, VkExecTarget, p_bind_buf
@@ -22,7 +23,8 @@ void vk_dlaa_draw(VkExec *ex);
 void vk_dlaa_viewport(VkExec *ex, VkViewport *v);
 // vk_exec_draw.c, once a draw's fragment shader is known: 1 skips the draw (the game's SMAA while the AA runs).
 int vk_dlaa_skip_draw(VkExec *ex, const GfxShader *fs);
-const char *vk_dlaa_running(void);   // "DLAA" or "XeSS Native AA" while it runs, NULL otherwise (the overlay)
+const char *vk_dlaa_running(void);   // "DLAA", "XeSS Native AA" or "FSR 3 Native AA" while it runs, else NULL
+int vk_dlaa_choice_state(const char *aa);   // the menu: 0 runs or can, 1 after a restart, 2 not available here
 
 // ---- per-object motion (vk_exec_draw.c "per-object motion", vk_mvprev.c), for either backend
 int vk_dlaa_available(void);   // a temporal AA backend is chosen and up

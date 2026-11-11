@@ -1,6 +1,6 @@
 // XeSS: Intel XeSS Super Resolution (XeSS-SR 2.0, the library of SDK 3.0.2) as the scene's temporal anti-aliasing at
-// its own size (its Native AA quality setting), behind AC_XESS (astralchain.ini xess = 1). libxess.dll (from Intel's
-// XeSS SDK, shipped beside astralchain.exe by the release; Intel Simplified Software License) is loaded at run time
+// its own size (its Native AA quality setting), behind AC_ANTI_ALIASING=xess (astralchain.ini anti_aliasing = xess).
+// libxess.dll (from Intel's XeSS SDK, shipped beside astralchain.exe by the release; Intel Simplified Software License) is loaded at run time
 // from the folder of the exe. No Intel header
 // is compiled in: the SDK's headers are under Intel's own license, so the few types and entry points used are declared
 // here from the SDK's documented C ABI (xess.h, xess_vk.h of SDK 3.0.2), as vk_dlaa.c does for NVIDIA's NGX.
@@ -14,7 +14,7 @@
 // shaderIntegerDotProduct for its faster path). vk_device.c enables every feature the device supports, so the device is
 // fit for XeSS when it supports each feature XeSS asks for and the one extension structure among them that is not core
 // (VK_EXT_mutable_descriptor_type) is chained; vk_xess_device_exts checks this before any extension is added, so a
-// device that lacks something is made exactly as with xess = 0.
+// device that lacks something is made exactly as without XeSS.
 //
 // Threads: XeSS is not thread-safe. The context is made, built, initialised and executed on the replay thread (the first
 // time the setting is on there: vk_xess_evaluate), and destroyed at shutdown once the device is idle.
@@ -103,9 +103,11 @@ static struct {
 
 int vk_xess_wanted(void) {
     static int wanted = -1;
-    if (wanted < 0) wanted = cfg_bool("AC_XESS");
+    if (wanted < 0) wanted = !strcmp(cfg_value("AC_ANTI_ALIASING"), "xess");
     return wanted;
 }
+
+int vk_xess_tried(void) { return X.tried; }
 
 static int lib_load(void) {
     if (X.tried) return X.loaded;
@@ -389,7 +391,7 @@ void vk_xess_release(void) {
 }
 
 // ---------------------------------------------------------------- --probe-xess
-// XeSS on its own, with the device the game makes (xess = 1 for the run): a context, Native AA at 256x144, and one
+// XeSS on its own, with the device the game makes (anti_aliasing = xess for the run): a context, Native AA at 256x144, and one
 // evaluation of a flat grey picture with zero motion, which must come out grey. Without libxess.dll, or on a device
 // XeSS cannot run on, it says so and passes.
 static int probe_image(uint32_t w, uint32_t h, VkFormat f, VkImageUsageFlags u, VkImageAspectFlags asp, VkImage *img,
@@ -412,7 +414,7 @@ static double half_to_double(uint16_t h) {
 }
 
 int probe_xess(void) {
-    cfg_set("AC_XESS", "1");
+    cfg_set("AC_ANTI_ALIASING", "xess");
     if (!vk_init()) {
         printf("probe-xess: FAILED (no Vulkan device)\n");
         return 1;

@@ -120,23 +120,21 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_SHADOW_RANGE_DESC] = "Moves the steps where shadows turn softer (the game's 20, 40, 80 and 160 m) further "
                                   "away. Spreads the shadow map over more ground: raise Shadow resolution with it. "
                                   "Takes effect at the next start.",
-    [UI_MENU_DLAA] = "NVIDIA DLSS anti-aliasing",
-    [UI_MENU_DLAA_DESC] = "NVIDIA DLSS for the 3D scene (NVIDIA RTX GPUs; nvngx_dlss.dll next to astralchain.exe): smoother edges "
-                          "and less shimmer. The HUD is not touched. The mode below sets the resolution it works from. Takes effect "
-                          "after a restart.",
+    [UI_MENU_AA] = "Game anti-aliasing",
+    [UI_MENU_AA_DESC] = "How the edges of the 3D scene are smoothed. SMAA is the game's own. NVIDIA DLAA (NVIDIA RTX GPUs; "
+                        "nvngx_dlss.dll next to astralchain.exe), Intel XeSS AA (most recent GPUs; libxess.dll next to "
+                        "astralchain.exe) and AMD FSR 3 (any GPU, built in) are temporal: smoother edges and less shimmer, "
+                        "for some GPU time. The HUD is not touched. DLAA and XeSS chosen here take effect after a restart.",
+    [UI_MENU_AA_DESC_OTHER] = "How the edges of the 3D scene are smoothed. SMAA is the game's own. AMD FSR 3 is temporal: "
+                              "smoother edges and less shimmer, for some GPU time. The HUD is not touched. NVIDIA DLAA and "
+                              "Intel XeSS are Windows only.",
+    [UI_MENU_AA_UNAVAILABLE] = "not available here: SMAA runs",
     [UI_MENU_DLSS] = "DLSS mode",
     [UI_MENU_DLSS_DESC] = "DLAA draws the 3D scene at full resolution. Quality, Balanced and Performance draw it at 67, 58 "
                           "and 50 % and let DLSS scale it up, for more frames per second; they replace the 3D render "
                           "scale. Takes effect after a restart.",
     [UI_MENU_DLSS_DLAA] = "DLAA (native)", [UI_MENU_DLSS_QUALITY] = "Quality", [UI_MENU_DLSS_BALANCED] = "Balanced",
     [UI_MENU_DLSS_PERFORMANCE] = "Performance",
-    [UI_MENU_XESS] = "Intel XeSS anti-aliasing",
-    [UI_MENU_XESS_DESC] = "Intel XeSS Native AA for the 3D scene (most recent GPUs; libxess.dll next to astralchain.exe): smoother "
-                          "edges and less shimmer, for some GPU time. The HUD is not touched and the game's own SMAA is set "
-                          "aside while it runs. DLSS / DLAA wins when both are on. Takes effect after a restart.",
-    [UI_MENU_TAA_XESS_ON] = "Off while Intel XeSS anti-aliasing is on",
-    [UI_MENU_TAA_DLAA_ON] = "Off while NVIDIA DLSS anti-aliasing is on",
-    [UI_MENU_TAA_WINDOWS] = "Windows only",
 
     [UI_MENU_FPS_LIMIT] = "Frame rate",
     [UI_MENU_FPS_LIMIT_DESC] = "60 FPS runs the game's 60 fps patch; 30 FPS switches it off. Read live.",
@@ -509,24 +507,22 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_SHADOW_RANGE_DESC] = "Отодвигает границы, за которыми тени становятся мягче (в игре 20, 40, 80 и 160 м). "
                                   "Карта теней растягивается на большую площадь, поэтому вместе с этим поднимайте "
                                   "разрешение теней. Действует после перезапуска.",
-    [UI_MENU_DLAA] = "Сглаживание NVIDIA DLSS",
-    [UI_MENU_DLAA_DESC] = "NVIDIA DLSS для 3D-сцены (видеокарты NVIDIA RTX; nvngx_dlss.dll рядом с astralchain.exe): ровнее края и "
-                          "меньше мерцания. Интерфейс не затрагивается. Режим ниже задаёт разрешение, с которым он работает. "
-                          "Действует после перезапуска.",
+    [UI_MENU_AA] = "Сглаживание игры",
+    [UI_MENU_AA_DESC] = "Как сглаживаются края 3D-сцены. SMAA — собственное сглаживание игры. NVIDIA DLAA (видеокарты NVIDIA "
+                        "RTX; nvngx_dlss.dll рядом с astralchain.exe), Intel XeSS AA (большинство современных видеокарт; "
+                        "libxess.dll рядом с astralchain.exe) и AMD FSR 3 (любая видеокарта, встроено) — временные: ровнее "
+                        "края и меньше мерцания ценой части времени видеокарты. Интерфейс не затрагивается. DLAA и XeSS, "
+                        "выбранные здесь, действуют после перезапуска.",
+    [UI_MENU_AA_DESC_OTHER] = "Как сглаживаются края 3D-сцены. SMAA — собственное сглаживание игры. AMD FSR 3 — временное: "
+                              "ровнее края и меньше мерцания ценой части времени видеокарты. Интерфейс не затрагивается. "
+                              "NVIDIA DLAA и Intel XeSS — только в Windows.",
+    [UI_MENU_AA_UNAVAILABLE] = "недоступно здесь: работает SMAA",
     [UI_MENU_DLSS] = "Режим DLSS",
     [UI_MENU_DLSS_DESC] = "DLAA рисует 3D-сцену в полном разрешении. «Качество», «Баланс» и «Производительность» рисуют её "
                           "в 67, 58 и 50 % и масштабируют через DLSS ради большего числа кадров; они заменяют масштаб "
                           "3D-отрисовки. Действует после перезапуска.",
     [UI_MENU_DLSS_DLAA] = "DLAA (родное)", [UI_MENU_DLSS_QUALITY] = "Качество", [UI_MENU_DLSS_BALANCED] = "Баланс",
     [UI_MENU_DLSS_PERFORMANCE] = "Производительность",
-    [UI_MENU_XESS] = "Сглаживание Intel XeSS",
-    [UI_MENU_XESS_DESC] = "Intel XeSS Native AA для 3D-сцены (большинство современных видеокарт; libxess.dll рядом с "
-                          "astralchain.exe): ровнее края и меньше мерцания ценой части времени видеокарты. Интерфейс не "
-                          "затрагивается, собственное SMAA игры на это время отключается. Если включены оба, работает "
-                          "DLSS / DLAA. Действует после перезапуска.",
-    [UI_MENU_TAA_XESS_ON] = "Недоступно, пока включено сглаживание Intel XeSS",
-    [UI_MENU_TAA_DLAA_ON] = "Недоступно, пока включено сглаживание NVIDIA DLSS",
-    [UI_MENU_TAA_WINDOWS] = "Только в Windows",
 
     [UI_MENU_FPS_LIMIT] = "Частота кадров",
     [UI_MENU_FPS_LIMIT_DESC] = "60 FPS включает патч игры на 60 кадров; 30 FPS отключает его. Читается на лету.",
@@ -1172,10 +1168,16 @@ static const char *const text_pt_br[UI_TEXT_COUNT] = {
     [UI_MENU_PCSS] = "Sombras suaves",
     [UI_MENU_PCSS_DESC] = "Sombras do sol nítidas onde um objeto toca o chão e mais suaves quanto mais longe a sombra "
                           "cai (PCSS). 0 mantém o filtro do jogo. Vale no próximo início.",
-    [UI_MENU_DLAA] = "Antisserrilhado NVIDIA DLSS",
-    [UI_MENU_DLAA_DESC] = "NVIDIA DLSS para a cena 3D (placas NVIDIA RTX; nvngx_dlss.dll ao lado do astralchain.exe): bordas "
-                          "mais suaves e menos cintilação. O HUD não é afetado. O modo abaixo define a resolução de "
-                          "onde ele parte. Vale após reiniciar.",
+    [UI_MENU_AA] = "Antisserrilhado do jogo",
+    [UI_MENU_AA_DESC] = "Como as bordas da cena 3D são suavizadas. SMAA é o do próprio jogo. NVIDIA DLAA (placas NVIDIA RTX; "
+                        "nvngx_dlss.dll ao lado do astralchain.exe), Intel XeSS AA (a maioria das placas recentes; "
+                        "libxess.dll ao lado do astralchain.exe) e AMD FSR 3 (qualquer placa, embutido) são temporais: "
+                        "bordas mais suaves e menos cintilação, ao custo de algum tempo de GPU. O HUD não é afetado. DLAA e "
+                        "XeSS escolhidos aqui valem após reiniciar.",
+    [UI_MENU_AA_DESC_OTHER] = "Como as bordas da cena 3D são suavizadas. SMAA é o do próprio jogo. AMD FSR 3 é temporal: "
+                              "bordas mais suaves e menos cintilação, ao custo de algum tempo de GPU. O HUD não é afetado. "
+                              "NVIDIA DLAA e Intel XeSS são somente no Windows.",
+    [UI_MENU_AA_UNAVAILABLE] = "indisponível aqui: roda o SMAA",
     [UI_MENU_DLSS] = "Modo do DLSS",
     [UI_MENU_DLSS_DESC] = "DLAA desenha a cena 3D na resolução cheia. Qualidade, Equilibrado e Desempenho a desenham "
                           "em 67, 58 e 50 % e deixam o DLSS ampliá-la, para mais quadros por segundo; eles substituem "
@@ -1184,14 +1186,6 @@ static const char *const text_pt_br[UI_TEXT_COUNT] = {
     [UI_MENU_DLSS_QUALITY] = "Qualidade",
     [UI_MENU_DLSS_BALANCED] = "Equilibrado",
     [UI_MENU_DLSS_PERFORMANCE] = "Desempenho",
-    [UI_MENU_XESS] = "Antisserrilhado Intel XeSS",
-    [UI_MENU_XESS_DESC] = "Intel XeSS Native AA para a cena 3D (a maioria das placas recentes; libxess.dll ao lado do "
-                          "astralchain.exe): bordas mais suaves e menos cintilação, ao custo de algum tempo de GPU. O HUD não "
-                          "é afetado e o SMAA do próprio jogo fica de lado enquanto ele roda. Com os dois ligados, vale o "
-                          "DLSS / DLAA. Vale após reiniciar.",
-    [UI_MENU_TAA_XESS_ON] = "Indisponível com o antisserrilhado Intel XeSS ligado",
-    [UI_MENU_TAA_DLAA_ON] = "Indisponível com o antisserrilhado NVIDIA DLSS ligado",
-    [UI_MENU_TAA_WINDOWS] = "Somente no Windows",
     [UI_MENU_TAB_CHEATS] = "Cheats",
     [UI_MENU_CHEATS_NONE] = "Nenhum cheat para esta versão do jogo. Os cheats de um mod são um arquivo de cheats do "
                             "Atmosphere na pasta cheats dele, com o nome da build do jogo: mods\\<mod>\\cheats\\%s. "
@@ -1692,22 +1686,20 @@ static const char *const text_zh_hans[UI_TEXT_COUNT] = {
     [UI_MENU_CONTACT_SHADOWS_DESC] = "阴影贴图遗漏的细小太阳阴影：脚下、石头下、草丛和褶皱中。在光照之后于屏幕空间追踪。下次启动时生效。",
     [UI_MENU_PCSS] = "柔和阴影",
     [UI_MENU_PCSS_DESC] = "物体接触地面处的太阳阴影锐利，阴影投得越远越柔和（PCSS）。0 保留游戏自身的过滤。下次启动时生效。",
-    [UI_MENU_DLAA] = "NVIDIA DLSS 抗锯齿",
-    [UI_MENU_DLAA_DESC] = "用于 3D 场景的 NVIDIA DLSS（NVIDIA RTX 显卡；nvngx_dlss.dll 放在 astralchain.exe 旁）：边缘更平滑，闪烁更少。HUD "
-                          "不受影响。下方的模式决定它的工作分辨率。重启后生效。",
+    [UI_MENU_AA] = "游戏抗锯齿",
+    [UI_MENU_AA_DESC] = "3D 场景边缘的平滑方式。SMAA 是游戏自带的。NVIDIA DLAA（NVIDIA RTX 显卡；nvngx_dlss.dll 放在 "
+                        "astralchain.exe 旁）、Intel XeSS AA（大多数较新的显卡；libxess.dll 放在 astralchain.exe 旁）和 AMD "
+                        "FSR 3（任何显卡，内置）是时间性抗锯齿：边缘更平滑，闪烁更少，但会占用一些 GPU 时间。HUD 不受影响。"
+                        "在此选择的 DLAA 和 XeSS 重启后生效。",
+    [UI_MENU_AA_DESC_OTHER] = "3D 场景边缘的平滑方式。SMAA 是游戏自带的。AMD FSR 3 是时间性抗锯齿：边缘更平滑，闪烁更少，但会"
+                              "占用一些 GPU 时间。HUD 不受影响。NVIDIA DLAA 和 Intel XeSS 仅限 Windows。",
+    [UI_MENU_AA_UNAVAILABLE] = "此处不可用：使用 SMAA",
     [UI_MENU_DLSS] = "DLSS 模式",
     [UI_MENU_DLSS_DESC] = "DLAA 以全分辨率绘制 3D 场景。质量、平衡和性能分别以 67%、58% 和 50% 绘制，再由 DLSS 放大，以获得更高帧率；它们会取代 3D 渲染比例。重启后生效。",
     [UI_MENU_DLSS_DLAA] = "DLAA（原生）",
     [UI_MENU_DLSS_QUALITY] = "质量",
     [UI_MENU_DLSS_BALANCED] = "平衡",
     [UI_MENU_DLSS_PERFORMANCE] = "性能",
-    [UI_MENU_XESS] = "Intel XeSS 抗锯齿",
-    [UI_MENU_XESS_DESC] = "用于 3D 场景的 Intel XeSS 原生抗锯齿（大多数较新的显卡；libxess.dll 放在 astralchain.exe 旁）：边缘更平滑，"
-                          "闪烁更少，但会占用一些 GPU 时间。HUD 不受影响，运行时游戏自身的 SMAA 会被搁置。两者都开启时以 DLSS / "
-                          "DLAA 为准。重启后生效。",
-    [UI_MENU_TAA_XESS_ON] = "Intel XeSS 抗锯齿开启时不可用",
-    [UI_MENU_TAA_DLAA_ON] = "NVIDIA DLSS 抗锯齿开启时不可用",
-    [UI_MENU_TAA_WINDOWS] = "仅限 Windows",
     [UI_MENU_TAB_CHEATS] = "金手指",
     [UI_MENU_CHEATS_NONE] = "此游戏版本没有金手指。模组的金手指是它的 cheats 文件夹中以游戏构建命名的 Atmosphere "
                             "金手指文件：mods\\<模组>\\cheats\\%s。重启游戏后才会读取。对于修改游戏代码的金手指，"

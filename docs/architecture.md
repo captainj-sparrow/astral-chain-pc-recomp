@@ -134,9 +134,14 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   in-game menu is drawn into an RGBA8 image and blended on at the HUD's white. Without an HDR10 surface format
   (Windows with "Use HDR" off, a compositor without colour management) the swapchain stays SDR and the tonemap writes
   the game's own result. `AC_SHOTS` reads the window texture, so its pictures clip highlights in HDR.
-- Temporal anti-aliasing at the scene's own size (`vk_dlaa.c`, off by default): NVIDIA DLAA (`dlaa`, through the
-  driver's NGX core loaded at run time) or Intel XeSS Native AA (`xess`, `vk_xess.c`, `libxess.dll` loaded at run time);
-  no SDK header or code of either is compiled in. Astral Chain renders forward: a depth-only prepass writes the scene
+- Temporal anti-aliasing at the scene's own size (`vk_dlaa.c`, off by default): one setting, `anti_aliasing`, keeps the
+  game's SMAA (`smaa`) or puts NVIDIA DLAA (`dlaa`, through the driver's NGX core loaded at run time, Windows only), Intel
+  XeSS Native AA (`xess`, `vk_xess.c`, `libxess.dll` loaded at run time, Windows only) or AMD FSR 3 Native AA (`fsr3`,
+  `vk_fsr3.c`, every OS) in its place; no SDK header or code of NVIDIA's
+  or Intel's is compiled in. FSR 3's passes are AMD's GLSL, unmodified and not in the repository: `tools/ffx_sdk.py`
+  fetches the pinned files of the FidelityFX SDK (commit and per-file SHA-256) into `toolchain/ffx-sdk/` and compiles
+  them into `fsr3_spv.h` in the build directory, and `vk_fsr3.c` is our own host for them (internal images, constant
+  blocks, the seven passes in AMD's order). Astral Chain renders forward: a depth-only prepass writes the scene
   depth (D32F_S8), the opaque draws and the transparents go into an R11G11B10F light target with it (two images,
   alternating per frame), the bloom chain reads it at half size and down, a composite tonemaps, SMAA anti-aliases and
   the HUD is drawn over the result. The AA arms on the first light-target pass after a prepass and runs, in place on

@@ -50,6 +50,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_xlate  # noqa: E402
 import check_content  # noqa: E402
+import ffx_sdk  # noqa: E402
 import xess_sdk  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -368,6 +369,7 @@ def collect_licenses(out):
         (unpack('sdl3-dll') / 'LICENSE.txt', 'SDL3-LICENSE.txt'),
         (unpack('zstd') / 'ucrt64' / 'share' / 'licenses' / 'zstd' / 'LICENSE', 'zstd-LICENSE.txt'),
         (ROOT / 'runtime' / 'shaders' / 'ffx' / 'LICENSE.txt', 'FidelityFX-FSR-LICENSE.txt'),
+        (ffx_sdk.license_path(), 'FidelityFX-SDK-LICENSE.txt'),   # FSR 3's passes (runtime/vk_fsr3.c)
         (MAIN_ROOT / 'toolchain' / 'hactool' / 'LICENSE', 'hactool-LICENSE.txt'),
         (MAIN_ROOT / 'refs' / 'MacNativeGames' / 'LICENSE', 'MacNativeGames-LICENSE.txt'),
         (xess_dir() / 'LICENSE.txt', 'XeSS-LICENSE.txt'),
