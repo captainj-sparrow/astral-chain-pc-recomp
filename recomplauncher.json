@@ -1,0 +1,12 @@
+{
+    "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+    "format": 1,
+    "name": "Astral Chain Recomp",
+    "repo": "captainj-sparrow/astral-chain-pc-recomp",
+    "start": {
+        "program": [
+            "astralchain.exe",
+            "Astral Chain-Setup.exe"
+        ]
+    }
+}
