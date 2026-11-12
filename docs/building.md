@@ -290,6 +290,18 @@ with draws drawn again; `AC_DLAA_MVDEBUG=1` with `--shot` shows the vectors (x r
 `toolchain\ffx-sdk\` and compiles the passes with `glslc` into `fsr3_spv.h` in the build directory, again only when
 the pins or the options change. A change to `runtime/vk_fsr3.c` wants the same scripted run with `AC_UPSCALING=fsr3`, native and upscaled.
 
+A change to the cutscene or movie timing (`runtime/frame_rate.c`), the present pacer (`runtime/nvn_api_obj.c`) or the
+audio output (`runtime/ov_audout.c`) wants `.venv\Scripts\python tools\av_sync_test.py build\v101 movie` and the same
+with `cutscene --profile <a profile whose first save opens on an in-engine cutscene>`. Each runs its scene once per
+scenario (a machine too slow for the scene, hitches of 80 ms to 2.5 s, a starved sound thread, a suspended process,
+the 30 fps mode), brought about by the test knobs `AC_TEST_HITCH`, `AC_TEST_FREEZE` and `AC_TEST_AUDIO_STALL`, and
+prints the picture's lead or lag on the sound from the log's `cutscene run` and `movie` lines: within 90 ms counts
+as kept. Two cases lose the sound by design: `very-slow` (12 fps, below the 15 fps a step of 2.0 covers) and what a
+stall leaves beyond the 5 s a cutscene catches up. In a player's log, `frame rate: audio desync:` marks a picture
+more than 250 ms off its sound for 2 s (minus: the picture is late, the sound ahead), names the scenario of this
+test it looks like, with the figures of the last seconds of cutscene frames, and `audio desync over:` its end; a
+launch writes 12 such lines at most.
+
 Shaders: `.venv-py314\Scripts\python tools\shader_census.py --version <ver> --translate` extracts every Maxwell shader
 to `build\<ver>\shaders\` and runs it through the translator and `spirv-val`; failure groups go to `failures.txt`.
 `tools\xlate_smoke.py` checks the translator alone, without game files.

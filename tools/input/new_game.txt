@@ -1,0 +1,20 @@
+# A new game on a profile without any save (a new empty folder), from the title screen to the motorway the game
+# starts on. Timed lines (@ms of the world clock, from the first present).
+# Title (ZL + ZR held) starts the opening movie about 14 s in; PLUS shows the skip prompt and PLUS again skips it ->
+# the character screen, about 23 s in. A takes the character on the left -> the categories; A opens Name; DOWN, A
+# takes "random name" (which shows nothing, a known bug); B goes back to the categories; DOWN x3 reaches Confirm, A,
+# and A again on the question -> the first lines, then the motorway about 56 s in, which rides on by itself.
+@12000 ZL 3000
+@12000 ZR 3000
+@17000 PLUS 200
+@18500 PLUS 200
+@27000 A 200
+@29500 A 200
+@31500 DOWN 200
+@33500 A 200
+@35500 B 200
+@37000 DOWN 200
+@38000 DOWN 200
+@39000 DOWN 200
+@40500 A 200
+@43500 A 200

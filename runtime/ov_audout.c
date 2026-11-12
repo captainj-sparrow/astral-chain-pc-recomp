@@ -13,6 +13,7 @@
 #include <math.h>
 #include <stdatomic.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -31,6 +32,7 @@
 #define AUDOUT_MAX_BUFFERS 32                 // the SDK's own queue limit (AudioCore::BufferCount)
 #define AUDOUT_RING_FRAMES 32768              // stereo frames of output queued ahead, about 680 ms
 #define AUDOUT_MAX_FRAME 1024                 // frames converted per callback step
+#define AUDOUT_DRY_MAX (AUDOUT_RATE / 2)      // frames of one dry stretch that count as sound coming late (0.5 s)
 #define AUDOUT_SAMPLE_FORMAT_PCM16 1u
 #define AUDOUT_STATE_STARTED 0u
 #define AUDOUT_STATE_STOPPED 1u
@@ -52,6 +54,11 @@ static struct {
     PlatMutex push;
     volatile int64_t overruns;
     volatile int64_t appends, releases, zero_releases;
+    // The ring ran dry while the game was feeding it: the frames of silence the device got instead, and how many
+    // times it happened (audout_pull). fed: the game has queued sound since the last stop or flush.
+    _Atomic uint64_t dry_frames, dry_gaps;
+    _Atomic int fed;
+    uint64_t dry_logged, dry_gaps_logged, dry_log_ns;   // what the last log line reported, and when (out_dry_report)
     double level_sum, level_peak;
     uint64_t level_count;
 } out = {.push = PLAT_MUTEX_INIT, .played = 1, .queued = 1};
@@ -126,11 +133,20 @@ static void notify_released(void) {
     }
 }
 
-// SDL's audio thread: hands stereo float to the device, silence when the ring runs dry.
+// SDL's audio thread: hands stereo float to the device, silence when the ring runs dry. A dry ring while the game feeds
+// it means the game's sound thread did not refill in time: the device plays silence, and everything the game streams
+// (a voice, a movie's sound) comes that much later, for good, since the game queues a buffer only when one comes back.
+// Those frames are counted for the log (out_dry_report) and move the dry clock on (audio_mixer.c
+// audio_device_dry_ns), by which a cutscene's picture waits for its sound (frame_rate.c cutscene_lost); every request
+// moves the device clock on. Only the first AUDOUT_DRY_MAX frames of one dry stretch move the dry clock: a longer one
+// is not a late sound thread but a game that stopped feeding the output, and no picture has to wait for that.
+// AC_TEST_FREEZE (frame_rate.c frame_test_frozen): while a test freeze lasts the device gets silence, the ring is
+// left alone and neither clock moves, as if the process stood still.
 static void SDLCALL audout_pull(void *user, SDL_AudioStream *stream, int additional, int total) {
     (void)user;
     (void)total;
     float tmp[2 * AUDOUT_MAX_FRAME];
+    static uint64_t dry;   // frames of silence in the dry stretch the last request was in, 0 none (SDL thread only)
     uint64_t played = atomic_load_explicit(&out.played, memory_order_relaxed);
     while (additional > 0) {
         int frames = additional / (int)(2 * sizeof(float));
@@ -138,7 +154,20 @@ static void SDLCALL audout_pull(void *user, SDL_AudioStream *stream, int additio
         if (frames <= 0) break;
         uint64_t queued = atomic_load_explicit(&out.queued, memory_order_acquire);
         uint64_t have = queued > played ? queued - played : 0;
+        int frozen = frame_test_frozen();
+        if (frozen) have = 0;
         int n = have < (uint64_t)frames ? (int)have : frames;
+        uint64_t late = 0;   // frames of this request that count as the game's sound coming late
+        if (n < frames && !frozen && atomic_load_explicit(&out.fed, memory_order_relaxed)) {
+            uint64_t silent = (uint64_t)(frames - n);
+            atomic_fetch_add_explicit(&out.dry_frames, silent, memory_order_relaxed);
+            if (!dry) atomic_fetch_add_explicit(&out.dry_gaps, 1, memory_order_relaxed);
+            late = dry >= AUDOUT_DRY_MAX ? 0 : silent < AUDOUT_DRY_MAX - dry ? silent : AUDOUT_DRY_MAX - dry;
+            dry += silent;
+        } else if (n == frames) {
+            dry = 0;
+        }
+        if (!frozen) audio_device_clock_add((uint64_t)frames, late, AUDOUT_RATE);
         for (int i = 0; i < n; i++) {
             uint64_t k = (played + (uint64_t)i) % AUDOUT_RING_FRAMES;
             tmp[2 * i] = out.ring[2 * k];
@@ -183,6 +212,7 @@ static void out_open(void) {
     SDL_AudioSpec dev;
     int period = 0;
     SDL_GetAudioDeviceFormat(SDL_GetAudioStreamDevice(out.stream), &dev, &period);
+    if (period > 0 && dev.freq > 0) audio_device_set_period((uint64_t)period, (uint32_t)dev.freq);
     const char *name = SDL_GetAudioDeviceName(SDL_GetAudioStreamDevice(out.stream));
     rt_log("audout: SDL device '%s' opened, %d Hz stereo signed 16-bit in, float out, device period %d frames",
            name ? name : "?", AUDOUT_RATE, period);
@@ -211,6 +241,7 @@ static uint64_t out_push(const int16_t *pcm, uint64_t frames, float volume) {
     out.level_count += 2 * n;
     queued += n;
     atomic_store_explicit(&out.queued, queued, memory_order_release);
+    if (n) atomic_store_explicit(&out.fed, 1, memory_order_relaxed);
     if (n < frames && out.device_ok && plat_xadd64(&out.overruns, 1) == 0)
         rt_log("audout: the output ring is full (%d frames queued): dropping frames of a buffer", AUDOUT_RING_FRAMES);
     if (!out.device_ok)   // no device: everything is already played, so the game recycles at its own pace
@@ -248,6 +279,7 @@ static void out_stop(AudoutOut *o) {
     plat_mutex_lock(&o->lock);
     int dropped = queue_release_all(o);
     plat_mutex_unlock(&o->lock);
+    atomic_store_explicit(&out.fed, 0, memory_order_relaxed);   // an empty ring is no gap from here on
     if (dropped) {
         atomic_store_explicit(&out.played, atomic_load_explicit(&out.queued, memory_order_acquire), memory_order_release);
         kern_event_signal(o->event);
@@ -269,6 +301,7 @@ static uint32_t out_flush(AudoutOut *o) {
     plat_mutex_lock(&o->lock);
     int dropped = queue_release_all(o);
     plat_mutex_unlock(&o->lock);
+    atomic_store_explicit(&out.fed, 0, memory_order_relaxed);
     if (dropped) {
         atomic_store_explicit(&out.played, atomic_load_explicit(&out.queued, memory_order_acquire), memory_order_release);
         kern_event_signal(o->event);
@@ -289,8 +322,45 @@ static const IpcBuffer *first_buffer(const IpcRequest *rq, int *is_static) {
     return NULL;
 }
 
+// One log line when the ring ran dry (audout_pull counts, on SDL's thread; this runs on the game's sound thread at its
+// next append), at most one per 5 s: a log with these lines explains sound that lags the picture.
+static void out_dry_report(void) {
+    uint64_t dry = atomic_load_explicit(&out.dry_frames, memory_order_relaxed);
+    if (dry == out.dry_logged) return;
+    uint64_t now = kern_now_ns();
+    if (out.dry_log_ns && now - out.dry_log_ns < 5000000000ull) return;
+    uint64_t gaps = atomic_load_explicit(&out.dry_gaps, memory_order_relaxed);
+    rt_log("audout: the output ran dry %llu times since the last report (%.0f ms of silence; %.0f ms in %llu gaps "
+           "since the start): the game's sound thread refilled late, and streamed sound is that much later",
+           (unsigned long long)(gaps - out.dry_gaps_logged), (double)(dry - out.dry_logged) * 1000.0 / AUDOUT_RATE,
+           (double)dry * 1000.0 / AUDOUT_RATE, (unsigned long long)gaps);
+    out.dry_logged = dry, out.dry_gaps_logged = gaps, out.dry_log_ns = now;
+}
+
+// AC_TEST_AUDIO_STALL=<ms>[:<every ms>] (testing): the game's sound thread sleeps <ms> before an append, once per
+// <every ms> (5000 without it), so the output runs dry as it does when that thread gets no processor time.
+static void test_audio_stall(void) {
+    static int parsed;
+    static unsigned ms, every = 5000;
+    static uint64_t last_ns;
+    if (!parsed) {
+        parsed = 1;
+        const char *e = cfg_get("AC_TEST_AUDIO_STALL");
+        if (e && sscanf(e, "%u:%u", &ms, &every) >= 1 && ms)
+            rt_log("audout: test stall of the sound thread, %u ms every %u ms", ms, every);
+    }
+    if (!ms) return;
+    uint64_t now = kern_now_ns();
+    if (!last_ns) last_ns = now;
+    if (now - last_ns < every * 1000000ull) return;
+    last_ns = now;
+    plat_sleep_ns(ms * 1000000ull);
+}
+
 // AppendAudioOutBuffer: the AudioOutBuffer record (0x28 bytes) in a buffer, its tag in the raw data.
 static void out_append(AudoutOut *o, const IpcRequest *rq, IpcResponse *rs) {
+    test_audio_stall();
+    out_dry_report();
     const IpcBuffer *b = first_buffer(rq, NULL);
     if (!b || b->size < 0x28) {
         rt_log("audout: AppendAudioOutBuffer cmd %u with %llu bytes, expected 0x28 (x%u a%u b%u w%u c%u data %u)",

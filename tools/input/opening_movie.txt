@@ -1,0 +1,7 @@
+# Title screen to the opening movie, on a profile without any save (a new empty folder). Timed lines (@ms of the world
+# clock, from the first present). With no save the title takes ZL + ZR held and starts the opening movie
+# (movie/ev0010.bk2: 290 s at 1600x900, with speech, in a cutscene held to 30 fps), about 14 s in.
+# tools/av_sync_test.py plays it to measure the movie's hold on its sound.
+# To go on to the game instead: PLUS shows the skip prompt and PLUS again skips the movie (tools/input/new_game.txt).
+@12000 ZL 3000
+@12000 ZR 3000

@@ -69,7 +69,7 @@ void rt_fps_timer_first(Cpu *c);    // frame timer's first call: the game's step
 void rt_fps_text_rate_s2(Cpu *c);   // dialogue text reveal: s2 = rate * step
 void rt_fps_cue_up_w8(Cpu *c);      // cue scheduler: w8 += whole ticks, keeping the old counter
 uint64_t rt_fps_cue_cmp(Cpu *c);    // cue scheduler: cmp w9,w8 -> Z when the entry's frame is in (old, new]
-void rt_cut_hold_s1(Cpu *c);        // cut clock: s1 = the time a cut may reach (len - rate; just below len at 60)
+void rt_cut_hold_s1(Cpu *c);        // cut clock: s1 = the time a cut may reach (len - rate; just below len when exact)
 void rt_cut_prev_s0(Cpu *c);        // cut clock: s0 = the time before this frame (s1 at 60: no hold)
 void rt_cut_next_s1(Cpu *c);        // cut clock: s1 = the next cut's start (0; the overshoot at 60)
 void rt_fps_talk_clear(Cpu *c);     // talk command: clear the talking flag, unless the frame is skipped at 60
@@ -86,6 +86,10 @@ void rt_cut_drift_s0(Cpu *c);      // cutscene voice sync: records s0 = track po
 void rt_movie_opened(Cpu *c);       // Bink player open: x0 = BinkOpen's handle (full-screen by its size)
 void rt_movie_close(Cpu *c);        // Bink player: x0 = the handle BinkClose takes
 void rt_movie_wait(Cpu *c);         // Bink player: x0 = the handle BinkWait takes (a full-screen movie is playing)
+uint64_t rt_movie_late_w9(Cpu *c);  // BinkWait: w9 = how late the next frame is (subs w9,w10,w9), kept for the skip
+void rt_movie_skip_w0(Cpu *c);      // Bink player: w0 = 1 to skip a frame of a movie that is late on its clock
+void rt_fixed_step(Cpu *c);         // frame timer at 30 fps: a cutscene's fixed step (str s8,[x19,#0xd0])
+void rt_free_step(Cpu *c);          // frame timer at 30 fps: a frame without the cutscene flag ends a cutscene run
 void rt_fov_s0(Cpu *c);             // field of view: s0 (the scene's vertical angle) *= AC_FOV factor (resolution.c)
 void rt_fov_lens24_s0(Cpu *c);      // the same for a lens's projection (lens x24 / x8), then a taller frame's angle
 void rt_fov_lens8_s0(Cpu *c);

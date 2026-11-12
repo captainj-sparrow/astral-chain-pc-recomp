@@ -647,7 +647,8 @@ NVN_API(nvnWindowSetCrop) {
 static uint64_t present_period(const win_t *o) {
     if (frame_step_realtime()) return frame_step_cap_ns();
     uint64_t ticks = o->interval > 0 ? (uint64_t)o->interval : 1ull;
-    if (frame_step_cutscene() && ticks < 2) ticks = 2;   // the 60 fps patch drops the game's own wait (frame_rate.c)
+    // the 60 fps patch drops the game's own wait (frame_rate.c); a held cutscene far behind is let go to catch up
+    if (frame_step_cutscene() && !frame_step_rush() && ticks < 2) ticks = 2;
     return ticks * 1000000000ull / VSYNC_HZ;
 }
 

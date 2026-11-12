@@ -189,5 +189,12 @@ void audio_device_handler(IpcSession *s, const IpcRequest *rq, IpcResponse *rs);
 // The master output volume the game set through IAudioDevice::SetAudioDeviceOutputVolume, 1.0 until it does.
 float audio_device_volume(void);
 // The sound the output device has asked for since it opened, in ns; 0 without a device. It stands still while the
-// device does (a suspended process). Any thread.
+// device does (a suspended process). audio_device_dry_ns: what of it was silence because the game's sound thread
+// refilled late, which the game's streamed sound is behind by. Any thread. audio_device_clock_add moves both on, by
+// frames at a sample rate (the outputs' SDL threads).
 uint64_t audio_device_clock_ns(void);
+uint64_t audio_device_dry_ns(void);
+void audio_device_clock_add(uint64_t frames, uint64_t dry_frames, uint32_t rate);
+// The device's period in ns, 0 unknown: the step its clock moves by. Set by the output that opened the device.
+uint64_t audio_device_period_ns(void);
+void audio_device_set_period(uint64_t frames, uint32_t rate);

@@ -16,7 +16,7 @@ Special thanks to [@capibawa](https://github.com/capibawa) for their multiple co
 
 ## Status
 
-The game is playable from the title screen to credits. The port has no known gameplay issue, including correct timings at 60FPS (perfect dodge, assault attack, 360 spin and so on) and no known visual issues. People enjoy this port for it's stutter-free experience, visuals and good performances on Windows. The project goal is to make people discover this hidden gem from Platinum Games.
+The game is playable from the title screen to credits. The port has no known gameplay issue, including correct timings at 60FPS (perfect dodge, assault attack, 360 spin and so on) and no known visual issues. People enjoy this port for it's stutter-free experience, visuals, no audio desync (since 1.13.0 port's update) and good performances on Windows. The project goal is to make people discover this hidden gem from Platinum Games.
 
 Report problems as issues, following [CONTRIBUTING.md](CONTRIBUTING.md).
 

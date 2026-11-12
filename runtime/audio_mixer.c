@@ -70,12 +70,32 @@ static _Atomic float device_volume = 1.0f;
 
 float audio_device_volume(void) { return atomic_load(&device_volume); }
 
-// The output device's clock: the sound it has asked for since it opened, in ns (sdl_pull adds each request, whether the
-// ring had samples for it or not). It stands still while the device does: a suspended process, a debugger break. The
-// 60 fps cutscene step (frame_rate.c cutscene_stall) reads it to tell such a stall from one of the game thread alone.
-static _Atomic uint64_t device_clock_ns;
+// The output device's clock, in ns: the sound the device has asked for since it opened, whether the ring had samples
+// for a request or not (sdl_pull here; ov_audout.c audout_pull for the audout output, the one Astral Chain plays
+// through). It stands still while the device does: a suspended process, a debugger break. The cutscene step
+// (frame_rate.c cutscene_lost) reads it to tell such a stall from one of the game thread alone.
+// The dry clock, in ns: of those requests, what the audout output answered with silence because the game's sound
+// thread had not refilled the ring in time. The game queues a buffer only when one comes back, so everything it
+// streams (a voice, a movie's sound, music) is that much later from then on. The cutscene step gives the same time up,
+// and the cutscene and movie log lines measure the picture against the sound played: the device clock minus this.
+// The device asks in periods (10 ms on most, several times that on some): its clock moves by one at a time, which is
+// how far it may be behind the wall clock at any reading (audio_device_period_ns, 0 unknown).
+static _Atomic uint64_t device_clock_ns, device_dry_ns, device_period_ns;
 
 uint64_t audio_device_clock_ns(void) { return atomic_load_explicit(&device_clock_ns, memory_order_relaxed); }
+uint64_t audio_device_dry_ns(void) { return atomic_load_explicit(&device_dry_ns, memory_order_relaxed); }
+uint64_t audio_device_period_ns(void) { return atomic_load_explicit(&device_period_ns, memory_order_relaxed); }
+
+void audio_device_set_period(uint64_t frames, uint32_t rate) {
+    if (rate) atomic_store_explicit(&device_period_ns, frames * 1000000000ull / rate, memory_order_relaxed);
+}
+
+void audio_device_clock_add(uint64_t frames, uint64_t dry_frames, uint32_t rate) {
+    if (!rate) return;
+    atomic_fetch_add_explicit(&device_clock_ns, frames * 1000000000ull / rate, memory_order_relaxed);
+    if (dry_frames)
+        atomic_fetch_add_explicit(&device_dry_ns, dry_frames * 1000000000ull / rate, memory_order_relaxed);
+}
 
 // AC_VOLUME: the player's volume in percent (0..100) on top of the game's own; a live setting (the
 // menu), parsed again when cfg_version changes. Render thread only.
@@ -173,8 +193,7 @@ static void SDLCALL sdl_pull(void *user, SDL_AudioStream *stream, int additional
         if (!frames) break;
         if (frames > 1024) frames = 1024;
         ring_pull(m, tmp, frames);
-        if (m->rate > 0)
-            atomic_fetch_add_explicit(&device_clock_ns, frames * 1000000000ull / (uint64_t)m->rate, memory_order_relaxed);
+        audio_device_clock_add(frames, 0, m->rate > 0 ? (uint32_t)m->rate : 0);
         if (!SDL_PutAudioStreamData(stream, tmp, (int)(frames * 2 * sizeof(float)))) break;
         additional -= (int)(frames * 2 * sizeof(float));
     }
@@ -207,6 +226,7 @@ static void output_open(Mixer *m, int rate) {
     int period = 0;
     if (!SDL_GetAudioDeviceFormat(SDL_GetAudioStreamDevice(m->stream), &dev, &period) || period <= 0) period = m->frame;
     m->period = period;
+    audio_device_set_period((uint64_t)period, (uint32_t)rate);
     m->target = m->frame * m->prefill > 2 * period ? m->frame * m->prefill : 2 * period;
     if (m->target > RING_FRAMES / 2) m->target = RING_FRAMES / 2;
     uint64_t period_ns = (uint64_t)period * 1000000000ull / (uint64_t)rate;

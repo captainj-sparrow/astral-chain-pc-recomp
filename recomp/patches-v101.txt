@@ -141,7 +141,8 @@ site fov main 998f90 bd014260 @fn:rt_fov_s0 bd014260   # str s0,[x19,#0x140] -> 
 # instead of whole 60 fps frames; the camera's per-frame smoothing blend becomes 1 - powf(1 - a, clamp(step, 0, 4)); the
 # dialogue text reveal, the time-scale channel test and the frame-counted cue scheduler follow the step. Cutscenes keep
 # the game's fixed-step flag: in-engine ones step by the real time at 60 (frame_rate.c cutscene_step), and one with a
-# full-screen movie keeps the fixed step, held to 30 presents per second (frame_rate.c cutscene_rate). Sites from the
+# full-screen movie is held to 30 presents per second (frame_rate.c cutscene_rate) and steps by the whole 30 fps
+# frames of the real time (frame_rate.c held_step). Sites from the
 # AstralChain-Dynamic-FPS mod v1.1.1 are marked so. AC_FPS=30 runs the original instructions (the shipping 30 fps).
 set  fps60 FPS60 1
 # frame call: request mode 0 (present interval 1) instead of mode 1 (interval 2, 30 fps); the present pacer
@@ -185,11 +186,7 @@ site fps60 main 430dd0 1e2e1001 bd40d001   # fmov s1,#1.0 -> ldr s1,[x0,#0xd0]
 site fps60 main 6a3f28 11000508 @fn:rt_fps_cue_up_w8   # add w8,w8,#1 -> w8 += ticks
 site fps60 main 6a3f38 6b08013f @fnz:rt_fps_cue_cmp    # cmp w9,w8 -> Z = entry due
 site fps60 main 6a3f54 6b08013f @fnz:rt_fps_cue_cmp    # cmp w9,w8 -> Z = entry due (next entries)
-# cut clock (main+0x8C2410), the end of a cut: the game's own test, unless a cutscene runs at 60 (no movie in it), where
-# a cut goes on while its time is below its length and the next cut starts at what the step went past it
-site fps60 main 8c2550 1e283821 @fn:rt_cut_hold_s1   # fsub s1,s1,s8 -> len - rate, or just below len
-site fps60 main 8c255c bd400680 @fn:rt_cut_prev_s0   # ldr s0,[x20,#4] -> the old time, or s1 (no hold)
-site fps60 main 8c2568 1e2703e1 @fn:rt_cut_next_s1   # fmov s1,wzr -> 0, or the overshoot
+# (the cut clock's end test, which a cutscene at 60 needs exact, is in the avsync set below)
 # diagnostics (AC_TRACE=perf): the scene clock the event kept, after its update (main+0x8B7C60)
 site fps60 main 8b7cb0 b9402a68 b9402a68 @fn:rt_cut_state   # ldr w8,[x19,#0x28]; then log cut changes and stops
 # the game's audio sync of an event with a voice track (main+0x8B9DC0, twin main+0x8C2E10): s0 = the track's position
@@ -351,14 +348,37 @@ site fps60 main 2876d4 71000508 @fnz:rt_fps_hs_w8   # +0x14d4, sibling of 28759c
 
 # Full-screen movies (runtime/frame_rate.c rt_movie_*): the game's Bink player (open main+0x9BEFD0) tells the runtime
 # which open handles are full-screen movies (1280x720 or more) and when one last waited for its next frame, so a
-# cutscene with a movie keeps the 30 fps hold. Nothing changes what the player does. Its own set,
-# on at 30 fps too, so a movie opened before a switch to 60 is known.
+# cutscene with a movie keeps the 30 fps hold. Its own set, on at 30 fps too, so a movie opened before a switch to 60
+# is known.
 set  movies AC_MOVIE_TRACK 1
 site movies main 9bf058 f9000680 @fn:rt_movie_opened f9000680   # str x0,[x20,#8] after BinkOpen; the handle first
 site movies main 9bf26c 97f502cd @fn:rt_movie_close 97f502cd    # bl BinkClose; the handle first
 site movies main 9bf430 97f503ec @fn:rt_movie_wait 97f503ec     # bl BinkWait
 site movies main 9bf514 97f503b3 @fn:rt_movie_wait 97f503b3     # bl BinkWait
 site movies main 9bf6a8 97f5034e @fn:rt_movie_wait 97f5034e     # bl BinkWait
+
+# The picture kept with the sound (runtime/frame_rate.c). The game's sound plays on the audio device's
+# clock whatever the picture does, so a cutscene whose frames come late has to make up for them. On at 30 fps and at
+# 60; the helpers change nothing while the frames come on time.
+set  avsync AC_AVSYNC_PATCH 1
+# A movie ("Keeping a movie with its sound" in frame_rate.c; its helpers go by the movies set's tracking). The event
+# movies have no sound track, so Bink never skips a frame of one, and a cutscene with a movie presents 30 times a
+# second at most: a frame shown late stayed late. BinkWait's subtraction (main+0x7003E0: the timer since the sync
+# point minus the next frame's due time) hands the runtime how late the movie is and no longer takes a new sync point
+# for a delay the skipped frames can make up; the player's read of BinkShouldSkip's answer (in its decode,
+# main+0x9BF6F0) then skips a frame of a movie that is a frame and a half late, by the game's own code for it.
+site avsync main 7004d4 6b090149 @fnz:rt_movie_late_w9          # subs w9,w10,w9 -> the same, recorded; w9 capped
+site avsync main 9bf760 340003e0 @fn:rt_movie_skip_w0 340003e0  # cbz w0,0x9bf7dc; before it w0 = 1 for a late movie
+# At 30 fps the game's own timer runs (the fps60 set's site at main+0x91DC10 branches past this one): its fixed step,
+# 1.0 while the cutscene flag is set, becomes the whole 30 fps frames of the real time (frame_rate.c rt_fixed_step).
+site avsync main 91dc48 bd00d268 @fn:rt_fixed_step              # str s8,[x19,#0xd0] -> the step stored by the helper
+site avsync main 91dc14 bd40da61 @fn:rt_free_step bd40da61      # ldr s1,[x19,#0xd8], the free step: a cutscene run ended
+# cut clock (main+0x8C2410), the end of a cut: the game's own test, unless the frame steps a cutscene by other than
+# 1.0 (a cutscene at 60, or a held one making up for late frames), where a cut goes on while its time is below its
+# length and the next cut starts at what the step went past it
+site avsync main 8c2550 1e283821 @fn:rt_cut_hold_s1   # fsub s1,s1,s8 -> len - rate, or just below len
+site avsync main 8c255c bd400680 @fn:rt_cut_prev_s0   # ldr s0,[x20,#4] -> the old time, or s1 (no hold)
+site avsync main 8c2568 1e2703e1 @fn:rt_cut_next_s1   # fmov s1,wzr -> 0, or the overshoot
 
 # Wide pictures (the aspect setting's wide, AC_ASPECT=wide; runtime/resolution.c res_wide_tick). The game renders 16:9
 # whatever the window's shape (off the 32n x 18n grid it loses the device, resolution.c res_output_grid), so a wider
