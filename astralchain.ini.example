@@ -146,6 +146,9 @@
 # in front again. 0: it pauses when its window loses focus, as it does on the Switch when Home is pressed; a load
 # interrupted that way can stop for good. Read at each focus change.
 # assume_focus = 1
+# 1, the default: the game draws its HUD. 0: the HUD of play (the gauges, the map, the prompts, the markers) is not
+# drawn; the menus stay. F12 switches it in game and saves it here, as does the menu's Game tab.
+# hud = 1
 # Performance overlay in the top right corner: off, fps, or full (frame rate, mean and longest frame time). F10
 # cycles the modes in game, as does holding L + R and then pressing Minus + Plus on a controller (both stick clicks are
 # left to the game: they trigger Fusion).

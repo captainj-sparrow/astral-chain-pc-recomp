@@ -34,6 +34,8 @@ Report problems as issues, following [CONTRIBUTING.md](CONTRIBUTING.md).
   GPU; the HUD stays at full resolution
 - Anisotropic texture filtering up to 16x, for sharp ground into the distance
 - In-game settings menu (F1) and performance overlay (F10)
+- No-HUD mode for screenshots and videos: F12 (or the menu's Game tab) hides the gauges, map, prompts and markers
+  during play and shows them again; the menus stay
 - Setup and in-game menu in English, Russian, Brazilian Portuguese and Simplified Chinese
 - Keyboard, mouse and gamepad, with remapping, rumble and gyro
 - Xbox and PlayStation button prompts, each with its matching button layout (PlayStation mod from https://gamebanana.com/mods/604666)

@@ -602,10 +602,12 @@ void res_settle(int upscaler_ok, unsigned vram_mib) {
 }
 
 static void wide_init(void);
+static void hud_init(void);
 
 void res_init(void) {
     res_pick();
     wide_init();
+    hud_init();
     res_shadow_range();
     if (!output_set()) {   // 1.0.1: the res set took output_res above, the scene set scales the scene for upscaling
         scene_init();
@@ -1148,4 +1150,56 @@ void rt_wide_anchor(Cpu *c) {
     if (!side) return;
     float *m = (float *)(uintptr_t)(c->sp + 0x10);
     m[12 + a] += (float)side * move;
+}
+
+// ---- the gameplay HUD switched off (the hud setting, AC_HUD, which F12 and the menu's Game tab switch;
+// recomp/patches-v101.txt, set nohud). The set's two sites sit where the game sends a layout instance's parts to the
+// renderer, and leave out the instances of the gameplay HUD's archive (hud2): nothing of them is drawn, while the game
+// keeps updating them, so the HUD is back whole in the first frame after the set goes off. The menus, the title
+// screen, the dialogue and the loading screens are layouts of other archives and stay.
+static struct {
+    int set;          // the nohud set (rt_patch_set), -1 when the generated C lacks it
+    int hidden;       // the setting asks for no HUD (and the set is on when the generated C has it)
+    unsigned seen;    // cfg_version the setting was read at
+} H = {.set = -1, .seen = ~0u};
+
+static void hud_init(void) {
+    H.set = rt_patch_set("nohud");
+    H.hidden = rt_patch_enabled(H.set);   // AC_NOHUD_PATCH, until the first present reads the setting
+}
+
+// The game's present (vk_backend.c vk_be_present, the game's thread): the set follows the setting when it changed.
+void res_hud_tick(void) {
+    unsigned v = cfg_version();
+    if (v == H.seen) return;
+    H.seen = v;
+    int hide = !cfg_bool("AC_HUD");
+    if (hide == H.hidden) return;
+    H.hidden = hide;
+    if (H.set < 0) {
+        if (hide) rt_log("resolution: hud = 0 needs the nohud patch set, which the generated C lacks: the HUD stays");
+        return;
+    }
+    rt_patch_switch(H.set, hide);
+    rt_log("resolution: the gameplay HUD is %s (hud = %d)", hide ? "hidden" : "shown", !hide);
+}
+
+// 1 for an instance of a layout of the gameplay HUD's archive, by the archive's name in the game's table (a few
+// entries, read each time: nothing here relies on an archive keeping its number).
+static int hud_instance(const uint8_t *inst) {
+    uint32_t arc;
+    memcpy(&arc, inst + INST_ARCHIVE, sizeof arc);
+    return !strcmp(anchor_archive(arc), "hud2");
+}
+
+// main+0x9177ec (ldrb w8,[x23,#0xd1]), in the draw of an instance that has a layer of its own: x23 = the instance,
+// w8 = its byte the function tests next, 0 for one it does not draw. A HUD instance reads as 0.
+void rt_hud_off23_x8(Cpu *c) {
+    if (hud_instance((const uint8_t *)(uintptr_t)c->x[23])) c->x[8] = 0;
+}
+
+// main+0x915ea0 (ldr x8,[x22,#0x160]), in the draw of the queued instances: x22 = the instance taken off the list,
+// x8 = its parts' count, 0 for one the function passes over. A HUD instance reads as 0.
+void rt_hud_off22_x8(Cpu *c) {
+    if (hud_instance((const uint8_t *)(uintptr_t)c->x[22])) c->x[8] = 0;
 }

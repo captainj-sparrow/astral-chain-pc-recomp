@@ -302,6 +302,8 @@ void res_fov_live(void);                                   // AC_FOV to the came
 // window's size with each new swapchain.
 float res_wide_tick(void);
 void res_wide_window(unsigned w, unsigned h);
+// The gameplay HUD (the hud setting, set nohud): the game's present switches the set when the setting changed.
+void res_hud_tick(void);
 // ---- code patches (patches.c) and the frame step (frame_rate.c)
 void rt_patches_init(void);                                // after ldr_load: switches from the environment, the patch
                                                            // page committed; logs the sets

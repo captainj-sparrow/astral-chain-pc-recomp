@@ -423,3 +423,17 @@ site wide main 403704 2a1f03e2 52800022               # layer 0x6e's (main+0x403
 # hangs on a moved part follows it, and the layouts of the menus, the centre of the screen and the markers placed on
 # the world stay where they are.
 site wide main 9111d8 9105c260 @fn:rt_wide_anchor 9105c260    # add x0,x19,#0x170; before it the world matrix moved
+
+# The gameplay HUD switched off (the hud setting, F12; runtime/resolution.c res_hud_tick). An interface layout is drawn
+# as an instance (its archive's number at +0xb4, its parts' array at +0x150 and their count at +0x160), and two
+# functions send an instance's parts to the renderer, both through main+0x9126c0, which draws a part, its children and
+# the parts after it: main+0x9177d0, the draw of an instance that has a layer of its own (the instance at +0x30 of
+# x0, drawn while its byte at +0xd1 is set), and main+0x915e50, which takes the instances queued for a draw off their
+# list one by one and draws those that have parts. Each site, after the load its function tests, clears x8 for an
+# instance of the gameplay HUD's archive (hud2: the gauges, the map, the prompts and the markers over the world), so
+# the function leaves it out as it does an instance without parts. The layouts keep being updated and nothing in the
+# game's state changes: the HUD is back in the frame after the set goes off. The menus, the title screen, the dialogue
+# and the loading screens are layouts of other archives and stay.
+set  nohud AC_NOHUD_PATCH 0
+site nohud main 9177ec 394346e8 394346e8 @fn:rt_hud_off23_x8   # ldrb w8,[x23,#0xd1]; then x8 = 0 for a HUD instance (x23)
+site nohud main 915ea0 f940b2c8 f940b2c8 @fn:rt_hud_off22_x8   # ldr x8,[x22,#0x160]; the same (x22)

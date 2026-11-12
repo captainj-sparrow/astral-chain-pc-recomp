@@ -1,6 +1,7 @@
 // AC_DUMP=<frame>: a frame dump for the Vulkan back end, which RenderDoc cannot capture (it hides
-// VK_EXT_external_memory_host). F12 arms the next full frame at runtime (vk_dump_request), for an artifact whose frame
-// is not known in advance. Between presents frame-1 and frame, the replay's command buffers also copy, after each
+// VK_EXT_external_memory_host). With AC_DUMP_KEY=1, F12 arms the next full frame at runtime (vk_dump_request, from
+// gfx_present.c gfx_window_f12), for an artifact whose frame is not known in advance; without it F12 switches the
+// gameplay HUD. Between presents frame-1 and frame, the replay's command buffers also copy, after each
 // render pass, its colour and depth targets and, after each dispatch, the storage images it writes into host buffers;
 // the completion thread turns them into 8-bit PNGs once the submission is done. 3D textures (LUTs, volumes) sampled or
 // written in the frame are copied once each, slices side by side. Files in AC_DUMP_DIR (default "dump"):
@@ -25,7 +26,7 @@
 // AC_DUMP_SKIP_RUNS=1: a render pass with the same targets as the render pass before it is logged but not copied
 // (the terrain decals draw one pass each into the G-buffer and would use up both caps).
 // AC_DUMP_AUTO=<vs>[:<fs>]: arms the next frame automatically when a draw with these shader hashes is recorded, so one
-// playthrough captures an effect whose frame is not known; F12 does the same on demand.
+// playthrough captures an effect whose frame is not known; F12 does the same on demand (AC_DUMP_KEY=1).
 // AC_DUMP_N=<n> (with F12 or AC_DUMP): dump that many consecutive frames, each into AC_DUMP_DIR/f<frame>/
 // (1 = AC_DUMP_DIR itself, the default). Consecutive presents are opposite phases of a 2-frame flicker.
 // AC_DUMP_DRAWS=<seq>: in the dumped frame, the render pass with that sequence number is split after every draw and its
@@ -993,7 +994,7 @@ out:
 static void make_dirs(char *path) { plat_file_mkdir_p(path); }
 
 // AC_DUMP_DIR, AC_DUMP_UBO, AC_DUMP_SKIP_RUNS, AC_DUMP_TEX and AC_DUMP_BUF are parsed even when AC_DUMP is absent: F12
-// (vk_dump_request) can arm a dump at any time, unlike AC_DUMP which names its frame at start.
+// with AC_DUMP_KEY=1 (vk_dump_request) can arm a dump at any time, unlike AC_DUMP which names its frame at start.
 static void dump_config(void) {
     if (dump_conf) return;
     dump_conf = 1;

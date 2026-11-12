@@ -151,6 +151,13 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   or on a part of a block that has moved already), and menus keep their composition in the middle 16:9. Not done:
   widening a layout's own backdrops that span the screen. `--shot` and `AC_SHOTS` save the
   game's 16:9 texture; `AC_PRESENT_SHOT` saves the window's picture.
+- No HUD (`hud = 0`; F12 and the menu's Game tab switch and save it; `resolution.c` `res_hud_tick`, set `nohud` of
+  `recomp/patches-v101.txt`). The game sends a layout instance's parts to the renderer from two functions
+  (main+0x9177d0 for an instance with a layer of its own, main+0x915e50 for the queued ones); the set's site in
+  each makes an instance of the gameplay HUD's archive (`hud2`) read as one with nothing to draw
+  (`rt_hud_off23_x8`, `rt_hud_off22_x8`). The game keeps updating those layouts, so the HUD is back whole in the
+  frame after the set goes off, and the menus, the title screen, the loading screens and the dialogue's lines,
+  which are not `hud2` layouts, stay. The game's present switches the set when the setting changed.
 - HDR (`hdr = 1`, `vk_hdr.c`). The game tonemaps its scene (Uchimura's curve, or Hable's, then a 16³ colour LUT) into
   an R11G11B10F target at the output's size, sRGB-encoded; its SMAA reads that target and writes the 8-bit window
   texture it presents, and the HUD and menus draw into the window texture afterwards. With HDR on, the tonemap's
@@ -238,7 +245,7 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   at its next use instead of keeping stale memory.
   --probe-astc holds both encoders and the scan to PSNR and exactness bounds. The CPU decoder (`tex_astc*.c`) is the fallback and the test oracle.
 - Draw state. A draw whose program, bound state and textures repeat reuses the previous draw's shaders and skips rebuilding its descriptor sets; descriptor sets are written through update templates (`vk_exec_draw.c`, `vk_pipeline.c`).
-- Allocation: Vulkan Memory Allocator. Debugging: Vulkan validation layers, per-pass frame dumps (`AC_DUMP`, `vk_dump.c`) and a flight recorder (`AC_FLIGHT`). RenderDoc cannot capture, because it hides `VK_EXT_external_memory_host` from the application.
+- Allocation: Vulkan Memory Allocator. Debugging: Vulkan validation layers, per-pass frame dumps (`AC_DUMP`, or F12 with `AC_DUMP_KEY=1`; `vk_dump.c`) and a flight recorder (`AC_FLIGHT`). RenderDoc cannot capture, because it hides `VK_EXT_external_memory_host` from the application.
 
 Maxwell behaviour the back end has to match, and the Astral Chain bugs other ports fixed: [maxwell.md](maxwell.md).
 

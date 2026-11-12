@@ -63,6 +63,20 @@ void gfx_window_focus_changed(int in) {
            t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
 }
 
+// F12 (the window thread of either back end): the gameplay HUD is hidden or shown again. The hud setting is switched
+// and saved, as F11 does fullscreen, so the menu's row agrees; the game's next present switches the patch set
+// (resolution.c res_hud_tick). With AC_DUMP_KEY=1 the key arms a dump of the next full frame instead (vk_dump.c): a
+// debugging aid that writes the frame's render targets to disk, so a player's key press must not start it.
+void gfx_window_f12(void) {
+    const char *dump = cfg_get("AC_DUMP_KEY");
+    if (dump && *dump && strcmp(dump, "0")) {
+        vk_dump_request();
+        return;
+    }
+    cfg_set("AC_HUD", cfg_bool("AC_HUD") ? "0" : "1");
+    cfg_save();
+}
+
 // The window was closed: the process ends with it, as in MNG, once a save Commit still running in the background is
 // done. After gfx_window_request_restart the executable then starts again with the same command line and environment
 // (plat_restart), and the new process waits until this one is gone (main.c) before it moves the log and opens the
