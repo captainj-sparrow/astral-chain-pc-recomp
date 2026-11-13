@@ -1,22 +1,43 @@
 #version 450
 // Ambient occlusion (runtime/vk_ao.c run): the blur that averages ao.comp's 4x4 pattern out, at the occlusion's own
-// resolution, where it costs a quarter of what it did per pixel of the light target. Each texel averages the 4x4
-// texels from two before it to one after it, the pattern's span, so every pattern value counts once; the average
-// therefore sits half a texel before the texel on each axis, which ao_apply.frag takes into account. Each texel
-// also counts by how close its view z is to the centre's, 1 over the near half of the tolerance, so occlusion stays on
-// its side of a depth edge and a surface that slants away still counts its texels alike.
-// It also lets go of what glows: where the light target is several times its typical brightness (ao_meter.comp), a lit
+// resolution, where it costs a quarter of what it did per pixel of the light target, and the step that turns the
+// visibility into the factor on the light. Each texel averages the 4x4 texels from two before it to one after it, the
+// pattern's span, so every pattern value counts once; the average therefore sits half a texel before the texel on each
+// axis, which ao_apply.frag takes into account. Each texel also counts by how close its view z is to the centre's, 1
+// over the near half of the tolerance, so occlusion stays on its side of a depth edge and a surface that slants away
+// still counts its texels alike.
+// It lets go of what glows: where the light target is several times its typical brightness (ao_meter.comp), a lit
 // sign, a lamp, a fire's glow on the ground, the visibility goes to 1, so the occlusion that multiplies all the light
 // does not dim emissive surfaces.
-// In and out: .x visibility, .y view z (0 sky).
+// The visibility becomes the factor through a fixed curve (vk_ao.c AO_OPEN, AO_POWER): visibilities from "open" up are
+// 1, the rest, scaled to 0..1, is raised to "power".
+// The factor then spares the game's fog. Astral Chain's opaque fragment shaders end with their distance fog:
+//   t   = pow(clamp((distance to the camera - start) / range, 0, 1), exponent)
+//   f   = t * cube.a * (1 + h * (bright - 1)),   h = clamp(luminance of the lit surface - threshold, 0, 1)
+//   out = mix(lit surface, cube.rgb * scale, f)
+// with cube a small cube map read along the direction from the camera to the surface, in world space. The fog is light
+// scattered in front of the surface, which nothing near that surface hides, and it can be most of a pixel's light with
+// a small f: in a misty street at 20 m, f is 0.03 and the fog's colour 500 times the surface's. Multiplying the whole
+// pixel by the occlusion dug dark, blurred shapes into the mist around every distant object. The same fog is computed
+// here from the texel's view-space position and the light target's pixel the texel stands for, and each channel's
+// factor only takes the occlusion on the surface's share of that pixel: 1 - (1 - k) * (pixel - fog) / pixel. Where the
+// pixel holds less light than the fog computed here (a surface drawn without fog), the share is 0: the factor never
+// goes below the plain occlusion k nor above 1.
+// In: .x visibility, .y view z (0 sky). Out: .rgb the factor on the light, .a view z (0 sky).
 layout(local_size_x = 8, local_size_y = 8) in;
 layout(binding = 0) uniform sampler2D ao_tex;
-layout(binding = 1) uniform writeonly image2D ao_out;
+layout(binding = 1, rgba16f) uniform writeonly image2D ao_out;
 layout(binding = 2) uniform sampler2D light_tex;   // bilinear
 layout(binding = 3) uniform sampler2D mean_tex;    // 1x1
+layout(binding = 4) uniform samplerCube fog_tex;   // the game's fog cube map; a stand-in without fog
 layout(push_constant) uniform P {
-    vec4 glow;     // x: light-target pixels per occlusion texel; y, z: the brightness, in multiples of the typical one,
-                   // where the occlusion starts to fade and where it is gone
+    vec4 glow;          // x: light-target pixels per occlusion texel; y, z: the brightness, in multiples of the typical
+                        // one, where the occlusion starts to fade and where it is gone; w: 1 with the game's fog known
+    vec4 curve;         // open, power, 2 for the view of the surface's share alone (vk_ao.c AC_AO_DEBUG=2), 0
+    vec4 ndc_to_view;   // view x = z * (ndc.x * a + b), view y = z * (ndc.y * c + d), as in ao.comp
+    vec4 size;          // light target width, height, the fog's luminance threshold, its factor on bright surfaces
+    vec4 world0, world1, world2;   // .xyz: the rows of the view-to-world rotation
+    vec4 fog;           // start, 1 / range, exponent, colour scale
 } pc;
 
 void main() {
@@ -24,7 +45,7 @@ void main() {
     if (p.x >= size.x || p.y >= size.y) return;
     float z = texelFetch(ao_tex, p, 0).y;
     if (z == 0.0) {   // the sky
-        imageStore(ao_out, p, vec4(1.0, 0.0, 0.0, 0.0));
+        imageStore(ao_out, p, vec4(1.0, 1.0, 1.0, 0.0));
         return;
     }
     float tol = 0.04 * abs(z) + 0.05, sum = 0.0, wsum = 0.0;
@@ -40,5 +61,27 @@ void main() {
     float lum = dot(textureLod(light_tex, uv, 0.0).rgb, vec3(0.2126, 0.7152, 0.0722));
     float typical = texelFetch(mean_tex, ivec2(0), 0).r;
     v = mix(v, 1.0, smoothstep(pc.glow.y * typical, pc.glow.z * typical, lum));
-    imageStore(ao_out, p, vec4(v, z, 0.0, 0.0));
+    float k = pow(clamp(v / pc.curve.x, 0.0, 1.0), pc.curve.y);
+    bool share_view = pc.curve.z > 1.5;
+    vec3 factor = share_view ? vec3(1.0) : vec3(k);
+    if (pc.glow.w > 0.5 && (k < 1.0 || share_view)) {
+        // the light target's pixel this texel stands for (ao_prep.comp) and its view-space position
+        ivec2 q = min(p * int(pc.glow.x), ivec2(pc.size.xy) - 1);
+        vec3 c = texelFetch(light_tex, q, 0).rgb;
+        vec2 ndc = vec2((float(q.x) + 0.5) / pc.size.x * 2.0 - 1.0, 1.0 - (float(q.y) + 0.5) / pc.size.y * 2.0);
+        vec3 pv = z * vec3(ndc.x * pc.ndc_to_view.x + pc.ndc_to_view.y, ndc.y * pc.ndc_to_view.z + pc.ndc_to_view.w,
+                           1.0);
+        vec3 dir = vec3(dot(pc.world0.xyz, pv), dot(pc.world1.xyz, pv), dot(pc.world2.xyz, pv));
+        vec4 cube = textureLod(fog_tex, dir, 0.0);
+        vec3 colour = cube.rgb * pc.fog.w;
+        float f = clamp(pow(clamp((length(pv) - pc.fog.x) * pc.fog.y, 0.0, 1.0), pc.fog.z) * cube.a, 0.0, 1.0);
+        if (pc.size.w != 1.0) {   // bright surfaces take another amount of fog: from the surface this f leaves
+            vec3 lit = max(c - colour * f, 0.0) / max(1.0 - f, 1e-3);
+            float h = clamp(dot(lit, vec3(0.2989, 0.587, 0.114)) - pc.size.z, 0.0, 1.0);
+            f = clamp(f * (1.0 + h * (pc.size.w - 1.0)), 0.0, 1.0);
+        }
+        vec3 share = clamp((c - colour * f) / max(c, vec3(1e-6)), 0.0, 1.0);
+        factor = share_view ? share : 1.0 - (1.0 - k) * share;
+    }
+    imageStore(ao_out, p, vec4(factor, z));
 }

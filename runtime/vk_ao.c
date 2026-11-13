@@ -9,7 +9,9 @@
 // depth. The first light-target pass with that depth after the linear depth pass is the opaque lighting; when the next
 // pass with other targets begins, or a dispatch or copy comes first, the steps run (runtime/shaders): ao_prep.comp takes
 // the scene depth to a view z at the occlusion's resolution, ao.comp computes the occlusion there, ao_meter.comp reads
-// the light target's typical brightness, ao_blur.comp averages the noise pattern out and lets go of what glows, and ao_apply.frag scales the result up and multiplies the light target by it through a blend.
+// the light target's typical brightness, ao_blur.comp averages the noise pattern out, lets go of what glows and turns
+// the visibility into the factor on the light, and ao_apply.frag scales the result up and multiplies the light target
+// by it through a blend.
 // Transparent surfaces, particles, the bloom, the tonemap and the HUD come after, untouched. The
 // frame state starts over at each present (vk_ao_frame).
 //
@@ -31,9 +33,23 @@
 // plain power of it darkened the whole picture by a fifth), so visibilities from AO_OPEN up count as open and stay
 // untouched, and the rest falls off with AO_POWER: contacts and corners go dark, open walls and ground keep the game's
 // light.
+//
+// The fog keeps its light. The game's opaque fragment shaders end with their distance fog (ao_blur.comp has the
+// formula): a colour read from a small cube map along the view direction, mixed in by the distance to the camera. That
+// light is scattered in front of the surface, and it can be nearly all of a pixel: in a misty street (measured 20 m
+// away) the surface gives 1.5 and the fog 16 of the pixel's 17.5. Multiplied whole, such pixels lost up to nine tenths
+// of their light (38% of the picture lost more than 5%), and every distant object stood in a dark, blurred, shimmering
+// stain where the mist should have been even. The fog's parameters are the fragment stage's c5 block (row 2: start, 1 /
+// range, exponent, colour scale; row 4: .y and .z, a luminance threshold and the fog's factor on bright surfaces) and
+// its cube map the fragment texture slot 12, the same in every opaque shader of the game: vk_ao_draw takes the pair
+// most colour-writing draws of the opaque lighting bound, and ao_blur.comp computes the same fog per occlusion texel
+// and applies the occlusion to the rest of the pixel only. Without a usable pair (no such block, a cube map the view
+// cannot read as it is) the whole pixel is multiplied, as before.
 // Live: the setting is read again whenever cfg_version moves, so the menu switches it on and off at once.
-// AC_AO_DEBUG=1 (no settings row) shows the occlusion factor in grey in place of the light. AC_GPU_PASSES times the
-// pass on a row of its own ("ao").
+// AC_AO_DEBUG=1 (no settings row) shows the factor on the light in place of the light; AC_AO_DEBUG=2 multiplies the
+// light by the surface's share alone, which shows the scene with the fog computed here taken out (a check of that
+// computation: no mist should remain, and nothing should go black); AC_AO_DEBUG=3 multiplies the whole pixel, fog
+// included, to compare a scene with and without the fog kept. AC_GPU_PASSES times the pass on a row of its own ("ao").
 #include "vk.h"
 
 #include <math.h>
@@ -62,6 +78,11 @@
 #define AO_POWER 2.0f         // the remaining visibility to this power is the factor on the light
 #define AO_FADE 120.0f        // the occlusion fades out between half this view distance and this one
 #define MAX_APPLY 4           // apply pipelines: light target format x debug
+#define N_IM 5                // view z, the occlusion, the factor, the 1x1 brightness, the stand-in cube map
+#define K_FORMAT VK_FORMAT_R16G16B16A16_SFLOAT   // ao_blur.comp: the factor per channel and view z (storage mandatory)
+#define FOG_BANK 5            // the fragment stage's constant bank with the fog's parameters (c5)
+#define FOG_SLOT 12           // the fragment stage's texture slot of the fog's cube map
+#define FOG_BYTES 80u         // rows 0-4 of the fog block
 
 struct Cam {
     uint64_t addr;
@@ -70,10 +91,18 @@ struct Cam {
     float block[CAM_BYTES / 4];
 };
 
+// The fog block and cube map the opaque lighting's draws bind (vk_ao_draw).
+struct Fog {
+    uint64_t addr, cube;       // the block's address, the combined texture handle
+    uint32_t n;
+    int have;
+    float block[FOG_BYTES / 4];
+};
+
 static struct {
     // settings
     int level;                 // 0 off, 1 low, 2 high
-    int debug;
+    int debug;                 // AC_AO_DEBUG: 1 the factor alone, 2 the surface's share alone, 3 no fog kept
     unsigned cfg_seen;
     int cfg_read;
     // pipelines
@@ -84,8 +113,9 @@ static struct {
     VkPipeline comp[4];        // ao_prep, ao, ao_meter, ao_blur
     struct { VkFormat fmt; int debug; VkPipeline p; } apply[MAX_APPLY];
     int napply;
-    // the images at the occlusion's resolution: view z, the occlusion, the blur's other side; and the 1x1 brightness
-    struct { VkImage img; VmaAllocation mem; VkImageView view; } im[4];
+    // the images at the occlusion's resolution: view z, the occlusion, the factor on the light; the 1x1 brightness;
+    // and a 1x1 cube map bound in the fog's place when the frame has none (never read)
+    struct { VkImage img; VmaAllocation mem; VkImageView view; } im[N_IM];
     uint32_t iw, ih;
     VkFormat ao_format;        // ao.comp's output: RG16F, half the bytes its readers fetch, else RG32F (mandatory)
     // this frame
@@ -93,7 +123,9 @@ static struct {
     int have, lin, armed, done;
     int wrote;                  // a draw of the armed pass writes colour: it is the opaque lighting (vk_ao_draw)
     struct Cam cams[4];
+    struct Fog fogs[4];
     int logged, no_cam_logs, fmt_logs;
+    int fog_state, fog_logs;    // 1 with the fog kept, 2 without: a change is logged, a few times
 } A;
 
 // ---------------------------------------------------------------- settings
@@ -104,9 +136,11 @@ static void read_settings(void) {
     const char *q = cfg_value("AC_AO");
     int level = !strcmp(q, "high") ? 2 : !strcmp(q, "low") ? 1 : 0;
     const char *e = cfg_get("AC_AO_DEBUG");   // diagnostic: no settings row
-    int debug = e && *e && strcmp(e, "0");
+    int debug = e && *e && strcmp(e, "0") ? (!strcmp(e, "2") ? 2 : !strcmp(e, "3") ? 3 : 1) : 0;
     if (level != A.level || debug != A.debug)
-        rt_log("vk: ambient occlusion %s%s", level == 2 ? "high" : level ? "low" : "off", debug ? " (debug view)" : "");
+        rt_log("vk: ambient occlusion %s%s", level == 2 ? "high" : level ? "low" : "off",
+               debug == 3 ? " (the fog multiplied too)" : debug == 2 ? " (debug view: the surface's share)"
+                                                                      : debug ? " (debug view)" : "");
     A.level = level, A.debug = debug;
 }
 
@@ -118,7 +152,7 @@ static VkShaderModule module(VkDevice d, const uint32_t *code, size_t size) {
 }
 
 static VkDescriptorSetLayout set_layout(VkDevice d, const VkDescriptorType *types, uint32_t n, VkShaderStageFlags st) {
-    VkDescriptorSetLayoutBinding b[4];
+    VkDescriptorSetLayoutBinding b[5];
     for (uint32_t i = 0; i < n; i++)
         b[i] = (VkDescriptorSetLayoutBinding){.binding = i, .descriptorType = types[i], .descriptorCount = 1,
                                               .stageFlags = st};
@@ -153,13 +187,13 @@ static int init(void) {
     VkSamplerCreateInfo sl = si;
     sl.magFilter = sl.minFilter = VK_FILTER_LINEAR;   // the light target, for the brightness (R11G11B10F and RGBA16F filter)
     const VkDescriptorType S = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, I = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    const VkDescriptorType tc[2] = {S, I}, tb[4] = {S, I, S, S}, ta[2] = {S, S};
+    const VkDescriptorType tc[2] = {S, I}, tb[5] = {S, I, S, S, S}, ta[2] = {S, S};
     if (vkCreateSampler(d, &si, NULL, &A.nearest) != VK_SUCCESS || vkCreateSampler(d, &sl, NULL, &A.linear) != VK_SUCCESS ||
         !(A.dsl_c = set_layout(d, tc, 2, VK_SHADER_STAGE_COMPUTE_BIT)) ||
-        !(A.dsl_b = set_layout(d, tb, 4, VK_SHADER_STAGE_COMPUTE_BIT)) ||
+        !(A.dsl_b = set_layout(d, tb, 5, VK_SHADER_STAGE_COMPUTE_BIT)) ||
         !(A.dsl_a = set_layout(d, ta, 2, VK_SHADER_STAGE_FRAGMENT_BIT)) ||
         !(A.lay_c = pipe_layout(d, &A.dsl_c, VK_SHADER_STAGE_COMPUTE_BIT, 64)) ||
-        !(A.lay_b = pipe_layout(d, &A.dsl_b, VK_SHADER_STAGE_COMPUTE_BIT, 16)) ||
+        !(A.lay_b = pipe_layout(d, &A.dsl_b, VK_SHADER_STAGE_COMPUTE_BIT, 128)) ||
         !(A.lay_a = pipe_layout(d, &A.dsl_a, VK_SHADER_STAGE_FRAGMENT_BIT, 64))) {
         rt_log("vk: ambient occlusion off: its pipeline layouts could not be created");
         return 0;
@@ -252,7 +286,7 @@ static VkPipeline apply_pipeline(VkFormat fmt, int debug) {
 // device is idle).
 static void free_images(int deferred) {
     VkCtx *c = vk_ctx();
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < N_IM; i++) {
         if (deferred) {
             vk_defer_view(A.im[i].view);
             if (A.im[i].img) vk_defer_image(A.im[i].img, A.im[i].mem);
@@ -265,19 +299,24 @@ static void free_images(int deferred) {
     A.iw = A.ih = 0;
 }
 
-// The occlusion's images at w x h and the 1x1 brightness; a new size retires the old ones. New images go to GENERAL,
-// the layout every image of the back end is kept in.
+// The occlusion's images at w x h, the 1x1 brightness and the stand-in cube map; a new size retires the old ones. New
+// images go to GENERAL, the layout every image of the back end is kept in.
 static int ensure_images(VkCommandBuffer cb, uint32_t w, uint32_t h) {
     if (A.im[0].img && A.iw == w && A.ih == h) return 1;
     VkCtx *c = vk_ctx();
     if (A.im[0].img) free_images(1);
-    VkImageMemoryBarrier2 ib[4];
-    for (int i = 0; i < 4; i++) {
-        VkFormat f = i == 0 || i == 3 ? Z_FORMAT : A.ao_format;
-        VkImageCreateInfo ii = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D, .format = f,
-                                .extent = {i == 3 ? 1 : w, i == 3 ? 1 : h, 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
+    VkImageMemoryBarrier2 ib[N_IM];
+    for (int i = 0; i < N_IM; i++) {
+        int one = i >= 3, cube = i == 4;
+        uint32_t layers = cube ? 6 : 1;
+        VkFormat f = cube ? VK_FORMAT_R8G8B8A8_UNORM : i == 0 || i == 3 ? Z_FORMAT : i == 2 ? K_FORMAT : A.ao_format;
+        VkImageCreateInfo ii = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                                .flags = cube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0, .imageType = VK_IMAGE_TYPE_2D,
+                                .format = f, .extent = {one ? 1 : w, one ? 1 : h, 1}, .mipLevels = 1,
+                                .arrayLayers = layers, .samples = VK_SAMPLE_COUNT_1_BIT,
                                 .tiling = VK_IMAGE_TILING_OPTIMAL,
-                                .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                                .usage = cube ? VK_IMAGE_USAGE_SAMPLED_BIT
+                                              : VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
         VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
         if (vmaCreateImage(c->vma, &ii, &ai, &A.im[i].img, &A.im[i].mem, NULL) != VK_SUCCESS) {
@@ -286,8 +325,8 @@ static int ensure_images(VkCommandBuffer cb, uint32_t w, uint32_t h) {
             return 0;
         }
         VkImageViewCreateInfo vi = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = A.im[i].img,
-                                    .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = f,
-                                    .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+                                    .viewType = cube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D, .format = f,
+                                    .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, layers}};
         if (vkCreateImageView(c->device, &vi, NULL, &A.im[i].view) != VK_SUCCESS) {
             A.im[i].view = VK_NULL_HANDLE;
             free_images(1);
@@ -300,9 +339,9 @@ static int ensure_images(VkCommandBuffer cb, uint32_t w, uint32_t h) {
                                         .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED, .newLayout = VK_IMAGE_LAYOUT_GENERAL,
                                         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                                         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .image = A.im[i].img,
-                                        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+                                        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, layers}};
     }
-    VkDependencyInfo di = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 4,
+    VkDependencyInfo di = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = N_IM,
                            .pImageMemoryBarriers = ib};
     vkCmdPipelineBarrier2(cb, &di);
     A.iw = w, A.ih = h;
@@ -354,6 +393,33 @@ static const float *frame_camera(void) {
     return best ? best->block : NULL;
 }
 
+// This frame's fog: the block and cube map most colour-writing draws of the opaque lighting bound, when the block reads
+// as fog parameters and the cube map can be sampled through a plain view (no channel remap, which a sampled view of the
+// game's would apply). *view: the cube map's view. NULL: none, the occlusion multiplies the whole pixel.
+static const struct Fog *frame_fog(VkImageView *view) {
+    const struct Fog *best = NULL;
+    for (int i = 0; i < 4; i++)
+        if (A.fogs[i].have && (!best || A.fogs[i].n > best->n)) best = &A.fogs[i];
+    if (!best) return NULL;
+    // row 2: start, 1 / range, exponent, colour scale; row 4: -, luminance threshold, factor on bright surfaces
+    const float *r2 = best->block + 8, *r4 = best->block + 16;
+    if (!(isfinite(r2[0]) && r2[1] > 0 && isfinite(r2[1]) && r2[2] > 0 && r2[2] < 64 && r2[3] > 0 && isfinite(r2[3]) &&
+          isfinite(r4[1]) && isfinite(r4[2])))
+        return NULL;
+    view_t v;
+    int hv = 0;
+    const VkTexImage *t = vk_texture_by_id(NVN_HANDLE_TEX(best->cube), &v, &hv);
+    static const uint8_t plain[4] = {NVN_TEXTURE_SWIZZLE_R, NVN_TEXTURE_SWIZZLE_G, NVN_TEXTURE_SWIZZLE_B,
+                                     NVN_TEXTURE_SWIZZLE_A};
+    if (!t || t->type != VK_IMAGE_TYPE_2D || t->layers < 6 || t->samples > 1 || t->alpha_one || t->chan[0] ||
+        (t->view_type != VK_IMAGE_VIEW_TYPE_CUBE && t->view_type != VK_IMAGE_VIEW_TYPE_CUBE_ARRAY) ||
+        !(t->aspect & VK_IMAGE_ASPECT_COLOR_BIT) || memcmp(hv && v.set_swizzle ? v.swz : t->swz, plain, 4) ||
+        (hv && (v.set_format || (v.set_layers && v.min_layer))))
+        return NULL;
+    *view = vk_exec_target_view(t, t->format, VK_IMAGE_VIEW_TYPE_CUBE, VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 6, 0);
+    return best;
+}
+
 // A perspective projection (row-major) as ao.comp needs it: clip w a multiple of view z, and clip x and y depending on
 // their own coordinate and z alone (an off-centre frustum included), so view x and y follow from z and the scales.
 static int plain_perspective(const double p[16]) {
@@ -385,14 +451,21 @@ static void step(VkExec *ex, int n, VkPipeline pipe, VkDescriptorImageInfo src, 
     if (n && vk_gpuprof_on()) vk_gpuprof_mark(ex, 6, (uint64_t)n);
 }
 
-// The blur (ao_blur.comp), from one occlusion image into the other, with the light target and its typical brightness.
-static void blur(VkExec *ex, int from, int to, VkImageView light, float scale) {
+// ao_blur.comp's constants.
+typedef struct {
+    float glow[4], curve[4], ndc_to_view[4], size[4], world[3][4], fog[4];
+} BlurPush;
+
+// The blur (ao_blur.comp), from the occlusion image into the factor's, with the light target, its typical brightness
+// and the fog's cube map (the stand-in without fog).
+static void blur(VkExec *ex, int from, int to, VkImageView light, VkImageView fog, const BlurPush *pb) {
     VkCommandBuffer cb = ex->cb;
     VkDescriptorImageInfo in = {A.nearest, A.im[from].view, VK_IMAGE_LAYOUT_GENERAL},
                           out = {VK_NULL_HANDLE, A.im[to].view, VK_IMAGE_LAYOUT_GENERAL},
                           li = {A.linear, light, VK_IMAGE_LAYOUT_GENERAL},
-                          mean = {A.nearest, A.im[3].view, VK_IMAGE_LAYOUT_GENERAL};
-    VkWriteDescriptorSet wb[4] = {
+                          mean = {A.nearest, A.im[3].view, VK_IMAGE_LAYOUT_GENERAL},
+                          fg = {A.linear, fog, VK_IMAGE_LAYOUT_GENERAL};
+    VkWriteDescriptorSet wb[5] = {
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 0, .descriptorCount = 1,
          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &in},
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 1, .descriptorCount = 1,
@@ -400,11 +473,12 @@ static void blur(VkExec *ex, int from, int to, VkImageView light, float scale) {
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 2, .descriptorCount = 1,
          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &li},
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 3, .descriptorCount = 1,
-         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &mean}};
-    float pb[4] = {scale, AO_GLOW_LO, AO_GLOW_HI, 0};
+         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &mean},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 4, .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &fg}};
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, A.comp[3]);
-    rec_push(vk_pipeline_push_fn(), cb, VK_PIPELINE_BIND_POINT_COMPUTE, A.lay_b, 0, 4, wb);
-    vkCmdPushConstants(cb, A.lay_b, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pb, pb);
+    rec_push(vk_pipeline_push_fn(), cb, VK_PIPELINE_BIND_POINT_COMPUTE, A.lay_b, 0, 5, wb);
+    vkCmdPushConstants(cb, A.lay_b, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof *pb, pb);
     vkCmdDispatch(cb, (A.iw + 7) / 8, (A.ih + 7) / 8, 1);
     full_barrier(cb);
 }
@@ -424,7 +498,7 @@ static void run(VkExec *ex) {
     const VkExecTarget *t = &A.light, *z = &A.depth;
     uint32_t w = t->width, h = t->height, sc = AO_SCALE;
     uint32_t hw = (w + sc - 1) / sc, hh = (h + sc - 1) / sc, gx = (hw + 7) / 8, gy = (hh + 7) / 8;
-    VkPipeline ap = apply_pipeline(t->format, A.debug);
+    VkPipeline ap = apply_pipeline(t->format, A.debug == 1);
     if (!ap) return;
     vk_exec_barrier(ex);   // ends the open pass; what drew the scene is done, feedback-layout targets back in GENERAL
     VkCommandBuffer cb = ex->cb;
@@ -460,15 +534,34 @@ static void run(VkExec *ex) {
         {AO_RADIUS, (float)(fabs(pj[5]) * 0.5 * hh / fabs(ws)), (float)hh / AO_REACH, AO_FADE},
         {A.level == 2 ? 3.0f : 2.0f, A.level == 2 ? 5.0f : 4.0f, 0, 0}};
     step(ex, 2, A.comp[1], z_in, A.im[1].view, &pa, sizeof pa, gx, gy);
-    // 3: the light's typical brightness, then the pattern averaged out (image 1 into 2)
+    // 3: the light's typical brightness, then the pattern averaged out and the factor on the light (image 1 into 2),
+    // which leaves the game's fog its light (frame_fog)
     step(ex, 0, A.comp[2], light_in, A.im[3].view, NULL, 0, 1, 1);
-    blur(ex, 1, 2, cv, (float)sc);
+    VkImageView fogv = A.im[4].view;
+    const struct Fog *fog = A.debug == 3 ? NULL : frame_fog(&fogv);
+    BlurPush pb = {.glow = {(float)sc, AO_GLOW_LO, AO_GLOW_HI, fog ? 1.0f : 0.0f},
+                   .curve = {AO_OPEN, AO_POWER, A.debug == 2 ? 2.0f : 0.0f, 0},
+                   .size = {(float)w, (float)h, fog ? fog->block[17] : 0, fog ? fog->block[18] : 1.0f}};
+    memcpy(pb.ndc_to_view, pa.ndc_to_view, sizeof pb.ndc_to_view);
+    for (int r = 0; r < 3; r++)   // the inverse view's rotation: rows 12-14 of the camera block
+        for (int k = 0; k < 3; k++) pb.world[r][k] = cam[48 + 4 * r + k];
+    if (fog) memcpy(pb.fog, fog->block + 8, sizeof pb.fog);
+    int fog_state = fog ? 1 : 2;
+    if (A.fog_state != fog_state && A.fog_logs < 6) {
+        A.fog_logs++;
+        if (fog)
+            rt_log("vk: ambient occlusion: the fog keeps its light (start %.1f, range %.0f, exponent %.2f, scale %.0f)",
+                   pb.fog[0], 1.0 / pb.fog[1], pb.fog[2], pb.fog[3]);
+        else rt_log("vk: ambient occlusion: no fog parameters this frame: the whole pixel is multiplied");
+    }
+    A.fog_state = fog_state;
+    blur(ex, 1, 2, cv, fogv, &pb);
     if (vk_gpuprof_on()) vk_gpuprof_mark(ex, 6, 3);
     // 4: scaled up and onto the light target
     struct { float inv2[4], inv3[4], size[4], mode[4]; } pf;
     memcpy(&pf, &pz, sizeof pz);
-    pf.size[3] = AO_POWER;
-    pf.mode[0] = (float)A.debug, pf.mode[1] = AO_OPEN, pf.mode[2] = (float)sc, pf.mode[3] = 0;
+    pf.size[3] = 0;
+    pf.mode[0] = A.debug == 1 ? 1.0f : 0.0f, pf.mode[1] = 0, pf.mode[2] = (float)sc, pf.mode[3] = 0;
     VkRenderingAttachmentInfo ca = {.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO, .imageView = cv,
                                     .imageLayout = VK_IMAGE_LAYOUT_GENERAL, .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
                                     .storeOp = VK_ATTACHMENT_STORE_OP_STORE};
@@ -539,17 +632,35 @@ void vk_ao_flush(VkExec *ex) {
     if (A.armed && A.wrote && !A.done) run(ex);
 }
 
-// A draw about to be recorded. Two things are taken from it. Whether the armed pass writes colour: in play, every other
-// frame, the game draws nine shapes with the colour writes masked off into the light target and the scene depth between
-// the linear depth and the shadow map (cutscenes have no such pass); the opaque lighting comes after the shadow map, so
-// the occlusion applied after the masked pass was drawn over one frame in two. And the camera block of a draw with the
+// A draw about to be recorded. Three things are taken from it. Whether the armed pass writes colour: in play, every
+// other frame, the game draws nine shapes with the colour writes masked off into the light target and the scene depth
+// between the linear depth and the shadow map (cutscenes have no such pass); the opaque lighting comes after the shadow
+// map, so the occlusion applied after the masked pass was drawn over one frame in two. And the camera block of a draw with the
 // scene depth (vk_dlaa.c vk_dlaa_draw does the same for the upscaler): copied when first seen this frame from the
-// uniform snapshot of the submission that draws with it, what the GPU reads.
+// uniform snapshot of the submission that draws with it, what the GPU reads. And the fog of a colour-writing draw of
+// the armed pass: the fragment stage's c5 block with the cube map in its texture slot 12, tallied and copied the same
+// way (frame_fog).
 void vk_ao_draw(VkExec *ex) {
     if (!A.level || A.done || !A.have) return;
-    if (A.armed && !A.wrote && (ex->pipe.chmask.mask & 0xf) && ex->color[0].image == A.light.image &&
-        ex->depth.image == A.depth.image)
+    if (A.armed && (ex->pipe.chmask.mask & 0xf) && ex->color[0].image == A.light.image &&
+        ex->depth.image == A.depth.image) {
         A.wrote = 1;
+        const p_bind_buf *f = &ex->ubo[1][FOG_BANK - 3];   // fragment stage; the replay keeps user banks from c3 on
+        uint64_t cube = ex->tex[1][FOG_SLOT];
+        if (f->size >= FOG_BYTES && f->addr && cube) {
+            int i = 0, low = 0;
+            for (; i < 4 && A.fogs[i].addr && (A.fogs[i].addr != f->addr || A.fogs[i].cube != cube); i++)
+                if (A.fogs[i].n < A.fogs[low].n) low = i;
+            if (i == 4) i = low, A.fogs[i].addr = 0;   // full: the rarest makes room
+            struct Fog *fg = &A.fogs[i];
+            if (!fg->addr) {
+                if (!vk_usnap_copy(f->addr, FOG_BYTES, fg->block))
+                    memcpy(fg->block, (const void *)(uintptr_t)f->addr, FOG_BYTES);
+                fg->addr = f->addr, fg->cube = cube, fg->n = 0, fg->have = 1;
+            }
+            fg->n++;
+        }
+    }
     const p_bind_buf *b = &ex->ubo[0][0];   // constant bank c3
     if (b->size != CAM_BYTES || !b->addr || ex->depth.image != A.depth.image) return;
     int i = 0, low = 0;
@@ -568,6 +679,7 @@ void vk_ao_frame(void) {
     read_settings();
     A.have = A.lin = A.armed = A.done = A.wrote = 0;
     memset(A.cams, 0, sizeof A.cams);
+    memset(A.fogs, 0, sizeof A.fogs);
 }
 
 void vk_ao_release(void) {

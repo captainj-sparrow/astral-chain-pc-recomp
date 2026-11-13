@@ -233,15 +233,26 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   the next pass with other targets begins (or a dispatch or copy comes first), `ao_prep.comp` takes the scene depth to a
   half-resolution view z, `ao.comp` searches horizons along 2 or 3 directions within 1.5 m and a quarter of the picture's
   height (GTAO's closed-form integral, a fixed 4x4 pattern), `ao_blur.comp` averages the pattern out at half resolution
-  with depth-aware weights and lets go of what glows (light several times the picture's typical brightness, which
-  `ao_meter.comp` reads: signs, lamps, fires), and `ao_apply.frag` scales the result up and multiplies the light target
-  through a blend, by a fixed curve (visibility from 0.9 up is left alone, the rest squared: `AO_OPEN`, `AO_POWER`).
-  Transparents, bloom, tonemap and HUD come after. The camera is the c3 block of the scene's draws, as for the motion
-  vectors. Half resolution and the fixed pattern hold with a temporal upscaler too: with FSR 3 a pattern turning per
-  frame made the picture less steady, and the scene's full resolution cost 2.5 ms for no gain. Lengths on screen count
+  with depth-aware weights, lets go of what glows (light several times the picture's typical brightness, which
+  `ao_meter.comp` reads: signs, lamps, fires) and turns the visibility into the factor on the light by a fixed curve
+  (visibility from 0.9 up is left alone, the rest squared: `AO_OPEN`, `AO_POWER`), and `ao_apply.frag` scales the
+  factor up and multiplies the light target through a blend. Transparents, bloom, tonemap and HUD come after. The
+  camera is the c3 block of the scene's draws, as for the motion vectors.
+  The game's fog keeps its light: every opaque fragment shader ends with a distance fog, `mix(surface, cube map colour
+  x scale, f)` with `f` from the distance to the camera, and that fog can be most of a pixel with a small `f` (a misty
+  street 20 m away: 1.5 from the surface, 16 from the fog). Multiplying such pixels whole dug dark, blurred, shimmering
+  stains into the mist around distant objects (38% of that picture lost more than 5% of its light) and moved the
+  game's exposure. `vk_ao_draw` takes the fog parameters (fragment block c5, rows 2 and 4) and the fog cube map
+  (fragment texture slot 12) of the opaque lighting's draws, `ao_blur.comp` computes the same fog per occlusion texel,
+  and each colour channel takes the occlusion on the surface's share of the pixel only; a frame without usable fog
+  parameters multiplies the whole pixel. In that street the frame-to-frame change of a still picture under FSR 3 went
+  from 0.054 back to 0.030 (0.027 without occlusion). Half resolution and the fixed pattern hold with a temporal
+  upscaler too: with FSR 3 a pattern turning per frame made the picture less steady, and the scene's full resolution cost 2.5 ms for no gain. Lengths on screen count
   in heights of the target, so ultrawide targets and `aspect = wide` (an ultrawide view in a 16:9 target) behave alike.
-  At 2560x1440 on an Arc 140T: about 1.45 ms (low) and 1.8 ms (high); `AC_GPU_PASSES` times each step ("ao"),
-  `AC_AO_DEBUG=1` shows the factor alone.
+  At 2560x1440 on an Arc 140T: about 1.45 ms (low) and 1.8 ms (high); the fog step added 0.04 ms to the 0.58 ms of
+  a 1472x828 scene (the factor's image holds three channels and view z). `AC_GPU_PASSES` times each step ("ao"),
+  `AC_AO_DEBUG=1` shows the factor alone, `2` the scene without the fog computed here (a check of that computation),
+  `3` multiplies the fog too.
 - The sun shadow map, one 2048x2048 DEPTH24_STENCIL8 texture on 1.0.1, is made `shadow_scale` times larger on each side
   (`vk_texture.c` `shadow_scale_of`; 2 by default, 1 in the Steam Deck profile): its depth-only pass draws at that
   size and the screen-space sun mask that reads it samples in UV, so edges get finer at the same softness. At x2 it
