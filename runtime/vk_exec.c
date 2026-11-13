@@ -423,6 +423,14 @@ static void resolve_rt(VkExec *ex) {
     }
     ex->pass_w = w, ex->pass_h = h, ex->pass_layers = layers;
     ex->pass_scale = ex->pass_noatt ? 1.0f : scale;
+    if (scale > 1.0f) {   // an enlarged shadow map (vk_texture.c shadow_scale_of) beside a target of the game's size
+        static int mixed_logs;
+        int mixed = d->image && d->scale < scale;
+        for (int i = 0; i < 8; i++) mixed |= ex->color[i].image && ex->color[i].scale < scale;
+        if (mixed && mixed_logs < 4)
+            mixed_logs++, rt_log("vk_exec: a pass mixes an enlarged shadow map (scale %g) with targets of the game's size "
+                                 "(%ux%u): its draws do not fit; AC_SHADOW_SCALE=1 avoids it", scale, w, h);
+    }
     // A declared colour target can have no image (the game passes NULL, or resolve_target left it out). The pipeline
     // counts the colours up to the last format it has, and VkRenderingInfo must carry the same count: a pass that
     // declares four but leaves only target 0 renderable used to give the pipeline one attachment and the pass four,
@@ -589,6 +597,7 @@ void vk_exec_pass_begin(VkExec *ex) {
     if (ex->in_pass) return;
     resolve_rt(ex);
     vk_contact_pass_begin(ex);
+    vk_ao_pass(ex);     // after the opaque lighting, before the transparents (vk_ao.c)
     vk_dlaa_pass(ex);   // DLAA runs before the bloom chain's first pass (vk_dlaa.c)
     // Learned targets (VkTexImage.fb_learned) are attached in the feedback layout
     VkImage want[9];

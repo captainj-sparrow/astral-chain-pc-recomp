@@ -31,7 +31,7 @@ static int save_ok = 1;                         // the last cfg_save_to wrote (o
 // logged as unknown. A new variable goes here too, or its ini key logs a harmless "unknown key" line. FXAA stays known
 // though nothing reads it any more (it switched TotK's FXAA, which Astral Chain does not have): older files carry it.
 static const char *const known[] = {
-    "AB", "AMIIBO_DIR", "ANISO", "ANTI_ALIASING", "APP_POOL", "ASPECT", "ASPECT_MIGRATED", "ASPECT_PATCH", "ASSUME_FOCUS", "ASTC", "ASTC_BC", "ASTC_TIME", "ASYNC_PREEMPT", "AUDIO", "AUDIO_OFF", "AVSYNC_PATCH", "AUDIO_PREFILL_MS",
+    "AB", "AMIIBO_DIR", "ANISO", "ANTI_ALIASING", "AO", "AO_DEBUG", "APP_POOL", "ASPECT", "ASPECT_MIGRATED", "ASPECT_PATCH", "ASSUME_FOCUS", "ASTC", "ASTC_BC", "ASTC_TIME", "ASYNC_PREEMPT", "AUDIO", "AUDIO_OFF", "AVSYNC_PATCH", "AUDIO_PREFILL_MS",
     "BACKGROUND_WINDOW", "BIND_A", "BIND_B", "BIND_DOWN", "BIND_L", "BIND_LCLICK", "BIND_LEFT", "BIND_LSTICK_DOWN", "BIND_LSTICK_LEFT",
     "BIND_LSTICK_RIGHT", "BIND_LSTICK_UP", "BIND_MINUS",
     "BIND_PLUS", "BIND_R", "BIND_RCLICK", "BIND_RIGHT", "BIND_RSTICK_DOWN", "BIND_RSTICK_LEFT", "BIND_RSTICK_RIGHT", "BIND_RSTICK_UP",
@@ -77,7 +77,7 @@ static const struct { const char *key, *section; } sections[] = {
     {"ANTI_ALIASING", "display"}, {"UPSCALING", "display"}, {"UPSCALING_QUALITY", "display"}, {"DLAA", "display"},
     {"DLSS", "display"}, {"XESS", "display"},
     {"DEVICE_PROFILE", "display"}, {"DECK_RES_MIGRATED", "display"}, {"ASPECT_MIGRATED", "display"}, {"ASSUME_FOCUS", "display"},
-    {"SHADOW_SCALE", "display"}, {"SHADOW_RANGE", "display"}, {"CONTACT_SHADOWS", "display"},
+    {"SHADOW_SCALE", "display"}, {"SHADOW_RANGE", "display"}, {"CONTACT_SHADOWS", "display"}, {"AO", "display"},
     {"PCSS", "display"},
     {"MODS_DIR", "mods"}, {"MODS_ORDER", "mods"}, {"MODS_DISABLED", "mods"}, {"MODS_REBUILD", "mods"},
     {"MENU_LANG", "language"}, {"LANG", "language"}, {"OPERATION_MODE", "language"},
@@ -136,9 +136,11 @@ static const CfgMeta metas[] = {
     {"HDR_UI_NITS", "203", "80..500", LIVE}, {"HDR_HUE", "80", "0..100", LIVE},
     {"DEVICE_PROFILE", "auto", "auto|desktop|deck", RESTART},
     {"SHADOW_RES", "game", "game|512|768|1024|1536|2048", RESTART},
-    {"SHADOW_SCALE", "1", "1..4", RESTART},
+    {"SHADOW_SCALE", "2", "1..4", RESTART},   // vk_texture.c shadow_scale_of; 1 in the Steam Deck profile
     {"SHADOW_RANGE", "100", "50..400", RESTART}, {"CONTACT_SHADOWS", "0", "0..100", RESTART},
     {"PCSS", "0", "0..200", RESTART},
+    // ambient occlusion (vk_ao.c): read again at the next present after a change
+    {"AO", "off", "off|low|high", LIVE},
     // Game
     {"FPS", "60", "30|60", LIVE},
     {"REALTIME", "1", "0|1", RESTART}, {"CLOTH_REALTIME", "1", "0|1", RESTART},

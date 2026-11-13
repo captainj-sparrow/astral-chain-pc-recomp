@@ -315,9 +315,10 @@ static void init_image(Tex *e, VkCommandBuffer cb) {
     }
 }
 
-// AC_SHADOW_SCALE (1 to 4): the game's shadow maps are made this many times larger on each side. Astral Chain renders its
-// sun cascades into a 960x960 DEPTH16 2D array of 4 layers and its static shadows into 1440x1440 and 720x720 arrays of 2,
-// whatever the output resolution, and shrinks the cascades under load (872, 848, 800, 480 and so on). Those are made
+// AC_SHADOW_SCALE (1 to 4; 2 by default, 1 in the Steam Deck profile): the game's shadow maps are made this many times
+// larger on each side. The rule for DEPTH16 square arrays comes from the TotK Recomp, whose game renders its sun cascades
+// into a 960x960 array of 4 layers and its static shadows into 1440x1440 and 720x720 arrays of 2; Astral Chain's sun
+// shadow map is the 2048x2048 one shadow_scale_of describes. Both are made
 // larger here: render passes into them scale the game's viewports and scissors (vk_exec.c resolve_rt, pass_scale),
 // copies scale their regions (vk_exec_xfer.c sub_resolve), and shaders sample them with normalised coordinates, so the
 // game sees nothing of it. A map whose storage the CPU writes (mirrored) or that aliases pool memory keeps its size,
@@ -333,11 +334,21 @@ static int shadow_scale(void) {
     return scale;
 }
 
+// Two kinds of map are made larger. The DEPTH16 square arrays of 2 to 4 layers described above. And Astral Chain's sun
+// shadow map on 1.0.1: one 2048x2048 DEPTH24_STENCIL8 2D texture, rendered in a depth-only pass and read by the
+// full-screen pass that makes the screen-space sun shadow mask (frame 1266 of build/v101/dump: passes 0006 and 0007).
+// That shader reads raw depth with taps placed in UV, so a larger map gives finer shadow edges with the same softness,
+// as the former ssaa setting did when it enlarged this map along with the screen. The scene depth has the same format
+// but the screen's 16:9 shape, and a render pass mixing an enlarged target with one of the game's size would not fit
+// (vk_exec.c resolve_rt logs one), hence the exact size.
 static int shadow_scale_of(const nvn_texdesc *d, const TexVkFormat *f, uint32_t samples, int mirrored) {
     int scale = shadow_scale();
-    if (scale == 1 || mirrored || samples > 1 || d->format != NVN_FORMAT_DEPTH16 || !f->depth) return 1;
-    if (d->target != NVN_TEXTURE_TARGET_2D_ARRAY || d->width != d->height || d->width < 256 || d->depth < 2 || d->depth > 4)
-        return 1;
+    if (scale == 1 || mirrored || samples > 1 || !f->depth) return 1;
+    int sun = d->format == NVN_FORMAT_DEPTH24_STENCIL8 && d->target == NVN_TEXTURE_TARGET_2D && d->width == 2048 &&
+              d->height == 2048 && d->levels <= 1;
+    int cascades = d->format == NVN_FORMAT_DEPTH16 && d->target == NVN_TEXTURE_TARGET_2D_ARRAY && d->width == d->height &&
+                   d->width >= 256 && d->depth >= 2 && d->depth <= 4;
+    if (!sun && !cascades) return 1;
     uint32_t most = vk_ctx()->props.limits.maxImageDimension2D;
     return d->width * (uint32_t)scale <= most ? scale : 1;
 }
@@ -775,6 +786,10 @@ static Tex *create_tex(const tex_t *t, const TexKey *k, int defer_init) {
         vmaGetAllocationInfo(c->vma, e->alloc, &mi);
         e->bytes = mi.size;
         own_bytes += e->bytes;
+        static int scaled_logs;
+        if (scale > 1.0f && scaled_logs < 8)   // what an enlarged shadow map costs, beside the pool storage it leaves
+            scaled_logs++, rt_log("vk: shadow map %ux%u fmt %#x made %ux%u (AC_SHADOW_SCALE): %.1f MiB of its own",
+                                  d->width, d->height, d->format, w, h, (double)mi.size / 1048576.0);
     }
     // The recompression accounting of the perf line (vk_texture_new_submit): the scan's cost, the format
     // each entry took and where the image lives — the numbers that sized the BC1 change and watch it after.

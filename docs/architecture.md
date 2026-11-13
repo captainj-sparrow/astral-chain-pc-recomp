@@ -224,6 +224,21 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   never shows. HDR output records the upscaled picture as the frame's scene (`vk_hdr.c` `vk_hdr_draw`).
   `output_res = auto` takes the screen's size, up to 1920x1080 without an upscaler and 3840x2160 with one (2560x1440 on
   a GPU with 4.5 GB of video memory or less).
+- Ambient occlusion (`vk_ao.c`, `ao = off | low | high`, live; off by default): the game has none.
+  The first light-target pass with the scene depth after the game's R32F linear-depth pass that writes colour is the
+  opaque lighting (in play, every other frame, a pass with its colour writes masked off comes before it); when
+  the next pass with other targets begins (or a dispatch or copy comes first), `ao_prep.comp` takes the scene depth to a
+  half-resolution view z, `ao.comp` searches horizons along 2 or 3 screen directions within 1.5 m (GTAO's closed-form
+  integral, a 4x4 pattern that turns per frame while a temporal upscaler runs), and `ao_apply.frag` averages the
+  pattern out with depth-aware weights, scales it up and multiplies the light target through a blend, by a fixed curve
+  (visibility from 0.9 up is left alone, the rest squared: `AO_OPEN`, `AO_POWER`). Transparents,
+  bloom, tonemap and HUD come after. The camera is the c3 block of the scene's draws, as for the motion vectors. At
+  2560x1440 on an Arc 140T: about 1.3 ms (low) and 1.6 ms (high); `AC_GPU_PASSES` times each step ("ao"),
+  `AC_AO_DEBUG=1` shows the factor alone.
+- The sun shadow map, one 2048x2048 DEPTH24_STENCIL8 texture on 1.0.1, is made `shadow_scale` times larger on each side
+  (`vk_texture.c` `shadow_scale_of`; 2 by default, 1 in the Steam Deck profile): its depth-only pass draws at that
+  size and the screen-space sun mask that reads it samples in UV, so edges get finer at the same softness. At x2 it
+  takes 85 MiB of its own on an Arc 140T (the pool storage it no longer aliases stays) and its pass about 0.5 ms more.
 - Occlusion queries never block the CPU; a result that is not ready counts as visible.
 - ASTC textures are uploaded as they are where the device reports `textureCompressionASTC_LDR`, and decoded by a
   compute shader everywhere else (`vk_astc.c`, `AC_ASTC`). A discrete GPU with 6 GB of video memory or more keeps

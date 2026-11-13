@@ -2447,6 +2447,7 @@ static int prepare_draw(VkExec *ex, int prim, int32_t count, int restart) {
         B.st = s, B.st_valid = 1;
     }
     vk_dlaa_draw(ex);
+    vk_ao_draw(ex);
     record_fixed(ex);
     repeat_stats(ex, info);
     bind_resources(ex, info);
@@ -3109,6 +3110,7 @@ static void op_dispatch(VkExec *ex, const p_dispatch *d) {
     if (d->x <= 0 || d->y <= 0 || d->z <= 0) return;
     if (!ex->prog) return warn_once(W_PROGRAM, "a dispatch without a bound program is skipped");
     vk_contact_flush(ex);
+    vk_ao_flush(ex);
     cb_res(ex);
     dummies_init();
     int present;

@@ -64,11 +64,6 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_UPSCALER_FSR] = "AMD FSR 1", [UI_MENU_UPSCALER_BILINEAR] = "Bilinear",
     [UI_MENU_FOV] = "Field of view",
     [UI_MENU_FOV_DESC] = "How much of the world the camera shows, in percent of the game's own (50 degrees vertically in play). Cutscenes keep the game's own framing.",
-    [UI_MENU_SHADOW_RES] = "Shadow map size",
-    [UI_MENU_SHADOW_RES_DESC] = "Size of the sun's shadow map. The game's own size changes with the view, down to about 400 "
-                                "near the ground, so leaf shadows look blocky and jump; a fixed size keeps them still and "
-                                "sharper. Above 1024 the shadows cost more GPU time and video memory.",
-    [UI_MENU_SHADOW_RES_GAME] = "Game (changes)",
     [UI_MENU_ANISO] = "Texture filtering",
     [UI_MENU_ANISO_DESC] = "Anisotropic filtering of surface textures: ground, roads and walls seen at a shallow angle stay sharp into the distance instead of blurring. Game: the level the game asks for, as on the Switch. Auto: 16x with 3D render scale 1440p, twice the game's level at 2160p, the game's level otherwise.",
     [UI_MENU_ANISO_GAME] = "Game",
@@ -106,18 +101,16 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_HDR_HUE_DESC] = "Bright colours such as fire and sparks turn towards white as in the game's own SDR picture, "
                              "matching the light they cast; 0 keeps them fully saturated.",
     [UI_MENU_SHADOW_SCALE] = "Shadow resolution",
-    [UI_MENU_SHADOW_SCALE_DESC] = "Draws the sun's shadow maps this many times larger on each side than the game's 960x960: "
-                                  "sharper shadow edges and leaf shadows. Takes effect at the next start.",
-    [UI_MENU_PCSS] = "Soft shadows",
-    [UI_MENU_PCSS_DESC] = "Sun shadows sharp where an object meets the ground and softer the further the shadow falls "
-                          "(PCSS). 0 keeps the game's filter. Takes effect at the next start.",
-    [UI_MENU_CONTACT_SHADOWS] = "Contact shadows",
-    [UI_MENU_CONTACT_SHADOWS_DESC] = "Small sun shadows the shadow maps miss: at feet, under stones, in grass and creases. "
-                                     "Traced on the screen after lighting. Takes effect at the next start.",
-    [UI_MENU_SHADOW_RANGE] = "Shadow cascade range",
-    [UI_MENU_SHADOW_RANGE_DESC] = "Moves the steps where shadows turn softer (the game's 20, 40, 80 and 160 m) further "
-                                  "away. Spreads the shadow map over more ground: raise Shadow resolution with it. "
-                                  "Takes effect at the next start.",
+    [UI_MENU_SHADOW_SCALE_DESC] = "Draws the sun's shadow map this many times larger on each side than the game's "
+                                  "2048x2048: sharper shadow edges and leaf shadows, for more video memory (about "
+                                  "85 to 130 MiB at 2x, 340 to 520 MiB at 4x). Takes effect at the next start.",
+    [UI_MENU_AO] = "Ambient occlusion",
+    [UI_MENU_AO_DESC] = "Darkens creases, corners and the ground under characters and objects, where little of the "
+                        "surrounding light reaches. Computed on the screen after the world is lit; the game has none of "
+                        "its own. High costs more GPU time than Low. Takes effect at once.",
+    [UI_MENU_AO_OFF] = "Off",
+    [UI_MENU_AO_LOW] = "Low",
+    [UI_MENU_AO_HIGH] = "High",
     [UI_MENU_UPSCALING] = "Upscaler",
     [UI_MENU_UPSCALING_DESC] = "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less "
                                "shimmer, and with a mode below Native more frames per second. NVIDIA DLSS needs an NVIDIA "
@@ -465,11 +458,6 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_UPSCALER_FSR] = "AMD FSR 1", [UI_MENU_UPSCALER_BILINEAR] = "Билинейное",
     [UI_MENU_FOV] = "Поле зрения",
     [UI_MENU_FOV_DESC] = "Сколько мира показывает камера, в процентах от игрового (50 градусов по вертикали в игре). Ролики сохраняют исходное кадрирование.",
-    [UI_MENU_SHADOW_RES] = "Размер карты теней",
-    [UI_MENU_SHADOW_RES_DESC] = "Размер карты теней от солнца. Собственный размер игры меняется вместе с видом, у земли до "
-                                "примерно 400, поэтому тени листвы выглядят квадратными и дёргаются; постоянный размер делает "
-                                "их ровными и чётче. Выше 1024 тени требуют больше времени GPU и видеопамяти.",
-    [UI_MENU_SHADOW_RES_GAME] = "Как в игре (меняется)",
     [UI_MENU_ANISO] = "Фильтрация текстур",
     [UI_MENU_ANISO_DESC] = "Анизотропная фильтрация текстур поверхностей: земля, дороги и стены под острым углом остаются чёткими вдали, а не размываются. Игра: уровень, который запрашивает игра, как на Switch. Авто: 16x при масштабе 3D-отрисовки 1440p, удвоенный уровень игры при 2160p, иначе уровень игры.",
     [UI_MENU_ANISO_GAME] = "Игра",
@@ -508,18 +496,16 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_HDR_HUE_DESC] = "Яркие цвета (огонь, искры) уходят к белому, как в SDR-картинке игры, и совпадают со светом, "
                              "который они дают; 0 оставляет их полностью насыщенными.",
     [UI_MENU_SHADOW_SCALE] = "Разрешение теней",
-    [UI_MENU_SHADOW_SCALE_DESC] = "Карты теней от солнца рисуются во столько раз больше по каждой стороне, чем 960x960 "
-                                  "самой игры: края теней и тени листвы чётче. Действует после перезапуска.",
-    [UI_MENU_PCSS] = "Мягкие тени",
-    [UI_MENU_PCSS_DESC] = "Тени от солнца резкие там, где предмет касается земли, и мягче, чем дальше падает тень "
-                          "(PCSS). 0 оставляет фильтр игры. Действует после перезапуска.",
-    [UI_MENU_CONTACT_SHADOWS] = "Контактные тени",
-    [UI_MENU_CONTACT_SHADOWS_DESC] = "Мелкие тени от солнца, которых нет на картах теней: у ног, под камнями, в траве и "
-                                     "складках. Считаются по экрану после освещения. Действует после перезапуска.",
-    [UI_MENU_SHADOW_RANGE] = "Дальность каскадов теней",
-    [UI_MENU_SHADOW_RANGE_DESC] = "Отодвигает границы, за которыми тени становятся мягче (в игре 20, 40, 80 и 160 м). "
-                                  "Карта теней растягивается на большую площадь, поэтому вместе с этим поднимайте "
-                                  "разрешение теней. Действует после перезапуска.",
+    [UI_MENU_SHADOW_SCALE_DESC] = "Карта теней от солнца рисуется во столько раз больше по каждой стороне, чем "
+                                  "2048x2048 в игре: края теней и тени листвы чётче, ценой видеопамяти (около "
+                                  "85–130 МиБ при 2x, 340–520 МиБ при 4x). Действует после перезапуска.",
+    [UI_MENU_AO] = "Фоновое затенение",
+    [UI_MENU_AO_DESC] = "Затемняет складки, углы и землю под персонажами и предметами, куда доходит мало окружающего "
+                        "света. Считается по экрану после освещения; в самой игре его нет. «Высокое» требует больше "
+                        "времени GPU, чем «Низкое». Действует сразу.",
+    [UI_MENU_AO_OFF] = "Выкл.",
+    [UI_MENU_AO_LOW] = "Низкое",
+    [UI_MENU_AO_HIGH] = "Высокое",
     [UI_MENU_UPSCALING] = "Апскейлер",
     [UI_MENU_UPSCALING_DESC] = "Временной апскейлер вместо сглаживания игры: ровнее края и меньше мерцания, а в режиме "
                                "ниже «Родного» — больше кадров в секунду. NVIDIA DLSS нужна видеокарта NVIDIA RTX и "
@@ -1120,12 +1106,6 @@ static const char *const text_pt_br[UI_TEXT_COUNT] = {
     [UI_MENU_FOV] = "Campo de visão",
     [UI_MENU_FOV_DESC] = "Quanto do mundo a câmera mostra, em porcentagem do original do jogo (50 graus na vertical "
                          "durante o jogo). As cenas mantêm o enquadramento original.",
-    [UI_MENU_SHADOW_RES] = "Tamanho do mapa de sombras",
-    [UI_MENU_SHADOW_RES_DESC] = "Tamanho do mapa de sombras do sol. O tamanho do jogo muda com a vista, até cerca de "
-                                "400 perto do chão, então as sombras das folhas ficam quadriculadas e pulam; um "
-                                "tamanho fixo as deixa paradas e mais nítidas. Acima de 1024 as sombras custam mais "
-                                "tempo de GPU e memória de vídeo.",
-    [UI_MENU_SHADOW_RES_GAME] = "Do jogo (varia)",
     [UI_MENU_ANISO] = "Filtragem de texturas",
     [UI_MENU_ANISO_DESC] = "Filtragem anisotrópica das texturas de superfície: chão, estradas e paredes vistos em "
                            "ângulo raso continuam nítidos ao longe em vez de borrar. Jogo: o nível que o jogo pede, "
@@ -1186,20 +1166,17 @@ static const char *const text_pt_br[UI_TEXT_COUNT] = {
     [UI_MENU_WALK_SCALE_DESC] = "A inclinação dos analógicos do teclado enquanto a tecla de andar está segura. Metade "
                                 "é andar, a inclinação total é correr.",
     [UI_MENU_SHADOW_SCALE] = "Resolução das sombras",
-    [UI_MENU_SHADOW_SCALE_DESC] = "Desenha os mapas de sombra do sol essa quantidade de vezes maiores em cada lado "
-                                  "que os 960x960 do jogo: bordas de sombra e sombras de folhas mais nítidas. Vale no "
+    [UI_MENU_SHADOW_SCALE_DESC] = "Desenha o mapa de sombras do sol essa quantidade de vezes maior em cada lado "
+                                  "que os 2048x2048 do jogo: bordas de sombra e sombras de folhas mais nítidas, "
+                                  "com mais memória de vídeo (85 a 130 MiB em 2x, 340 a 520 MiB em 4x). Vale no "
                                   "próximo início.",
-    [UI_MENU_SHADOW_RANGE] = "Alcance das cascatas de sombra",
-    [UI_MENU_SHADOW_RANGE_DESC] = "Afasta os degraus em que as sombras ficam mais suaves (20, 40, 80 e 160 m no "
-                                  "jogo). Espalha o mapa de sombras por mais terreno: aumente a Resolução das sombras "
-                                  "junto. Vale no próximo início.",
-    [UI_MENU_CONTACT_SHADOWS] = "Sombras de contato",
-    [UI_MENU_CONTACT_SHADOWS_DESC] = "Pequenas sombras do sol que os mapas de sombra não pegam: nos pés, sob pedras, "
-                                     "na grama e em dobras. Traçadas na tela depois da iluminação. Vale no próximo "
-                                     "início.",
-    [UI_MENU_PCSS] = "Sombras suaves",
-    [UI_MENU_PCSS_DESC] = "Sombras do sol nítidas onde um objeto toca o chão e mais suaves quanto mais longe a sombra "
-                          "cai (PCSS). 0 mantém o filtro do jogo. Vale no próximo início.",
+    [UI_MENU_AO] = "Oclusão de ambiente",
+    [UI_MENU_AO_DESC] = "Escurece dobras, cantos e o chão sob personagens e objetos, onde chega pouca luz ao redor. "
+                        "Calculada na tela depois da iluminação; o jogo não tem a sua. Alta custa mais tempo de GPU "
+                        "que Baixa. Vale na hora.",
+    [UI_MENU_AO_OFF] = "Desligada",
+    [UI_MENU_AO_LOW] = "Baixa",
+    [UI_MENU_AO_HIGH] = "Alta",
     [UI_MENU_UPSCALING] = "Upscaler",
     [UI_MENU_UPSCALING_DESC] = "Um upscaler temporal no lugar do antisserrilhado do jogo: bordas mais suaves e menos "
                                "cintilação e, com um modo abaixo de Nativo, mais quadros por segundo. NVIDIA DLSS precisa "
@@ -1692,10 +1669,6 @@ static const char *const text_zh_hans[UI_TEXT_COUNT] = {
     [UI_MENU_OV_SCALE_BILINEAR] = "双线性",
     [UI_MENU_OV_FMT_AREA] = "面积平均，锐度 %d%%",
     [UI_MENU_OV_FMT_PRESHARP] = "在 HUD 之前 RCAS，锐度 %d%%",
-    [UI_MENU_SHADOW_RES] = "阴影贴图尺寸",
-    [UI_MENU_SHADOW_RES_DESC] = "太阳阴影贴图的尺寸。游戏自身的尺寸随视角变化，靠近地面时降到约 400，因此树叶阴影显得块状并且跳动；固定尺寸能让阴影稳定、更清晰。高于 1024 时阴影会占用更多 "
-                                "GPU 时间和显存。",
-    [UI_MENU_SHADOW_RES_GAME] = "游戏默认（会变化）",
     [UI_MENU_ANISO] = "纹理过滤",
     [UI_MENU_ANISO_DESC] = "表面纹理的各向异性过滤：以小角度看到的地面、道路和墙壁在远处依然清晰，而不会模糊。游戏：使用游戏请求的级别，与 Switch 上相同。自动：3D 渲染比例为 1440p 时为 16x，2160p 时为游戏级别的两倍，其他情况使用游戏的级别。",
     [UI_MENU_ANISO_GAME] = "游戏",
@@ -1725,13 +1698,14 @@ static const char *const text_zh_hans[UI_TEXT_COUNT] = {
     [UI_MENU_WALK_SCALE] = "步行幅度",
     [UI_MENU_WALK_SCALE_DESC] = "按住步行键时键盘摇杆的推动幅度。一半为走路，推满为奔跑。",
     [UI_MENU_SHADOW_SCALE] = "阴影分辨率",
-    [UI_MENU_SHADOW_SCALE_DESC] = "将太阳阴影贴图的每条边绘制为游戏 960x960 的若干倍：阴影边缘和树叶阴影更清晰。下次启动时生效。",
-    [UI_MENU_SHADOW_RANGE] = "阴影级联范围",
-    [UI_MENU_SHADOW_RANGE_DESC] = "把阴影变柔和的分界（游戏中为 20、40、80 和 160 米）推得更远。阴影贴图会覆盖更大的地面，请同时提高阴影分辨率。下次启动时生效。",
-    [UI_MENU_CONTACT_SHADOWS] = "接触阴影",
-    [UI_MENU_CONTACT_SHADOWS_DESC] = "阴影贴图遗漏的细小太阳阴影：脚下、石头下、草丛和褶皱中。在光照之后于屏幕空间追踪。下次启动时生效。",
-    [UI_MENU_PCSS] = "柔和阴影",
-    [UI_MENU_PCSS_DESC] = "物体接触地面处的太阳阴影锐利，阴影投得越远越柔和（PCSS）。0 保留游戏自身的过滤。下次启动时生效。",
+    [UI_MENU_SHADOW_SCALE_DESC] = "将太阳阴影贴图的每条边绘制为游戏 2048x2048 的若干倍：阴影边缘和树叶阴影更清晰，"
+                                  "但占用更多显存（2x 约 85–130 MiB，4x 约 340–520 MiB）。下次启动时生效。",
+    [UI_MENU_AO] = "环境光遮蔽",
+    [UI_MENU_AO_DESC] = "让褶皱、角落以及角色和物体下方的地面变暗，那里接收到的周围光线较少。在光照之后于屏幕空间计算；"
+                        "游戏本身没有此效果。“高”比“低”占用更多 GPU 时间。立即生效。",
+    [UI_MENU_AO_OFF] = "关",
+    [UI_MENU_AO_LOW] = "低",
+    [UI_MENU_AO_HIGH] = "高",
     [UI_MENU_UPSCALING] = "超分辨率",
     [UI_MENU_UPSCALING_DESC] = "以时间性超分辨率取代游戏的抗锯齿：边缘更平滑、闪烁更少；选择低于“原生”的模式还能提高帧率。"
                                "NVIDIA DLSS 需要 NVIDIA RTX 显卡，并将 nvngx_dlss.dll 放在 astralchain.exe 旁；Intel XeSS "

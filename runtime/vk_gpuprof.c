@@ -2,7 +2,8 @@
 // presented frames and logged as a table, most expensive first. Each marker is a reset and a BOTTOM_OF_PIPE timestamp
 // written outside render passes: at the start of a command buffer (vk_exec.c vk_exec_record and maybe_split), before
 // vkCmdBeginRendering (the barriers, contact shadows and DLAA work recorded since the previous marker: "pre"), after
-// vkCmdEndRendering ("pass"), after a dispatch or copy op outside a pass, and at the end of the command buffer
+// vkCmdEndRendering ("pass"), after a dispatch or copy op outside a pass, after the ambient occlusion ("ao", vk_ao.c),
+// and at the end of the command buffer
 // ("tail": the final barrier and the VRAM mirror copies). A marker's time is the span since the previous marker of its
 // command buffer; the first marker of a command buffer only starts a span, so the idle time between submissions counts
 // nowhere. The replay barriers before every pass, so passes do not overlap and the spans add up to the replay's GPU
@@ -33,7 +34,7 @@ typedef struct {
     uint64_t frame;
 } GpLabel;
 
-static const char *const kind_name[] = {"start", "pre", "pass", "dispatch", "copy", "tail"};
+static const char *const kind_name[] = {"start", "pre", "pass", "dispatch", "copy", "tail", "ao"};
 
 static struct {
     int on;                // -1 unread, 0 off, else frames per report
@@ -110,6 +111,7 @@ static void report(void) {
         char what[96];
         if (r->k.kind == 3) snprintf(what, sizeof what, "prog %llu", (unsigned long long)r->k.prog);
         else if (r->k.kind == 4) snprintf(what, sizeof what, "op %llu", (unsigned long long)r->k.prog);
+        else if (r->k.kind == 6) snprintf(what, sizeof what, "step %llu", (unsigned long long)r->k.prog);
         else snprintf(what, sizeof what, "%ux%u layers %u colour %u fmt %#x depth %#x", r->k.w, r->k.h, r->k.layers,
                       r->k.ncolor, (unsigned)r->k.fmt0, (unsigned)r->k.fmtd);
         rt_log("gpu passes: %2d #%-3u.%u %-8s %6.3f ms %5.1f%% (cum %5.1f%%) x%.2f/frame draws %.0f  %s", i, r->k.ordinal, r->k.occ,
@@ -117,7 +119,7 @@ static void report(void) {
                (double)r->n / f, r->n ? (double)r->draws / (double)r->n : 0.0, what);
     }
     // Totals by kind and, for passes, by render area: full, half (a quarter of the pixels or less), other.
-    double by_kind[6] = {0}, by_area[3] = {0};
+    double by_kind[7] = {0}, by_area[3] = {0};
     uint32_t big = 0;
     for (int i = 0; i < nrows; i++)
         if (rows[i].k.kind == 2 && rows[i].k.w * rows[i].k.h > big) big = rows[i].k.w * rows[i].k.h;
@@ -129,8 +131,9 @@ static void report(void) {
         by_area[px == big ? 0 : px * 4 <= big ? 1 : 2] += (double)r->ns;
     }
     rt_log("gpu passes: by kind (ms/frame): pass %.2f, pre (barriers, contact shadows, DLAA) %.2f, dispatch %.2f, copy %.2f, "
-           "tail %.2f; passes by area: largest (%u px) %.2f, a quarter or less %.2f, between %.2f", by_kind[2] / f / 1e6,
-           by_kind[1] / f / 1e6, by_kind[3] / f / 1e6, by_kind[4] / f / 1e6, by_kind[5] / f / 1e6, big,
+           "tail %.2f, ambient occlusion %.2f; passes by area: largest (%u px) %.2f, a quarter or less %.2f, between %.2f",
+           by_kind[2] / f / 1e6, by_kind[1] / f / 1e6, by_kind[3] / f / 1e6, by_kind[4] / f / 1e6, by_kind[5] / f / 1e6,
+           by_kind[6] / f / 1e6, big,
            by_area[0] / f / 1e6, by_area[1] / f / 1e6, by_area[2] / f / 1e6);
     nrows = overflow = 0;
     total_ns = frames_seen = 0;

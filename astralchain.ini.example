@@ -208,11 +208,11 @@
 # Read at start.
 # shadow_res = game
 
-# Shadow map resolution: the game's sun cascades are 960x960 (and its static shadow maps 1440 and 720) whatever the game
-# resolution; 2 to 4 draws them that many times larger on each side, for sharper shadows. 1 = the game's. The game's
-# shadow edge filter is narrowed by the same factor (translator patch 0011), so close shadow edges don't look doubled.
-# Read at start.
-# shadow_scale = 1
+# Shadow map resolution: the game's sun shadow map is 2048x2048 whatever the game resolution; 2 to 4 draws it that many
+# times larger on each side, for sharper shadow edges and leaf shadows (the former ssaa setting enlarged it along with
+# the screen). 1 = the game's. Video memory: 85 to 130 MiB more at 2, 340 to 520 MiB at 4 (by GPU). Default 2, 1 on a
+# Steam Deck. Read at start.
+# shadow_scale = 2
 # Sun shadow cascade range in percent of the game's (its cascades end at 20, 40, 80 and 160 m), 50 to 400: higher moves
 # the steps where shadows turn softer further away, and spreads the shadow map over more ground. Read at start.
 # shadow_range = 100
@@ -224,6 +224,12 @@
 # where an object meets the ground and softer the further its shadow falls. Done in the translated shaders (translator
 # patch 0010), so the shader cache is rebuilt once after an update. Read at start.
 # pcss = 0
+# Ambient occlusion: off (the default), low or high. The game has none of its own; this darkens creases, corners and the
+# ground under characters and objects, where little of the surrounding light reaches. It is computed at half resolution
+# from the depth buffer once the game has lit its opaque world, before the transparent surfaces, the bloom and the HUD.
+# high searches more directions than low for more GPU time; how dark it gets is the same in both. Changes while the game
+# runs take effect at once.
+# ao = off
 
 # The 3D scene's temporal upscaler, in place of the game's anti-aliasing: off (the default), auto (DLSS where it can
 # run, FSR 3 elsewhere), dlss (NVIDIA DLSS: NVIDIA RTX GPUs, with nvngx_dlss.dll from NVIDIA's DLSS SDK next to

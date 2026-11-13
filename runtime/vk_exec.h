@@ -202,13 +202,18 @@ void vk_exec_op_xfer(VkExec *ex, uint32_t op, const void *payload);
 // vk_contact.c: a pass about to begin (its targets resolved, no pass open), and a dispatch or copy about to be recorded
 void vk_contact_pass_begin(VkExec *ex);
 void vk_contact_flush(VkExec *ex);
+// vk_ao.c, ambient occlusion: a pass about to begin (its targets resolved, no pass open), a dispatch or copy about to be
+// recorded, and a draw about to be recorded (the camera block)
+void vk_ao_pass(VkExec *ex);
+void vk_ao_flush(VkExec *ex);
+void vk_ao_draw(VkExec *ex);
 // vk_exec_xfer.c, samples-passed counting: a draw about to be recorded in the open pass (begins an occlusion query
 // when counting and none is active), and the open pass about to end (ends the active query).
 void vk_exec_oq_draw(VkExec *ex);
 void vk_exec_oq_pass_end(VkExec *ex);
 // vk_gpuprof.c, AC_GPU_PASSES: GPU time per pass. kind: 0 start of a command buffer, 1 before a pass begins, 2 after
-// it ends, 3 after a dispatch (arg: program serial), 4 after a copy (arg: op), 5 end of a command buffer. Outside
-// render passes only.
+// it ends, 3 after a dispatch (arg: program serial), 4 after a copy (arg: op), 5 end of a command buffer, 6 after the
+// ambient occlusion (vk_ao.c). Outside render passes only.
 int vk_gpuprof_on(void);
 void vk_gpuprof_mark(VkExec *ex, int kind, uint64_t arg);
 void vk_gpuprof_flush(uint64_t fence);

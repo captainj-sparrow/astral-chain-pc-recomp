@@ -56,7 +56,6 @@ int res_scene_reduced(void);
 void res_scene_for(const char *mode, unsigned out[2]);
 const char *res_output_asked(void);
 void res_auto_next(unsigned out[2]);
-int rt_patch_set(const char *name);
 double frame_step_limit_hz(void);
 extern const int rt_game_version;
 extern const char rt_port_version[];
@@ -597,25 +596,10 @@ static void rows_upscaling(void) {
     }
 }
 
-static void row_shadow_res(void) {
-    static const char *const vals[] = {"game", "512", "768", "1024", "1536", "2048"};
-    enum { N = sizeof vals / sizeof *vals };
-    const char *names[N];
-    names[0] = menu_text(UI_MENU_SHADOW_RES_GAME);
-    for (int i = 1; i < N; i++) names[i] = vals[i];
-    opt_choice_list("AC_SHADOW_RES", UI_MENU_SHADOW_RES, vals, names, N, UI_MENU_SHADOW_RES_DESC);
-}
-
 static void row_shadow_scale(void) {
     static const char *const vals[] = {"1", "2", "3", "4"};
-    static const char *const names[] = {"960 (1x)", "1920 (2x)", "2880 (3x)", "3840 (4x)"};
+    static const char *const names[] = {"2048 (1x)", "4096 (2x)", "6144 (3x)", "8192 (4x)"};
     opt_choice_list("AC_SHADOW_SCALE", UI_MENU_SHADOW_SCALE, vals, names, 4, UI_MENU_SHADOW_SCALE_DESC);
-}
-
-static void row_shadow_range(void) {
-    static const char *const vals[] = {"100", "150", "200", "300"};
-    static const char *const names[] = {"160 m (1x)", "240 m (1.5x)", "320 m (2x)", "480 m (3x)"};
-    opt_choice_list("AC_SHADOW_RANGE", UI_MENU_SHADOW_RANGE, vals, names, 4, UI_MENU_SHADOW_RANGE_DESC);
 }
 
 static void row_gpu(void) {
@@ -729,7 +713,6 @@ static void tab_screen(float scale) {
     opt_group(UI_MENU_GRAPHICS);
     row_output_res();
     rows_upscaling();
-    if (rt_patch_set("shadow") >= 0) row_shadow_res();
     static const UiTextId up[] = {UI_MENU_UPSCALER_FSR, UI_MENU_UPSCALER_BILINEAR};
     opt_choice("AC_UPSCALER", UI_MENU_UPSCALER, up, 2, UI_MENU_UPSCALER_DESC);
     opt_slider("AC_SHARPNESS", UI_MENU_SHARPNESS, 0, 100, UI_MENU_SHARPNESS_DESC, 5, "%.0f %%");
@@ -738,9 +721,8 @@ static void tab_screen(float scale) {
     const char *aniso_names[] = {menu_text(UI_MENU_ANISO_AUTO), menu_text(UI_MENU_ANISO_GAME), "2x", "4x", "8x", "16x"};
     opt_choice_list("AC_ANISO", UI_MENU_ANISO, aniso, aniso_names, 6, UI_MENU_ANISO_DESC);
     row_shadow_scale();
-    row_shadow_range();
-    opt_slider("AC_PCSS", UI_MENU_PCSS, 0, 200, UI_MENU_PCSS_DESC, 10, "%.0f %%");
-    opt_slider("AC_CONTACT_SHADOWS", UI_MENU_CONTACT_SHADOWS, 0, 100, UI_MENU_CONTACT_SHADOWS_DESC, 10, "%.0f %%");
+    static const UiTextId ao[] = {UI_MENU_AO_OFF, UI_MENU_AO_LOW, UI_MENU_AO_HIGH};
+    opt_choice("AC_AO", UI_MENU_AO, ao, 3, UI_MENU_AO_DESC);
     rows_color();
     opt_group(UI_MENU_HDR_GROUP);
     opt_toggle("AC_HDR", UI_MENU_HDR, UI_MENU_HDR_DESC);

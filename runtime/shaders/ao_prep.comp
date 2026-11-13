@@ -1,0 +1,28 @@
+#version 450
+// Ambient occlusion, step 1 of 3 (runtime/vk_ao.c run): the view-space z of full-resolution pixel 2p, one per
+// half-resolution texel, through the inverse projection. ao.comp then reads this 4-byte half-resolution image instead
+// of the 8-byte full-resolution depth-stencil one, which keeps its many scattered reads in cache. 0 marks the sky
+// (cleared depth): no view-space point has z 0 in front of the camera.
+// The replay's viewports have negative heights, so window y grows downwards from ndc y = +1 (as in dlaa_mv.comp).
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(binding = 0) uniform sampler2D depth_tex;
+layout(binding = 1, r32f) uniform writeonly image2D z_out;
+layout(push_constant) uniform P {
+    vec4 inv2, inv3;   // rows 2 and 3 of the inverse projection, row-major
+    vec4 size;         // full width, full height, 1 for -1..1 clip depth (0 for 0..1)
+} pc;
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= imageSize(z_out).x || p.y >= imageSize(z_out).y) return;
+    ivec2 q = min(p * 2, ivec2(pc.size.xy) - 1);
+    float d = texelFetch(depth_tex, q, 0).r;
+    float z = 0.0;
+    if (d < 1.0) {
+        vec2 win = vec2(q) + 0.5;
+        vec4 ndc = vec4(win.x / pc.size.x * 2.0 - 1.0, 1.0 - win.y / pc.size.y * 2.0, pc.size.z > 0.5 ? d * 2.0 - 1.0 : d,
+                        1.0);
+        z = dot(pc.inv2, ndc) / dot(pc.inv3, ndc);
+    }
+    imageStore(z_out, p, vec4(z));
+}

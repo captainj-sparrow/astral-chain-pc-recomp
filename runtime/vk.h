@@ -147,6 +147,9 @@ void vk_hdr_support(float out[4]);
 // vk_contact.c: screen-space contact shadows on the game's composed scene colour (AC_CONTACT_SHADOWS)
 int vk_contact_strength(void);   // percent, 0 = off
 void vk_contact_release(void);   // before the device goes away
+// vk_ao.c: screen-space ambient occlusion on the game's light target (AC_AO; live)
+void vk_ao_frame(void);     // at each present: the setting read again when it changed, the frame's state reset
+void vk_ao_release(void);   // before the device goes away
 void vk_present_flip(void);
 // Every submission to ctx->gfx_queue (and xfer_queue when shared) takes this lock; vk_present_image and the swapchain
 // rebuild do. Recursive.
