@@ -26,8 +26,11 @@ int input_pad_kind(void);
 // opens its own handle. PAD_KIND_NONE without a gamepad or with AC_INPUT=none. Any thread; idempotent.
 int input_detect_pad_kind(void);
 // AUTO resolved through a first-run detection: the detected kind's mod, Nintendo for any other controller or none.
-// Callers with a live gamepad use input_prompts_auto_for_kind(input_pad_kind()) instead.
+// Callers with a live gamepad use input_prompts_auto_live instead.
 int input_prompts_auto(void);
+// AUTO for the gamepad open now, for the settings menu. Both fall back to the controller a launcher names
+// (RECOMPLAUNCHER_PAD) while there is no gamepad at all, so the menu agrees with what the start loaded.
+int input_prompts_auto_live(void);
 // The gamepad layout in effect (PAD_LAYOUT_*, input_map.h; AC_PAD_LAYOUT, live); -1 without a gamepad. Any thread.
 int input_pad_layout(void);
 // The layout the loaded button prompts force (input_map.h PAD_LAYOUT_*), or -1 with the game's own prompts: the

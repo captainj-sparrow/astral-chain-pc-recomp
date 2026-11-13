@@ -27,7 +27,7 @@ from pathlib import Path
 from . import ini
 from . import state as statefile
 from .events import render
-from .layout import SUPPORTED
+from .layout import SUPPORTED, running_appimage
 
 TEXT = Path(__file__).resolve().parent / 'text'
 UI_LANGUAGES = ('en', 'ru', 'pt-BR', 'zh-Hans')
@@ -118,6 +118,44 @@ def default_game_language(ui):
     the Switch shared fonts (ini.NEED_SHARED_FONTS), which the setup extracts only from a firmware folder, and the game
     stops when they are missing; the player can still pick Chinese."""
     return 'ru' if ui == 'ru' else 'en-US'
+
+
+# Windows primary language ids (the low 10 bits of a LANGID) and the game language of each, for system_game_language.
+# Chinese and Korean are left out: their game text needs the Switch shared fonts (ini.NEED_SHARED_FONTS).
+PRIMARY_GAME_LANGUAGES = {0x09: 'en-US', 0x0c: 'fr', 0x07: 'de', 0x10: 'it', 0x0a: 'es-419', 0x13: 'nl', 0x16: 'pt',
+                          0x19: 'ru', 0x11: 'ja'}
+# The whole LANGIDs whose region has a game language of its own
+LANGID_GAME_LANGUAGES = {0x0809: 'en-GB', 0x0c0c: 'fr-CA', 0x040a: 'es', 0x0c0a: 'es', 0x0416: 'pt-BR'}
+# The same for a POSIX locale name, lower case with '_': the longest prefix wins
+LOCALE_GAME_LANGUAGES = {'en_gb': 'en-GB', 'en': 'en-US', 'fr_ca': 'fr-CA', 'fr': 'fr', 'de': 'de', 'it': 'it',
+                         'es_es': 'es', 'es': 'es-419', 'nl': 'nl', 'pt_br': 'pt-BR', 'pt': 'pt', 'ru': 'ru',
+                         'ja': 'ja'}
+
+
+def game_language_for_langid(langid):
+    """The game language for a Windows display language, English (US) when the game has none for it."""
+    return LANGID_GAME_LANGUAGES.get(langid) or PRIMARY_GAME_LANGUAGES.get(langid & 0x3ff, 'en-US')
+
+
+def game_language_for_locale(locale):
+    """The game language for a POSIX locale name ('fr_CA.UTF-8', 'pt-BR'), English (US) when the game has none."""
+    name = locale.lower().replace('-', '_').split('.')[0].split('@')[0]
+    for prefix in sorted(LOCALE_GAME_LANGUAGES, key=len, reverse=True):
+        if name == prefix or name.startswith(prefix + '_'):
+            return LOCALE_GAME_LANGUAGES[prefix]
+    return 'en-US'
+
+
+def system_game_language():
+    """The game language for this system's display language, for a setup that cannot ask (installer/cli.py --lang
+    auto). The window asks, so it starts from default_game_language instead."""
+    if os.name != 'nt':
+        return game_language_for_locale(os.environ.get('LC_ALL') or os.environ.get('LC_MESSAGES')
+                                        or os.environ.get('LANG') or '')
+    try:
+        return game_language_for_langid(ctypes.windll.kernel32.GetUserDefaultUILanguage())
+    except (AttributeError, OSError):
+        return 'en-US'
 
 
 def gib(n):
@@ -262,7 +300,26 @@ def find_keys(near=()):
     return ''
 
 
-def install_subfolder(path, name='Astral Chain'):
+GAME_FOLDER = 'Astral Chain'   # the folder name the window suggests for the game
+
+
+def launcher_game_folder(layout, environ=None):
+    """The folder the game goes to when RecompLauncher started this window, or '' when it did not.
+
+    The launcher sets RECOMPLAUNCHER=1 for what it starts. It keeps one folder per game, unpacks every release of the
+    setup over it and starts the game from it (recomplauncher.json: `prepare` builds into this same folder without a
+    window; a launcher too old for that opens this window instead). The game goes into a folder of its own inside:
+    it is not part of the release, so unpacking a newer one leaves it alone, and the setup's check wants an empty
+    folder. That folder is the release folder, or the one holding the AppImage when the setup runs from one (its
+    mount is read-only and goes away). A repository checkout gets nothing."""
+    environ = os.environ if environ is None else environ
+    if environ.get('RECOMPLAUNCHER') != '1' or layout.dev:
+        return ''
+    image = running_appimage(layout)
+    return str((image.parent if image else Path(layout.root)) / GAME_FOLDER)
+
+
+def install_subfolder(path, name=GAME_FOLDER):
     """The folder a first install should use when the player picked path: path itself when it is new or empty, else a
     new folder inside it (a player who picks "D:\\Games" means "in D:\\Games", and the setup needs an empty folder)."""
     if inspect_folder(path).kind in ('new', 'install'):

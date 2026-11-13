@@ -216,6 +216,8 @@
  "ui.choose_files": "Escolher os arquivos do jogo",
  "ui.result_updated": "O jogo está atualizado",
  "ui.updated_text": "Seus saves, configurações e mods foram mantidos. Clique em Jogar para abrir o jogo; você pode apagar a pasta deste instalador.",
+ "ui.done_text_launcher": "Clique em Jogar para abrir o jogo. Mantenha a pasta deste instalador: o jogo foi criado dentro dela, e o RecompLauncher o abre a partir dela.",
+ "ui.updated_text_launcher": "Seus saves, configurações e mods foram mantidos. Clique em Jogar para abrir o jogo.",
  "param.input.base": "jogo base",
  "param.input.update": "atualização",
  "param.input.keys": "chaves",

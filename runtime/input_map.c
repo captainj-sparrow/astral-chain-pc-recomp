@@ -304,6 +304,12 @@ int input_prompts_pick(const char *prompts, const char *pad_layout) {
     return PROMPTS_NINTENDO;
 }
 
+int input_pad_kind_named(const char *name) {
+    if (name && !strcasecmp(name, "xbox")) return PAD_KIND_XBOX;
+    if (name && !strcasecmp(name, "playstation")) return PAD_KIND_PLAYSTATION;
+    return PAD_KIND_NONE;
+}
+
 int input_prompts_auto_for_kind(int kind) {
     if (kind == PAD_KIND_XBOX) return PROMPTS_XBOX;
     if (kind == PAD_KIND_PLAYSTATION) return PROMPTS_PLAYSTATION;

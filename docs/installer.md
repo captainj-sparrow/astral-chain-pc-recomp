@@ -111,7 +111,9 @@ whatever the working folder), one argument per line. When an enabled mod has Exe
 folder at once and starts the game again when it succeeds. A failed or cancelled rebuild offers to start the game with
 the code it has; `build-cache/rebuild.skip` then keeps the same files from starting it again, until "Rebuild the game
 now" on the Mods tab. `[mods] mods_rebuild = off` turns it off. The rebuild needs the release folder the setup ran
-from: a moved or deleted release folder means running a setup again.
+from: a moved or deleted release folder means running a setup again. A setup run from an AppImage writes the AppImage
+file itself as the command (`AppRun` passes `--rebuild` to the window): the folder it is mounted on goes away when the
+setup ends.
 
 ## Command line
 
@@ -119,6 +121,7 @@ from: a moved or deleted release folder means running a setup again.
 
 ```
 python -m installer --base FILE --update FILE --keys FILE --lang CODE --dest DIR [--root DIR] [--temp DIR] [--verify]
+                    [--progress-lines]
 ```
 
 - A first install needs the base game, the update NSP and the keys. On a folder with `astralchain-install.json` only
@@ -130,6 +133,18 @@ python -m installer --base FILE --update FILE --keys FILE --lang CODE --dest DIR
   human-readable log goes to `<install>/build-cache/logs/` (a failed or cancelled run leaves it in `<temp>/logs/`).
 - Exit codes: 0 done, 1 failed, 2 bad command line, 3 cancelled. The window cancels with Ctrl+Break to the installer's
   process group.
+- For a program that runs the setup without the window and reads stdout only:
+  - `--progress-lines` prints `progress <0..1> <text>` lines in place of the JSON events (`installer/progress.py`).
+    The number covers the whole run (each step has a share, a skipped step counts as done) and never goes back; the
+    text is the English one the window shows. A failure is the last line, with the place of the log, so nothing has
+    to be read from stderr; the exit code stays 1.
+  - `--lang auto` takes the language `astralchain.ini` of the install folder has (the player may have changed it since
+    the install), else the recorded one, else on a first install the game's language for the system's display
+    language (English when the game has none for it, and for Chinese and Korean, whose text needs the Switch fonts).
+  - With `--progress-lines` the tools die with the setup (`installer/lifeline.py`), also when the setup's process is
+    killed, which no handler sees. On Windows the setup joins a job object that ends its processes when it goes; on
+    Linux a small watcher process kills the process group of each tool still running. The next run continues from the
+    last finished step, as after any cancel.
 - Each step records a key over its inputs (runner.py). A step with the recorded key and intact output is skipped, so
   resume and update are one rule; output kept from another release is re-hashed first.
 - Window (`python -m installer.gui`, `installer/gui.py` draws, `installer/guilogic.py` decides): a first screen with
@@ -141,7 +156,8 @@ python -m installer --base FILE --update FILE --keys FILE --lang CODE --dest DIR
   closes itself.
 - `tests/installer_gui_test.py`: event model, form, catalogs, cancel, the self-closing window and one end-to-end run of
   the CLI in `--verify` mode (needs `build/install-test`; see its docstring).
-- `tests/installer_test.py`: bookkeeping with fake steps. `tests/installer_e2e.py`: a dev-mode run with the files of
+- `tests/installer_test.py`: bookkeeping with fake steps, the progress lines, `--lang auto` and the tools ending
+  with a killed setup. `tests/installer_e2e.py`: a dev-mode run with the files of
   `config.local.toml`.
 
 ## Release layout

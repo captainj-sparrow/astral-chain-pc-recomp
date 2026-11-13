@@ -180,6 +180,21 @@ def dev_layout_posix(root):
         temp=root / 'build' / 'install-temp')
 
 
+def running_appimage(layout):
+    """The AppImage file this setup runs from, or None. Its runtime sets APPIMAGE (the file) and APPDIR (where it
+    mounted it) for AppRun; both are checked against the layout, so a checkout started from a shell that some other
+    AppImage opened is not taken for one."""
+    image, mount = os.environ.get('APPIMAGE'), os.environ.get('APPDIR')
+    if WIN or layout.dev or not image or not mount:
+        return None
+    try:
+        if Path(mount).resolve() != Path(layout.root).resolve() or not Path(image).is_file():
+            return None
+    except OSError:
+        return None
+    return Path(image)
+
+
 def find(root=None):
     """The layout of root (default: the folder above this package)."""
     root = Path(root or Path(__file__).resolve().parent.parent).resolve()

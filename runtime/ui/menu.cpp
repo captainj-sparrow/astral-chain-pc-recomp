@@ -820,7 +820,7 @@ static const char *prompts_note(bool *restart) {
     *restart = false;
     const char *layout = cfg_value("AC_PAD_LAYOUT"), *used = romfs_prompts();
     int pick = input_prompts_pick(cfg_get("AC_PROMPTS"), layout);
-    if (pick == PROMPTS_AUTO) pick = input_prompts_auto_for_kind(input_pad_kind());
+    if (pick == PROMPTS_AUTO) pick = input_prompts_auto_live();
     const char *want = input_prompts_folder(pick, layout);
     if (want == used || (want && used && !strcmp(want, used))) return nullptr;
     if (want && !romfs_prompts_ready(want)) return menu_text(UI_MENU_PROMPTS_MISSING);

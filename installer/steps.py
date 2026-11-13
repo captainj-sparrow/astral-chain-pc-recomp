@@ -24,7 +24,6 @@ import json
 import os
 import re
 import shutil
-import signal
 import subprocess
 import sys
 import threading
@@ -32,7 +31,8 @@ import time
 from pathlib import Path
 
 from . import ini
-from .layout import EXE, SUPPORTED, version_tag
+from . import lifeline
+from .layout import EXE, SUPPORTED, running_appimage, version_tag
 from .runner import InstallError, Step
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'tools'))
@@ -116,10 +116,10 @@ def kill_tree(proc):
     if os.name == 'nt':
         subprocess.run(['taskkill', '/T', '/F', '/PID', str(proc.pid)], capture_output=True)
         return
-    try:   # run_tool starts each tool in a session of its own: the group holds ninja, clang and the game
-        os.killpg(proc.pid, signal.SIGKILL)
-    except OSError:
-        proc.kill()
+    # run_tool starts each tool in a session of its own: it holds ninja, the compilers ninja puts in process groups of
+    # their own, and the game
+    lifeline.kill_session(proc.pid)
+    proc.kill()
 
 
 def linux_glibc():
@@ -161,6 +161,7 @@ def run_tool(ctx, step, script, args, parse=None, cwd=None):
         proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=cwd or ctx.layout.root,
                                 env=env, text=True, encoding='utf-8', errors='replace', bufsize=1,
                                 start_new_session=os.name != 'nt')
+        lifeline.watch(proc.pid)
         try:
             for line in proc.stdout:
                 out.write(line)
@@ -170,6 +171,8 @@ def run_tool(ctx, step, script, args, parse=None, cwd=None):
         except BaseException:
             kill_tree(proc)
             raise
+        finally:
+            lifeline.unwatch(proc.pid)
     ctx.reporter.log(f'{Path(script).name}: exit code {code}; output in {log}')
     return code, log
 
@@ -979,8 +982,13 @@ REBUILD_BOOT = ('import runpy, sys; sys.path.insert(0, sys.argv.pop(1)); '
 def rebuild_command(ctx):
     """The command that starts the setup window in its rebuild mode on this install folder (installer/gui.py
     --rebuild): pythonw beside the setup's Python on Windows, so no console opens. In a repository that is the Python
-    running this setup: the tools' embeddable Python there has no tkinter."""
+    running this setup: the tools' embeddable Python there has no tkinter. From an AppImage it is the AppImage file
+    itself (its AppRun passes the arguments to the window): the folder it is mounted on, where its Python is, goes
+    away when this setup ends."""
     layout = ctx.layout
+    image = running_appimage(layout)
+    if image:
+        return [str(image), '--rebuild', str(ctx.dest)]
     python = Path(sys.executable) if layout.dev else layout.python
     if os.name == 'nt' and python.with_name('pythonw.exe').is_file():
         python = python.with_name('pythonw.exe')

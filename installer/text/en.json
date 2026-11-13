@@ -216,6 +216,8 @@
  "ui.choose_files": "Choose the game files",
  "ui.result_updated": "The game is up to date",
  "ui.updated_text": "Your saves, settings and mods were kept. Click Play to start the game; you can delete this setup folder.",
+ "ui.done_text_launcher": "Click Play to start the game. Keep this setup folder: the game was built inside it, and RecompLauncher starts it from there.",
+ "ui.updated_text_launcher": "Your saves, settings and mods were kept. Click Play to start the game.",
  "param.input.base": "base game",
  "param.input.update": "update",
  "param.input.keys": "keys",
