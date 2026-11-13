@@ -40,6 +40,7 @@ enum {
     R_SetRasterizerDiscardEnable, R_SetScissorWithCount, R_SetStencilCompareMask, R_SetStencilOp, R_SetStencilReference,
     R_SetStencilTestEnable, R_SetStencilWriteMask, R_SetViewportWithCount, R_WriteTimestamp, R_WriteTimestamp2,
     R_PushTpl, R_Push, R_VertexInput, R_Bool, R_PolygonMode, R_BlendEnable, R_BlendEquation, R_WriteMask, R_EndCb,
+    R_SetViewport, R_SetScissor,
 };
 
 static uint64_t now_ns(void) { return plat_now_ns(); }
@@ -321,6 +322,29 @@ void rc_vkCmdSetScissorWithCount(VkCommandBuffer cb, uint32_t n, const VkRect2D 
     pub();
 }
 
+// vkCmdSetViewport and vkCmdSetScissor, for the host passes whose pipelines take a fixed viewport count: vk_ao.c run
+// records them into the replay's command buffer, vk_hdr.c vk_hdr_ui_compose into the window's. Without a packet they
+// were made at once by the submitting thread while the recorder was still making the calls queued before them into the
+// same command buffer: the validation layer reports a threading error on the first frame of the ambient occlusion, and
+// issue #97 (an RTX 4090 losing the device as soon as the ambient occlusion ran) is the report that led here.
+typedef struct { uint32_t first, n; const VkViewport *v; } A_SetViewport;
+void rc_vkCmdSetViewport(VkCommandBuffer cb, uint32_t first, uint32_t n, const VkViewport *v) {
+    if (!OWNED(cb)) { vkCmdSetViewport(cb, first, n, v); return; }
+    A_SetViewport *a = put(R_SetViewport, sizeof *a + sizeof *v * n);
+    uint8_t *at = (uint8_t *)(a + 1);
+    a->first = first, a->n = n, a->v = tail_copy(&at, v, sizeof *v * n);
+    pub();
+}
+
+typedef struct { uint32_t first, n; const VkRect2D *r; } A_SetScissor;
+void rc_vkCmdSetScissor(VkCommandBuffer cb, uint32_t first, uint32_t n, const VkRect2D *r) {
+    if (!OWNED(cb)) { vkCmdSetScissor(cb, first, n, r); return; }
+    A_SetScissor *a = put(R_SetScissor, sizeof *a + sizeof *r * n);
+    uint8_t *at = (uint8_t *)(a + 1);
+    a->first = first, a->n = n, a->r = tail_copy(&at, r, sizeof *r * n);
+    pub();
+}
+
 typedef struct {
     VkPipelineBindPoint bp;
     VkPipelineLayout l;
@@ -580,6 +604,8 @@ static void exec_packet(uint32_t op, void *p) {
     F(SetStencilWriteMask, a->f, a->v)
     F(WriteTimestamp, a->s, a->p, a->q)
     F(WriteTimestamp2, a->s, a->p, a->q)
+    F(SetViewport, a->first, a->n, a->v)
+    F(SetScissor, a->first, a->n, a->r)
     F(SetViewportWithCount, a->n, a->v)
     F(SetScissorWithCount, a->n, a->r)
     F(BindDescriptorSets, a->bp, a->l, a->first, a->n, a->s, a->nd, a->d)

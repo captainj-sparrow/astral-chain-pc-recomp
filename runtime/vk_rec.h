@@ -88,6 +88,7 @@ void rec_write_mask(PFN_vkCmdSetColorWriteMaskEXT fn, VkCommandBuffer cb, uint32
     X(SetPrimitiveRestartEnable, (VkCommandBuffer cb, VkBool32 v), (cb, v))                                              \
     X(SetPrimitiveTopology, (VkCommandBuffer cb, VkPrimitiveTopology v), (cb, v))                                        \
     X(SetRasterizerDiscardEnable, (VkCommandBuffer cb, VkBool32 v), (cb, v))                                             \
+    X(SetScissor, (VkCommandBuffer cb, uint32_t first, uint32_t n, const VkRect2D *r), (cb, first, n, r))                \
     X(SetScissorWithCount, (VkCommandBuffer cb, uint32_t n, const VkRect2D *r), (cb, n, r))                              \
     X(SetStencilCompareMask, (VkCommandBuffer cb, VkStencilFaceFlags f, uint32_t v), (cb, f, v))                         \
     X(SetStencilOp, (VkCommandBuffer cb, VkStencilFaceFlags f, VkStencilOp a, VkStencilOp b, VkStencilOp c,              \
@@ -95,6 +96,7 @@ void rec_write_mask(PFN_vkCmdSetColorWriteMaskEXT fn, VkCommandBuffer cb, uint32
     X(SetStencilReference, (VkCommandBuffer cb, VkStencilFaceFlags f, uint32_t v), (cb, f, v))                           \
     X(SetStencilTestEnable, (VkCommandBuffer cb, VkBool32 v), (cb, v))                                                   \
     X(SetStencilWriteMask, (VkCommandBuffer cb, VkStencilFaceFlags f, uint32_t v), (cb, f, v))                           \
+    X(SetViewport, (VkCommandBuffer cb, uint32_t first, uint32_t n, const VkViewport *v), (cb, first, n, v))             \
     X(SetViewportWithCount, (VkCommandBuffer cb, uint32_t n, const VkViewport *v), (cb, n, v))                           \
     X(WriteTimestamp, (VkCommandBuffer cb, VkPipelineStageFlagBits s, VkQueryPool p, uint32_t q), (cb, s, p, q))         \
     X(WriteTimestamp2, (VkCommandBuffer cb, VkPipelineStageFlags2 s, VkQueryPool p, uint32_t q), (cb, s, p, q))
@@ -141,12 +143,14 @@ REC_CMDS(REC_DECL)
 #define vkCmdSetPrimitiveRestartEnable rc_vkCmdSetPrimitiveRestartEnable
 #define vkCmdSetPrimitiveTopology rc_vkCmdSetPrimitiveTopology
 #define vkCmdSetRasterizerDiscardEnable rc_vkCmdSetRasterizerDiscardEnable
+#define vkCmdSetScissor rc_vkCmdSetScissor
 #define vkCmdSetScissorWithCount rc_vkCmdSetScissorWithCount
 #define vkCmdSetStencilCompareMask rc_vkCmdSetStencilCompareMask
 #define vkCmdSetStencilOp rc_vkCmdSetStencilOp
 #define vkCmdSetStencilReference rc_vkCmdSetStencilReference
 #define vkCmdSetStencilTestEnable rc_vkCmdSetStencilTestEnable
 #define vkCmdSetStencilWriteMask rc_vkCmdSetStencilWriteMask
+#define vkCmdSetViewport rc_vkCmdSetViewport
 #define vkCmdSetViewportWithCount rc_vkCmdSetViewportWithCount
 #define vkCmdWriteTimestamp rc_vkCmdWriteTimestamp
 #define vkCmdWriteTimestamp2 rc_vkCmdWriteTimestamp2
