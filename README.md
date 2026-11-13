@@ -41,6 +41,7 @@ Report problems as issues, following [CONTRIBUTING.md](CONTRIBUTING.md).
 - Xbox and PlayStation button prompts, each with its matching button layout (PlayStation mod from https://gamebanana.com/mods/604666)
 - Shaders prepared at install instead of during play
 - Ultrawide - From 16:10 to 48:9
+- Ambient Occlusion
 
 ## Installing
 
