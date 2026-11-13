@@ -117,6 +117,12 @@ site res main 40f1d0 7119001f @fnz:rt_res_cmp_w0 # cmp w0, #1600 -> cmp w0, widt
 site res main 40f1d8 1a880261 1a880001           # csel w1, w19, w8, eq -> w0 (level 2 docked width: the output's)
 site res main 9ed178 bc687920 1e2e1000           # ldr s0, [x9,x8,lsl #2] -> fmov s0, #1.0 (mipmap bias, as res1062)
 site res main 40e0b0 52a26c08 @fn:rt_res_budget_w8   # mov w8, #0x13600000 -> the budget for the output size
+# The GRAPHIC BUFFER heap (143 MiB, made inside BUFFER ROOT by the heap setup at main+0x575a00) holds the constant
+# buffers and one storage buffer of 6.97 bytes a pixel of the render size. At 3840x2160 that buffer takes 55 MiB, the
+# heap ran full in File 02 and its block headers were overwritten, which crashed the allocator at the next free
+# (runtime/resolution.c res_gbuf_extra has the measurements). Both sizes grow with the output's pixel count above 1080p.
+site res main 575a30 52a15ac1 @fn:rt_res_bufroot_w1  # mov w1, #0xad60000 -> BUFFER ROOT's size for the output size
+site res main 575c94 52a11e01 @fn:rt_res_gbuf_w1     # mov w1, #0x8f00000 -> the GRAPHIC BUFFER heap's size
 # Field of view (AC_FOV, runtime/resolution.c res_fov_live). A camera's lens (*(camera+0x58)) keeps the vertical view
 # angle at +0x27c (radians: 50 degrees in play, the shot's own in cutscenes), the aspect ratio at +0x278 and near / far
 # at +0x270 / +0x274. While the lens is dirty (+0x28c), main+0x9a3010 loads those four and builds the projection

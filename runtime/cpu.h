@@ -107,6 +107,7 @@ void rt_hud_off22_x8(Cpu *c);       // which its draw then leaves out (resolutio
 void rt_res_w8(Cpu *c), rt_res_h8(Cpu *c), rt_res_w9(Cpu *c), rt_res_h9(Cpu *c), rt_res_h22(Cpu *c);
 uint64_t rt_res_cmp_w0(Cpu *c);
 void rt_res_budget_w8(Cpu *c);
+void rt_res_bufroot_w1(Cpu *c), rt_res_gbuf_w1(Cpu *c);   // BUFFER ROOT's and the GRAPHIC BUFFER heap's size into w1
 // scene size for upscaling (resolution.c, set scene): a dynamic-resolution level's width into w1, its height into w2
 void rt_res_scene_w1(Cpu *c), rt_res_scene_h2(Cpu *c);
 

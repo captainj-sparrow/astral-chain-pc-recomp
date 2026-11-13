@@ -268,9 +268,9 @@ static void res_shadow_range(void) {
 // from the patch page (+32 width, +36 height, u32; rt_res_* below) at the sites that hold the game's render size, so
 // output_res takes a size as in the TotK Recomp, here any 16:9 one of 32n x 18n: 1920x1080 by default, 1280x720 for
 // GPUs that cannot hold 1080p, up to 3840x2160 (res_size). Above 1080p's pixel count the game's render-target budget
-// (main+0x40e0b0, 310 MiB, which 1080p fills to 304) grows with the pixels (res_budget), and the process heap by the
-// same amount, as the budget is carved from it (res_output_extra_bytes). AC_RES1062=1 still asks for the community
-// 1062p set instead.
+// (main+0x40e0b0, 310 MiB, which 1080p fills to 304) grows with the pixels (res_budget), so does the GRAPHIC BUFFER
+// heap (res_gbuf_extra), and the process heap grows by both amounts, as they are carved from it
+// (res_output_extra_bytes). AC_RES1062=1 still asks for the community 1062p set instead.
 #define RES_PAGE 32
 #define RES_BUDGET_GAME (310ull << 20)   // the game's own render-target budget, 0x13600000
 #define RES_PIXELS_MAX (3840ull * 2160)  // the most the process heap's 4 GiB (memory.c HEAP_CAP) leaves room for
@@ -405,11 +405,27 @@ static int res_set_wanted(void) {
     return !(r && !atoi(r)) && !(r1062 && atoi(r1062));
 }
 
+// What the GRAPHIC BUFFER heap gets on top of its 143 MiB for w x h. The game makes it at main+0x575c94 inside BUFFER
+// ROOT (main+0x575a30, 173.375 MiB) and keeps its constant buffers there, next to one storage buffer sized by the
+// render size: 6.97 bytes a pixel (13.8 MiB at 1920x1080, 24.5 at 2560x1440, 55.2 at 3840x2160). Measured in File 02
+// at the footprint tutorial, the heap held 95.5 MiB at 1920x1080, 106.2 at 2560x1440 and 136.7 at 3840x2160, where its
+// largest free block was under 1 KiB while the game makes about ten constant buffers a frame there: uniform data then
+// landed on the headers of other blocks, and the next free of a neighbour crashed in the allocator (main+0x9bb9f0
+// writing 0x3f800018, or main+0x9bafa0 reading -1), with or without an upscaler and in every AC_MEMORY mode. None of
+// the game's other 37 heaps changes with the size. So above 1080p's pixel count the heap and its root grow by 8 bytes
+// a pixel, in whole MiB (13 MiB at 2560x1440, 48 at 3840x2160), which leaves more free space than 1920x1080 has.
+static uint64_t res_gbuf_extra(unsigned w, unsigned h) {
+    uint64_t px = (uint64_t)w * h;
+    if (px <= 1920ull * 1080) return 0;
+    if (cfg_get("AC_I88_NOFIX")) return 0;   // i88 diagnostic (temporary): the heap at the game's own size
+    return ((px - 1920ull * 1080) * 8 + 0xfffff) & ~0xfffffull;
+}
+
 uint64_t res_output_extra_bytes(void) {
     if (!res_set_wanted()) return 0;
     unsigned w, h;
     res_size(&w, &h);
-    return res_budget(w, h) - RES_BUDGET_GAME;
+    return res_budget(w, h) - RES_BUDGET_GAME + res_gbuf_extra(w, h);
 }
 
 static unsigned res_page(int i) {
@@ -430,6 +446,9 @@ uint64_t rt_res_cmp_w0(Cpu *c) {
     return MKFLAGS(r >> 31, r == 0, a >= b, ((a ^ b) & (a ^ r)) >> 31);
 }
 void rt_res_budget_w8(Cpu *c) { c->x[8] = res_budget(res_page(0), res_page(1)); }
+// The sizes of BUFFER ROOT and of the GRAPHIC BUFFER heap inside it (res_gbuf_extra).
+void rt_res_bufroot_w1(Cpu *c) { c->x[1] = 0xad60000ull + res_gbuf_extra(res_page(0), res_page(1)); }
+void rt_res_gbuf_w1(Cpu *c) { c->x[1] = 0x8f00000ull + res_gbuf_extra(res_page(0), res_page(1)); }
 
 static void res_pick(void) {
     int res = rt_patch_set("res"), r1062 = rt_patch_set("res1062");
@@ -443,8 +462,9 @@ static void res_pick(void) {
         res_size(&w, &h);
         uint32_t page[2] = {w, h};
         memcpy((uint8_t *)rt_patch_page() + RES_PAGE, page, sizeof page);
-        rt_log("resolution: the game renders %ux%u (render-target budget %llu MiB)", w, h,
-               (unsigned long long)(res_budget(w, h) >> 20));
+        rt_log("resolution: the game renders %ux%u (render-target budget %llu MiB, graphic buffer heap %llu MiB)", w, h,
+               (unsigned long long)(res_budget(w, h) >> 20),
+               (unsigned long long)((0x8f00000ull + res_gbuf_extra(w, h)) >> 20));
     } else if (rt_patch_enabled(r1062)) {
         rt_log("resolution: the game renders 1888x1062");
     }

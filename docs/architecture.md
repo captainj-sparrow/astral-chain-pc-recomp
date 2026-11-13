@@ -107,8 +107,11 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   textures come from one budget the graphics configuration sets (main+0x40e0b0: 310 MiB, of which 1080p uses 304),
   carved from the process heap; above 1080p's pixel count `rt_res_budget_w8` raises it with the pixels (`res_budget`:
   the measured 87 MiB and 110 bytes a pixel, 15 % to spare) and `res_heap_extra_bytes` grows the application pool by
-  the same amount (TotK's HeapDef growth does not apply there). 1.0.1 has no `aspect` set and no HUD layouts for other
-  shapes; its wider pictures come from the `wide` set below. The
+  the same amount (TotK's HeapDef growth does not apply there). The GRAPHIC BUFFER heap (143 MiB inside BUFFER ROOT,
+  sized at main+0x575c94 and main+0x575a30) holds the constant buffers and a storage buffer of 6.97 bytes a pixel of
+  the render size, so above 1080p it and its root grow by 8 bytes a pixel as well (`res_gbuf_extra`,
+  `rt_res_gbuf_w1`, `rt_res_bufroot_w1`): at 3840x2160 the fixed size ran full in play and the allocator crashed.
+  1.0.1 has no `aspect` set and no HUD layouts for other shapes; its wider pictures come from the `wide` set below. The
   game always renders its picture at its own size: nothing enlarges its render targets from outside (the former
   `ssaa`). When the window is larger than the output, `vk_fsr.c` runs AMD FSR 1 (EASU, RCAS) on the present. An
   `output_res` that is not 16:9 (more than 1% off, `res_is_16x9`) also switches on the
