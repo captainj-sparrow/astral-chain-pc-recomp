@@ -25,7 +25,7 @@ GPL projects (yuzu, suyu, OpenSmash-Ultimate, Unicorn inside the game binary) ca
 
 ## Reporting bugs
 
-Use the issue form. Include the port version and game update from the title line of the settings menu (F1), your GPU and driver (Copy system info in the menu's Advanced tab copies them), the log (`logs\totk.log` next to `totk.exe`; after a crash, copy it before you start the game again), and the steps to reproduce. Screenshots are fine; recordings of long gameplay are not needed.
+Use the issue form. Include the port version and game update from the title line of the settings menu (F1), your GPU and driver (Copy system info in the menu's Advanced tab copies them), the log (`logs\astralchain.log` next to `astralchain.exe`; after a crash, copy it before you start the game again), and the steps to reproduce. Screenshots are fine; recordings of long gameplay are not needed.
 
 ## Pull requests
 
