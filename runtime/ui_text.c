@@ -104,7 +104,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_SHADOW_SCALE_DESC] = "Draws the sun's shadow map this many times larger on each side than the game's "
                                   "2048x2048: sharper shadow edges and leaf shadows, for more video memory (about "
                                   "85 to 130 MiB at 2x, 340 to 520 MiB at 4x). Takes effect at the next start.",
-    [UI_MENU_AO] = "Ambient occlusion",
+    [UI_MENU_AO] = "Ambient occlusion (experimental)",
     [UI_MENU_AO_DESC] = "Darkens creases, corners and the ground under characters and objects, where little of the "
                         "surrounding light reaches. Computed on the screen after the world is lit; the game has none of "
                         "its own. High costs more GPU time than Low. Takes effect at once.",
@@ -499,7 +499,7 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_SHADOW_SCALE_DESC] = "Карта теней от солнца рисуется во столько раз больше по каждой стороне, чем "
                                   "2048x2048 в игре: края теней и тени листвы чётче, ценой видеопамяти (около "
                                   "85–130 МиБ при 2x, 340–520 МиБ при 4x). Действует после перезапуска.",
-    [UI_MENU_AO] = "Фоновое затенение",
+    [UI_MENU_AO] = "Фоновое затенение (эксперим.)",
     [UI_MENU_AO_DESC] = "Затемняет складки, углы и землю под персонажами и предметами, куда доходит мало окружающего "
                         "света. Считается по экрану после освещения; в самой игре его нет. «Высокое» требует больше "
                         "времени GPU, чем «Низкое». Действует сразу.",
@@ -1170,7 +1170,7 @@ static const char *const text_pt_br[UI_TEXT_COUNT] = {
                                   "que os 2048x2048 do jogo: bordas de sombra e sombras de folhas mais nítidas, "
                                   "com mais memória de vídeo (85 a 130 MiB em 2x, 340 a 520 MiB em 4x). Vale no "
                                   "próximo início.",
-    [UI_MENU_AO] = "Oclusão de ambiente",
+    [UI_MENU_AO] = "Oclusão de ambiente (experimental)",
     [UI_MENU_AO_DESC] = "Escurece dobras, cantos e o chão sob personagens e objetos, onde chega pouca luz ao redor. "
                         "Calculada na tela depois da iluminação; o jogo não tem a sua. Alta custa mais tempo de GPU "
                         "que Baixa. Vale na hora.",
@@ -1700,7 +1700,7 @@ static const char *const text_zh_hans[UI_TEXT_COUNT] = {
     [UI_MENU_SHADOW_SCALE] = "阴影分辨率",
     [UI_MENU_SHADOW_SCALE_DESC] = "将太阳阴影贴图的每条边绘制为游戏 2048x2048 的若干倍：阴影边缘和树叶阴影更清晰，"
                                   "但占用更多显存（2x 约 85–130 MiB，4x 约 340–520 MiB）。下次启动时生效。",
-    [UI_MENU_AO] = "环境光遮蔽",
+    [UI_MENU_AO] = "环境光遮蔽（实验性）",
     [UI_MENU_AO_DESC] = "让褶皱、角落以及角色和物体下方的地面变暗，那里接收到的周围光线较少。在光照之后于屏幕空间计算；"
                         "游戏本身没有此效果。“高”比“低”占用更多 GPU 时间。立即生效。",
     [UI_MENU_AO_OFF] = "关",

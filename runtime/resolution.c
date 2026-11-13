@@ -417,7 +417,6 @@ static int res_set_wanted(void) {
 static uint64_t res_gbuf_extra(unsigned w, unsigned h) {
     uint64_t px = (uint64_t)w * h;
     if (px <= 1920ull * 1080) return 0;
-    if (cfg_get("AC_I88_NOFIX")) return 0;   // i88 diagnostic (temporary): the heap at the game's own size
     return ((px - 1920ull * 1080) * 8 + 0xfffff) & ~0xfffffull;
 }
 
