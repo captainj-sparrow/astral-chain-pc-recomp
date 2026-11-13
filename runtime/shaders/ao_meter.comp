@@ -1,0 +1,19 @@
+#version 450
+// Ambient occlusion (runtime/vk_ao.c run): the light target's typical brightness, for ao_blur.comp to tell surfaces
+// that glow or stand in a strong light from the rest. The light target holds scene light before the game's exposure, so
+// "bright" has no fixed value: the same lamp is 0.5 on the night motorway and 40 in a daylit street. One invocation
+// reads a 32x18 grid of bilinear taps and writes the geometric mean of their luminance, which a few very bright
+// texels (the neon itself) hardly move, into a 1x1 image.
+layout(local_size_x = 1) in;
+layout(binding = 0) uniform sampler2D light_tex;
+layout(binding = 1, r32f) uniform writeonly image2D mean_out;
+
+void main() {
+    float sum = 0.0;
+    for (int y = 0; y < 18; y++)
+        for (int x = 0; x < 32; x++) {
+            vec3 c = textureLod(light_tex, (vec2(x, y) + 0.5) / vec2(32.0, 18.0), 0.0).rgb;
+            sum += log(max(dot(c, vec3(0.2126, 0.7152, 0.0722)), 1e-4));
+        }
+    imageStore(mean_out, ivec2(0), vec4(exp(sum / 576.0)));
+}

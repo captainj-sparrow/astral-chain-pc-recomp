@@ -228,12 +228,16 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   The first light-target pass with the scene depth after the game's R32F linear-depth pass that writes colour is the
   opaque lighting (in play, every other frame, a pass with its colour writes masked off comes before it); when
   the next pass with other targets begins (or a dispatch or copy comes first), `ao_prep.comp` takes the scene depth to a
-  half-resolution view z, `ao.comp` searches horizons along 2 or 3 screen directions within 1.5 m (GTAO's closed-form
-  integral, a 4x4 pattern that turns per frame while a temporal upscaler runs), and `ao_apply.frag` averages the
-  pattern out with depth-aware weights, scales it up and multiplies the light target through a blend, by a fixed curve
-  (visibility from 0.9 up is left alone, the rest squared: `AO_OPEN`, `AO_POWER`). Transparents,
-  bloom, tonemap and HUD come after. The camera is the c3 block of the scene's draws, as for the motion vectors. At
-  2560x1440 on an Arc 140T: about 1.3 ms (low) and 1.6 ms (high); `AC_GPU_PASSES` times each step ("ao"),
+  half-resolution view z, `ao.comp` searches horizons along 2 or 3 directions within 1.5 m and a quarter of the picture's
+  height (GTAO's closed-form integral, a fixed 4x4 pattern), `ao_blur.comp` averages the pattern out at half resolution
+  with depth-aware weights and lets go of what glows (light several times the picture's typical brightness, which
+  `ao_meter.comp` reads: signs, lamps, fires), and `ao_apply.frag` scales the result up and multiplies the light target
+  through a blend, by a fixed curve (visibility from 0.9 up is left alone, the rest squared: `AO_OPEN`, `AO_POWER`).
+  Transparents, bloom, tonemap and HUD come after. The camera is the c3 block of the scene's draws, as for the motion
+  vectors. Half resolution and the fixed pattern hold with a temporal upscaler too: with FSR 3 a pattern turning per
+  frame made the picture less steady, and the scene's full resolution cost 2.5 ms for no gain. Lengths on screen count
+  in heights of the target, so ultrawide targets and `aspect = wide` (an ultrawide view in a 16:9 target) behave alike.
+  At 2560x1440 on an Arc 140T: about 1.45 ms (low) and 1.8 ms (high); `AC_GPU_PASSES` times each step ("ao"),
   `AC_AO_DEBUG=1` shows the factor alone.
 - The sun shadow map, one 2048x2048 DEPTH24_STENCIL8 texture on 1.0.1, is made `shadow_scale` times larger on each side
   (`vk_texture.c` `shadow_scale_of`; 2 by default, 1 in the Steam Deck profile): its depth-only pass draws at that

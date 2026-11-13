@@ -7,9 +7,10 @@
 // in a few places) with the scene depth (D32F with stencil), then turns that depth into an R32F linear depth in a pass
 // of its own, with no depth target, and some passes later draws the opaque world into the light target with the same
 // depth. The first light-target pass with that depth after the linear depth pass is the opaque lighting; when the next
-// pass with other targets begins, or a dispatch or copy comes first, three steps run (runtime/shaders): ao_prep.comp
-// takes the scene depth to a half-resolution view z, ao.comp computes the occlusion at that resolution, and
-// ao_apply.frag averages its noise pattern out, scales it up and multiplies the light target by it through a blend. Transparent surfaces, particles, the bloom, the tonemap and the HUD come after, untouched. The
+// pass with other targets begins, or a dispatch or copy comes first, the steps run (runtime/shaders): ao_prep.comp takes
+// the scene depth to a view z at the occlusion's resolution, ao.comp computes the occlusion there, ao_meter.comp reads
+// the light target's typical brightness, ao_blur.comp averages the noise pattern out and lets go of what glows, and ao_apply.frag scales the result up and multiplies the light target by it through a blend.
+// Transparent surfaces, particles, the bloom, the tonemap and the HUD come after, untouched. The
 // frame state starts over at each present (vk_ao_frame).
 //
 // The camera is the vertex stage's c3 block of the scene's draws (256 bytes, row-major vec4 rows: view, projection,
@@ -17,7 +18,13 @@
 // comes from the depth through the inverse of its projection, made here in double precision, with the depth mode of
 // DeviceSetDepthMode (0..1 or -1..1); view x and y come from z through the projection's scales. The scene targets are
 // made at their own size whatever the output resolution or upscaling mode (resolution.c), so the pass works at the size
-// of the targets it finds.
+// of the targets it finds, ultrawide ones included: every length on screen is counted in heights of the target, and
+// where aspect = wide stretches an ultrawide view over a 16:9 target, ao.comp steps by the texel's shape in view space.
+// The occlusion is computed at half the target's resolution (AO_SCALE) with a pattern that stays put, with a temporal
+// upscaler too. Measured with FSR 3 in its quality mode (a 1696x954 scene for 2560x1440, a street at rest, the mean
+// change of the picture from one frame to the next): 2.3 without occlusion, 2.2 at half resolution with the pattern
+// fixed, 2.5 when the pattern turns every frame, 2.4 and 3.4 for the same two at the scene's full resolution, which
+// also costs 2.5 ms in place of 0.9. The upscaler does not average a turning pattern out, and the blur already does.
 //
 // How dark it gets is fixed (AO_OPEN, AO_POWER), the same for every player: no setting. The measured visibility of a
 // surface in a street is seldom 1 (a wall 20 m away with pipes and ledges within the radius reads about 0.85, and a
@@ -34,18 +41,23 @@
 #include <string.h>
 
 #include "ao_apply_spv.h"
+#include "ao_blur_spv.h"
+#include "ao_meter_spv.h"
 #include "ao_prep_spv.h"
 #include "ao_spv.h"
 #include "cfg.h"
 #include "hdr_fullscreen_spv.h"
 #include "host.h"
 #include "nvn_api.h"
-#include "vk_dlaa.h"
 #include "vk_exec.h"
 
 #define CAM_BYTES 256u        // the c3 camera block: vec4 rows 0-15
 #define Z_FORMAT VK_FORMAT_R32_SFLOAT   // ao_prep.comp: view z (storage support is mandatory)
 #define AO_RADIUS 1.5f        // world radius of the search, metres: reaches under cars and along walls
+#define AO_SCALE 2u           // light-target pixels per occlusion texel, each way
+#define AO_REACH 4.0f         // the search covers at most 1/AO_REACH of the picture's height: close surfaces, close-ups
+#define AO_GLOW_LO 6.0f       // light this many times the picture's typical brightness starts to lose its occlusion
+#define AO_GLOW_HI 24.0f      // and this many times has none: signs, lamps, fires (ao_blur.comp)
 #define AO_OPEN 0.90f         // visibility from which a surface counts as open: no darkening (ao_apply.frag)
 #define AO_POWER 2.0f         // the remaining visibility to this power is the factor on the light
 #define AO_FADE 120.0f        // the occlusion fades out between half this view distance and this one
@@ -66,22 +78,21 @@ static struct {
     int cfg_read;
     // pipelines
     int tried, ok;
-    VkSampler nearest;
-    VkDescriptorSetLayout dsl_c, dsl_a;
-    VkPipelineLayout lay_c, lay_a;
-    VkPipeline comp[2];        // ao_prep, ao
+    VkSampler nearest, linear;
+    VkDescriptorSetLayout dsl_c, dsl_b, dsl_a;   // compute steps, the blur, the apply
+    VkPipelineLayout lay_c, lay_b, lay_a;
+    VkPipeline comp[4];        // ao_prep, ao, ao_meter, ao_blur
     struct { VkFormat fmt; int debug; VkPipeline p; } apply[MAX_APPLY];
     int napply;
-    // the half-resolution images: view z and the occlusion
-    struct { VkImage img; VmaAllocation mem; VkImageView view; } im[2];
+    // the images at the occlusion's resolution: view z, the occlusion, the blur's other side; and the 1x1 brightness
+    struct { VkImage img; VmaAllocation mem; VkImageView view; } im[4];
     uint32_t iw, ih;
-    VkFormat ao_format;        // ao.comp's output: RG16F, half the bytes ao_apply.frag reads, else RG32F (mandatory)
+    VkFormat ao_format;        // ao.comp's output: RG16F, half the bytes its readers fetch, else RG32F (mandatory)
     // this frame
     VkExecTarget light, depth;  // the light target and scene depth of the last light-target pass
     int have, lin, armed, done;
     int wrote;                  // a draw of the armed pass writes colour: it is the opaque lighting (vk_ao_draw)
     struct Cam cams[4];
-    uint32_t frame;
     int logged, no_cam_logs, fmt_logs;
 } A;
 
@@ -106,13 +117,14 @@ static VkShaderModule module(VkDevice d, const uint32_t *code, size_t size) {
     return vkCreateShaderModule(d, &mi, NULL, &m) == VK_SUCCESS ? m : VK_NULL_HANDLE;
 }
 
-static VkDescriptorSetLayout set_layout(VkDevice d, VkDescriptorType t1, VkShaderStageFlags st) {
-    VkDescriptorSetLayoutBinding b[2] = {
-        {.binding = 0, .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1, .stageFlags = st},
-        {.binding = 1, .descriptorType = t1, .descriptorCount = 1, .stageFlags = st}};
+static VkDescriptorSetLayout set_layout(VkDevice d, const VkDescriptorType *types, uint32_t n, VkShaderStageFlags st) {
+    VkDescriptorSetLayoutBinding b[4];
+    for (uint32_t i = 0; i < n; i++)
+        b[i] = (VkDescriptorSetLayoutBinding){.binding = i, .descriptorType = types[i], .descriptorCount = 1,
+                                              .stageFlags = st};
     VkDescriptorSetLayoutCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
                                           .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
-                                          .bindingCount = 2, .pBindings = b};
+                                          .bindingCount = n, .pBindings = b};
     VkDescriptorSetLayout l = VK_NULL_HANDLE;
     return vkCreateDescriptorSetLayout(d, &ci, NULL, &l) == VK_SUCCESS ? l : VK_NULL_HANDLE;
 }
@@ -138,22 +150,29 @@ static int init(void) {
                               .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
                               .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
                               .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .maxLod = 0};
-    if (vkCreateSampler(d, &si, NULL, &A.nearest) != VK_SUCCESS ||
-        !(A.dsl_c = set_layout(d, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)) ||
-        !(A.dsl_a = set_layout(d, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)) ||
+    VkSamplerCreateInfo sl = si;
+    sl.magFilter = sl.minFilter = VK_FILTER_LINEAR;   // the light target, for the brightness (R11G11B10F and RGBA16F filter)
+    const VkDescriptorType S = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, I = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    const VkDescriptorType tc[2] = {S, I}, tb[4] = {S, I, S, S}, ta[2] = {S, S};
+    if (vkCreateSampler(d, &si, NULL, &A.nearest) != VK_SUCCESS || vkCreateSampler(d, &sl, NULL, &A.linear) != VK_SUCCESS ||
+        !(A.dsl_c = set_layout(d, tc, 2, VK_SHADER_STAGE_COMPUTE_BIT)) ||
+        !(A.dsl_b = set_layout(d, tb, 4, VK_SHADER_STAGE_COMPUTE_BIT)) ||
+        !(A.dsl_a = set_layout(d, ta, 2, VK_SHADER_STAGE_FRAGMENT_BIT)) ||
         !(A.lay_c = pipe_layout(d, &A.dsl_c, VK_SHADER_STAGE_COMPUTE_BIT, 64)) ||
+        !(A.lay_b = pipe_layout(d, &A.dsl_b, VK_SHADER_STAGE_COMPUTE_BIT, 16)) ||
         !(A.lay_a = pipe_layout(d, &A.dsl_a, VK_SHADER_STAGE_FRAGMENT_BIT, 64))) {
         rt_log("vk: ambient occlusion off: its pipeline layouts could not be created");
         return 0;
     }
-    const struct { const uint32_t *code; size_t size; } cs[2] = {{ao_prep_spv, sizeof ao_prep_spv},
-                                                                 {ao_spv, sizeof ao_spv}};
-    for (int i = 0; i < 2; i++) {
+    const struct { const uint32_t *code; size_t size; VkPipelineLayout lay; } cs[4] = {
+        {ao_prep_spv, sizeof ao_prep_spv, A.lay_c}, {ao_spv, sizeof ao_spv, A.lay_c},
+        {ao_meter_spv, sizeof ao_meter_spv, A.lay_c}, {ao_blur_spv, sizeof ao_blur_spv, A.lay_b}};
+    for (int i = 0; i < 4; i++) {
         VkShaderModule m = module(d, cs[i].code, cs[i].size);
         VkComputePipelineCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
                                           .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                                                     .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = m, .pName = "main"},
-                                          .layout = A.lay_c};
+                                          .layout = cs[i].lay};
         VkResult r = m ? vkCreateComputePipelines(d, VK_NULL_HANDLE, 1, &ci, NULL, &A.comp[i]) : VK_ERROR_UNKNOWN;
         if (m) vkDestroyShaderModule(d, m, NULL);
         if (r != VK_SUCCESS) {
@@ -233,7 +252,7 @@ static VkPipeline apply_pipeline(VkFormat fmt, int debug) {
 // device is idle).
 static void free_images(int deferred) {
     VkCtx *c = vk_ctx();
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 4; i++) {
         if (deferred) {
             vk_defer_view(A.im[i].view);
             if (A.im[i].img) vk_defer_image(A.im[i].img, A.im[i].mem);
@@ -246,17 +265,17 @@ static void free_images(int deferred) {
     A.iw = A.ih = 0;
 }
 
-// The half-resolution images at w x h; a new size retires the old ones. New images go to GENERAL, the layout every
-// image of the back end is kept in.
+// The occlusion's images at w x h and the 1x1 brightness; a new size retires the old ones. New images go to GENERAL,
+// the layout every image of the back end is kept in.
 static int ensure_images(VkCommandBuffer cb, uint32_t w, uint32_t h) {
     if (A.im[0].img && A.iw == w && A.ih == h) return 1;
     VkCtx *c = vk_ctx();
     if (A.im[0].img) free_images(1);
-    VkImageMemoryBarrier2 ib[2];
-    for (int i = 0; i < 2; i++) {
-        VkFormat f = i == 0 ? Z_FORMAT : A.ao_format;
+    VkImageMemoryBarrier2 ib[4];
+    for (int i = 0; i < 4; i++) {
+        VkFormat f = i == 0 || i == 3 ? Z_FORMAT : A.ao_format;
         VkImageCreateInfo ii = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D, .format = f,
-                                .extent = {w, h, 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
+                                .extent = {i == 3 ? 1 : w, i == 3 ? 1 : h, 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
                                 .tiling = VK_IMAGE_TILING_OPTIMAL,
                                 .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
@@ -283,7 +302,7 @@ static int ensure_images(VkCommandBuffer cb, uint32_t w, uint32_t h) {
                                         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .image = A.im[i].img,
                                         .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
     }
-    VkDependencyInfo di = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 2,
+    VkDependencyInfo di = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 4,
                            .pImageMemoryBarriers = ib};
     vkCmdPipelineBarrier2(cb, &di);
     A.iw = w, A.ih = h;
@@ -347,10 +366,10 @@ static int plain_perspective(const double p[16]) {
 }
 
 // ---------------------------------------------------------------- the pass
-// One compute step at half resolution: src sampled at binding 0, dst written at binding 1. AC_GPU_PASSES times each
-// step on its own row (ao, step n).
+// One compute step: src sampled at binding 0, dst written at binding 1, gx x gy groups. AC_GPU_PASSES times the steps
+// on rows of their own (ao, step n): a step with n 0 counts with the next.
 static void step(VkExec *ex, int n, VkPipeline pipe, VkDescriptorImageInfo src, VkImageView dst, const void *pc,
-                 uint32_t pc_size) {
+                 uint32_t pc_size, uint32_t gx, uint32_t gy) {
     VkCommandBuffer cb = ex->cb;
     VkDescriptorImageInfo oi = {VK_NULL_HANDLE, dst, VK_IMAGE_LAYOUT_GENERAL};
     VkWriteDescriptorSet wc[2] = {
@@ -360,10 +379,34 @@ static void step(VkExec *ex, int n, VkPipeline pipe, VkDescriptorImageInfo src, 
          .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .pImageInfo = &oi}};
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
     rec_push(vk_pipeline_push_fn(), cb, VK_PIPELINE_BIND_POINT_COMPUTE, A.lay_c, 0, 2, wc);
-    vkCmdPushConstants(cb, A.lay_c, VK_SHADER_STAGE_COMPUTE_BIT, 0, pc_size, pc);
+    if (pc_size) vkCmdPushConstants(cb, A.lay_c, VK_SHADER_STAGE_COMPUTE_BIT, 0, pc_size, pc);
+    vkCmdDispatch(cb, gx, gy, 1);
+    full_barrier(cb);
+    if (n && vk_gpuprof_on()) vk_gpuprof_mark(ex, 6, (uint64_t)n);
+}
+
+// The blur (ao_blur.comp), from one occlusion image into the other, with the light target and its typical brightness.
+static void blur(VkExec *ex, int from, int to, VkImageView light, float scale) {
+    VkCommandBuffer cb = ex->cb;
+    VkDescriptorImageInfo in = {A.nearest, A.im[from].view, VK_IMAGE_LAYOUT_GENERAL},
+                          out = {VK_NULL_HANDLE, A.im[to].view, VK_IMAGE_LAYOUT_GENERAL},
+                          li = {A.linear, light, VK_IMAGE_LAYOUT_GENERAL},
+                          mean = {A.nearest, A.im[3].view, VK_IMAGE_LAYOUT_GENERAL};
+    VkWriteDescriptorSet wb[4] = {
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 0, .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &in},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 1, .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .pImageInfo = &out},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 2, .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &li},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 3, .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &mean}};
+    float pb[4] = {scale, AO_GLOW_LO, AO_GLOW_HI, 0};
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, A.comp[3]);
+    rec_push(vk_pipeline_push_fn(), cb, VK_PIPELINE_BIND_POINT_COMPUTE, A.lay_b, 0, 4, wb);
+    vkCmdPushConstants(cb, A.lay_b, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pb, pb);
     vkCmdDispatch(cb, (A.iw + 7) / 8, (A.ih + 7) / 8, 1);
     full_barrier(cb);
-    if (vk_gpuprof_on()) vk_gpuprof_mark(ex, 6, (uint64_t)n);
 }
 
 static void run(VkExec *ex) {
@@ -379,7 +422,8 @@ static void run(VkExec *ex) {
         return;
     }
     const VkExecTarget *t = &A.light, *z = &A.depth;
-    uint32_t w = t->width, h = t->height, hw = (w + 1) / 2, hh = (h + 1) / 2;
+    uint32_t w = t->width, h = t->height, sc = AO_SCALE;
+    uint32_t hw = (w + sc - 1) / sc, hh = (h + sc - 1) / sc, gx = (hw + 7) / 8, gy = (hh + 7) / 8;
     VkPipeline ap = apply_pipeline(t->format, A.debug);
     if (!ap) return;
     vk_exec_barrier(ex);   // ends the open pass; what drew the scene is done, feedback-layout targets back in GENERAL
@@ -399,28 +443,32 @@ static void run(VkExec *ex) {
                (int)t->format, hw, hh, pj[5]);
     }
     float mode = nvn_depth_minus_w() ? 1.0f : 0.0f;
-    struct { float inv2[4], inv3[4], size[4]; } pz = {.size = {(float)w, (float)h, mode, 0}};
+    struct { float inv2[4], inv3[4], size[4]; } pz = {.size = {(float)w, (float)h, mode, (float)sc}};
     for (int i = 0; i < 4; i++) pz.inv2[i] = (float)inv[8 + i], pz.inv3[i] = (float)inv[12 + i];
     VkDescriptorImageInfo depth_in = {A.nearest, zv, VK_IMAGE_LAYOUT_GENERAL},
                           z_in = {A.nearest, A.im[0].view, VK_IMAGE_LAYOUT_GENERAL},
-                          a1_in = {A.nearest, A.im[1].view, VK_IMAGE_LAYOUT_GENERAL};
-    // 1: view z at half resolution
-    step(ex, 1, A.comp[0], depth_in, A.im[0].view, &pz, sizeof pz);
+                          a2_in = {A.nearest, A.im[2].view, VK_IMAGE_LAYOUT_GENERAL},
+                          light_in = {A.linear, cv, VK_IMAGE_LAYOUT_GENERAL};
+    // 1: view z at the occlusion's resolution
+    step(ex, 1, A.comp[0], depth_in, A.im[0].view, &pz, sizeof pz, gx, gy);
     // 2: the occlusion. Clip x = p00 x + p02 z and clip w = p32 z give view x = z (ndc.x p32 / p00 - p02 / p00); y alike.
     // Pixels per unit at view z: |p11| (half height / 2) / |p32 z|.
     double ws = pj[14];
-    int temporal = vk_dlaa_running() != NULL;   // the upscaler's history averages a pattern that turns every frame
     struct { float ndc_to_view[4], size[4], radius[4], steps[4]; } pa = {
         {(float)(ws / pj[0]), (float)(-pj[2] / pj[0]), (float)(ws / pj[5]), (float)(-pj[6] / pj[5])},
-        {(float)hw, (float)hh, temporal ? (float)(A.frame++ & 1023) : 0, 0},
-        {AO_RADIUS, (float)(fabs(pj[5]) * 0.5 * hh / fabs(ws)), (float)hh / 8.0f, AO_FADE},
-        {A.level == 2 ? 3.0f : 2.0f, A.level == 2 ? 4.0f : 3.0f, 0, 0}};
-    step(ex, 2, A.comp[1], z_in, A.im[1].view, &pa, sizeof pa);
-    // 3: averaged out, scaled up and onto the light target
+        {(float)hw, (float)hh, (float)(fabs(pj[5]) * hh / (fabs(pj[0]) * hw)), 0},
+        {AO_RADIUS, (float)(fabs(pj[5]) * 0.5 * hh / fabs(ws)), (float)hh / AO_REACH, AO_FADE},
+        {A.level == 2 ? 3.0f : 2.0f, A.level == 2 ? 5.0f : 4.0f, 0, 0}};
+    step(ex, 2, A.comp[1], z_in, A.im[1].view, &pa, sizeof pa, gx, gy);
+    // 3: the light's typical brightness, then the pattern averaged out (image 1 into 2)
+    step(ex, 0, A.comp[2], light_in, A.im[3].view, NULL, 0, 1, 1);
+    blur(ex, 1, 2, cv, (float)sc);
+    if (vk_gpuprof_on()) vk_gpuprof_mark(ex, 6, 3);
+    // 4: scaled up and onto the light target
     struct { float inv2[4], inv3[4], size[4], mode[4]; } pf;
     memcpy(&pf, &pz, sizeof pz);
     pf.size[3] = AO_POWER;
-    pf.mode[0] = (float)A.debug, pf.mode[1] = AO_OPEN, pf.mode[2] = pf.mode[3] = 0;
+    pf.mode[0] = (float)A.debug, pf.mode[1] = AO_OPEN, pf.mode[2] = (float)sc, pf.mode[3] = 0;
     VkRenderingAttachmentInfo ca = {.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO, .imageView = cv,
                                     .imageLayout = VK_IMAGE_LAYOUT_GENERAL, .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
                                     .storeOp = VK_ATTACHMENT_STORE_OP_STORE};
@@ -434,7 +482,7 @@ static void run(VkExec *ex) {
     vkCmdSetScissor(cb, 0, 1, &s);
     VkWriteDescriptorSet wa[2] = {
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 0, .descriptorCount = 1,
-         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &a1_in},
+         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &a2_in},
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 1, .descriptorCount = 1,
          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &depth_in}};
     rec_push(vk_pipeline_push_fn(), cb, VK_PIPELINE_BIND_POINT_GRAPHICS, A.lay_a, 0, 2, wa);
@@ -444,7 +492,7 @@ static void run(VkExec *ex) {
     full_barrier(cb);   // what follows sees the darkened light
     ex->recorded += 30;
     vk_texture_gpu_written(t->tex);
-    if (vk_gpuprof_on()) vk_gpuprof_mark(ex, 6, 3);
+    if (vk_gpuprof_on()) vk_gpuprof_mark(ex, 6, 4);
     vk_exec_draw_new_cb();   // the game's pipelines, sets and dynamic state were replaced: the next draw binds them again
     ex->dirty = VK_EXEC_DIRTY_ALL;
 }
@@ -528,9 +576,12 @@ void vk_ao_release(void) {
     VkDevice d = c->device;
     free_images(0);
     for (int i = 0; i < A.napply; i++) vkDestroyPipeline(d, A.apply[i].p, NULL);
-    for (int i = 0; i < 2; i++)
+    for (int i = 0; i < 4; i++)
         if (A.comp[i]) vkDestroyPipeline(d, A.comp[i], NULL);
     if (A.lay_c) vkDestroyPipelineLayout(d, A.lay_c, NULL);
+    if (A.lay_b) vkDestroyPipelineLayout(d, A.lay_b, NULL);
+    if (A.dsl_b) vkDestroyDescriptorSetLayout(d, A.dsl_b, NULL);
+    if (A.linear) vkDestroySampler(d, A.linear, NULL);
     if (A.lay_a) vkDestroyPipelineLayout(d, A.lay_a, NULL);
     if (A.dsl_c) vkDestroyDescriptorSetLayout(d, A.dsl_c, NULL);
     if (A.dsl_a) vkDestroyDescriptorSetLayout(d, A.dsl_a, NULL);

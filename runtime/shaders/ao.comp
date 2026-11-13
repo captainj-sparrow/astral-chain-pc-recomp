@@ -1,22 +1,21 @@
 #version 450
-// Ambient occlusion, step 2 of 3 (runtime/vk_ao.c run), at half resolution. Each texel's view-space position comes
+// Ambient occlusion, second step (runtime/vk_ao.c run), at the occlusion's resolution (the target's or half of it). Each texel's view-space position comes
 // from ao_prep.comp's z and the projection's scales (a perspective projection: clip w is a multiple of view z, and x and
 // y depend on their own coordinate and z alone, which vk_ao.c checks); the normal from the nearer of its z neighbours
 // on each axis. The horizon is then searched along a few screen directions (slices): in each slice, the highest point
 // seen above the surface on either side, within a world-space radius, bounds the visible arc, and the cosine-weighted
 // visible part of the hemisphere is integrated in closed form over the arc between the two horizons and the normal
 // projected into the slice (horizon-based ambient occlusion, after Jimenez et al. 2016, "Practical Real-Time
-// Strategies for Accurate Indirect Occlusion"). Slice angles and step offsets follow a 4x4 pattern that ao_apply.frag
-// averages out; with the temporal upscaler on, the pattern also turns from frame to frame and the upscaler's history
-// averages that.
+// Strategies for Accurate Indirect Occlusion"). Slice angles and step offsets follow a 4x4 pattern that ao_blur.comp
+// averages out. The pattern stays put from frame to frame, with a temporal upscaler too (vk_ao.c has the measurement).
 // Output: .x visibility (1 open, 0 enclosed), .y the texel's view z (0 sky) for the depth-aware blur and upsampling.
 layout(local_size_x = 8, local_size_y = 8) in;
 layout(binding = 0) uniform sampler2D z_tex;
 layout(binding = 1) uniform writeonly image2D ao_out;   // RG16F, or RG32F where RG16F cannot be stored (vk_ao.c)
 layout(push_constant) uniform P {
     vec4 ndc_to_view;   // x = z * (ndc.x * a + b), y = z * (ndc.y * c + d)
-    vec4 size;          // half width, half height, frame index for the pattern, 0
-    vec4 radius;        // world radius, half-resolution pixels per unit at view distance 1, largest radius in pixels,
+    vec4 size;          // width, height, how many times wider than tall a texel is in view space (1: square), 0
+    vec4 radius;        // world radius, pixels per unit at view distance 1, largest radius in pixels,
                         // fade distance
     vec4 steps;         // slices, steps per side, 0, 0
 } pc;
@@ -61,20 +60,22 @@ void main() {
     vec3 N = normalize(cross(dx, dy));
     if (dot(N, V) < 0.0) N = -N;
 
-    // 4x4 ordered pattern: slice turn and step offset per texel, moving on with the frame index
+    // 4x4 ordered pattern: slice turn and step offset per texel
     const float bayer[16] = float[](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
     float b = bayer[(p.y & 3) * 4 + (p.x & 3)];
-    float f = pc.size.z;
-    float turn = fract((b + 0.5) / 16.0 + f * 0.6180339);
-    float jit = fract((b + 0.5) / 16.0 * 7.0 + f * 0.7548777);
+    float turn = (b + 0.5) / 16.0;
+    float jit = fract((b + 0.5) / 16.0 * 7.0);
 
     int slices = int(pc.steps.x), steps = int(pc.steps.y);
     float R2 = pc.radius.x * pc.radius.x;
     float vis = 0.0;
     for (int s = 0; s < slices; s++) {
         float phi = (float(s) + turn) * PI / float(slices);
-        vec2 o = vec2(cos(phi), sin(phi));   // window pixels, y down
-        vec3 dirV = vec3(o.x, -o.y, 0.0);
+        // The slice's direction is taken in view space; its step in window pixels (y down) is that many times shorter
+        // across where a texel is wider than tall there: with aspect = wide the game draws an ultrawide view into a
+        // 16:9 target, and lengths are counted in heights.
+        vec3 dirV = vec3(cos(phi), -sin(phi), 0.0);
+        vec2 o = vec2(dirV.x / pc.size.z, -dirV.y);
         vec3 ortho = normalize(dirV - dot(dirV, V) * V);
         vec3 axis = cross(dirV, V);
         vec3 pn = N - axis * dot(N, axis) / max(dot(axis, axis), 1e-8);

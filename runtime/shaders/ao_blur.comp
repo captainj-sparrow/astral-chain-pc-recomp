@@ -1,0 +1,44 @@
+#version 450
+// Ambient occlusion (runtime/vk_ao.c run): the blur that averages ao.comp's 4x4 pattern out, at the occlusion's own
+// resolution, where it costs a quarter of what it did per pixel of the light target. Each texel averages the 4x4
+// texels from two before it to one after it, the pattern's span, so every pattern value counts once; the average
+// therefore sits half a texel before the texel on each axis, which ao_apply.frag takes into account. Each texel
+// also counts by how close its view z is to the centre's, 1 over the near half of the tolerance, so occlusion stays on
+// its side of a depth edge and a surface that slants away still counts its texels alike.
+// It also lets go of what glows: where the light target is several times its typical brightness (ao_meter.comp), a lit
+// sign, a lamp, a fire's glow on the ground, the visibility goes to 1, so the occlusion that multiplies all the light
+// does not dim emissive surfaces.
+// In and out: .x visibility, .y view z (0 sky).
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(binding = 0) uniform sampler2D ao_tex;
+layout(binding = 1) uniform writeonly image2D ao_out;
+layout(binding = 2) uniform sampler2D light_tex;   // bilinear
+layout(binding = 3) uniform sampler2D mean_tex;    // 1x1
+layout(push_constant) uniform P {
+    vec4 glow;     // x: light-target pixels per occlusion texel; y, z: the brightness, in multiples of the typical one,
+                   // where the occlusion starts to fade and where it is gone
+} pc;
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy), size = textureSize(ao_tex, 0);
+    if (p.x >= size.x || p.y >= size.y) return;
+    float z = texelFetch(ao_tex, p, 0).y;
+    if (z == 0.0) {   // the sky
+        imageStore(ao_out, p, vec4(1.0, 0.0, 0.0, 0.0));
+        return;
+    }
+    float tol = 0.04 * abs(z) + 0.05, sum = 0.0, wsum = 0.0;
+    for (int y = -2; y < 2; y++)
+        for (int x = -2; x < 2; x++) {
+            vec2 a = texelFetch(ao_tex, clamp(p + ivec2(x, y), ivec2(0), size - 1), 0).xy;
+            float w = a.y == 0.0 ? 0.0 : clamp(2.0 - 2.0 * abs(a.y - z) / tol, 0.0, 1.0);
+            sum += a.x * w;
+            wsum += w;
+        }
+    float v = sum / wsum;   // the texel itself always counts
+    vec2 uv = (vec2(p) + 0.5) * pc.glow.x / vec2(textureSize(light_tex, 0));
+    float lum = dot(textureLod(light_tex, uv, 0.0).rgb, vec3(0.2126, 0.7152, 0.0722));
+    float typical = texelFetch(mean_tex, ivec2(0), 0).r;
+    v = mix(v, 1.0, smoothstep(pc.glow.y * typical, pc.glow.z * typical, lum));
+    imageStore(ao_out, p, vec4(v, z, 0.0, 0.0));
+}
