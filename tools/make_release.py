@@ -16,6 +16,7 @@ cached in toolchain/release-dl/ and checked against the sha256 in PINS; a mismat
     bin/       ac_xlate.exe (+ .id), hactool.exe, SDL3.dll (upstream), libopus-0.dll, libxess.dll (Intel XeSS SDK),
                ninja.exe
     recomp/, tools/, data/, installer/, licenses/, THIRD_PARTY_NOTICES.md, astralchain.ini.example
+    recomplauncher.json   what RecompLauncher does with the release (installer/progress.py)
     VERSION    the repository's VERSION plus the commit, 0.1.0+973c626; the installer's release string
     Astral Chain-Setup.exe  installer/launcher/launcher.c built with llvm/ (-mwindows): starts python/pythonw.exe -m installer.gui
 
@@ -440,6 +441,8 @@ def build_sources(out):
     copy_tree(ROOT / 'controller-ui', out / 'controller-ui', lambda r: False)
     copy_tree(ROOT / 'installer', out / 'installer', lambda r: '__pycache__' in r or r.startswith('launcher/'))
     shutil.copy2(ROOT / 'astralchain.ini.example', out / 'astralchain.ini.example')
+    # RecompLauncher reads it at the top of the unpacked release, or at the AppDir root of the AppImage
+    shutil.copy2(ROOT / 'recomplauncher.json', out / 'recomplauncher.json')
     shutil.copy2(ROOT / 'THIRD_PARTY_NOTICES.md', out / 'THIRD_PARTY_NOTICES.md')
     (out / 'VERSION').write_text(version() + '\n', encoding='utf-8')
 
@@ -527,6 +530,28 @@ def check_bundle(out):
     if r.returncode:
         sys.exit(f'bundle check: window selftest exit {r.returncode}\n{r.stdout[-2000:]}\n{r.stderr[-2000:]}')
     print('bundle check: the window built every screen in both languages and closed')
+    # What RecompLauncher's prepare step runs (recomplauncher.json), from the folder it starts it in
+    r = subprocess.run([py, '-m', 'installer', '--lang', 'auto', '--dest', chk / 'install', '--temp', chk / 'temp',
+                        '--progress-lines'], cwd=out / 'python', env=env, capture_output=True, text=True,
+                       encoding='utf-8', timeout=600)
+    lines = [line for line in r.stdout.splitlines() if line.startswith('progress ')]
+    if r.returncode != 1 or not lines or 'game files are needed' not in lines[-1]:
+        sys.exit(f'bundle check: --progress-lines: exit {r.returncode}\n{r.stdout[-2000:]}\n{r.stderr[-2000:]}')
+    check_manifest(out)
+    print('bundle check: the setup ran without a window and recomplauncher.json names files of the folder')
+
+
+def check_manifest(out):
+    """recomplauncher.json is in the folder, parses, and its prepare and start programs name a file of this release:
+    the launcher runs the first entry that exists, so a renamed Python or setup program would only show at a player's.
+    The built game (the entries under installer.guilogic GAME_FOLDER) is not in a release, and on Linux the setup
+    program is the AppImage this folder is packed into."""
+    manifest = json.loads((out / 'recomplauncher.json').read_text(encoding='utf-8'))
+    for part in ('prepare', 'start'):
+        programs = manifest[part]['program']
+        shipped = [p for p in programs if (out / p).is_file() or p.endswith('.AppImage') and (out / 'AppRun').is_file()]
+        if not shipped:
+            sys.exit(f'bundle check: recomplauncher.json {part}.program names no file of the release: {programs}')
 
 
 def drop_bytecode(out):

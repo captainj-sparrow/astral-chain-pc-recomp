@@ -33,7 +33,8 @@ from . import state as statefile
 from .layout import SUPPORTED
 from .guilogic import (DONE, FAILED, INSTALL, PENDING, RUNNING, SKIPPED, UI_LANGUAGE_LABELS, UI_LANGUAGES, UPDATE,
                        Catalog, Form, Model, Process, amount, default_game_language, describe_event, find_keys,
-                       inspect_folder, install_subfolder, parse_line, sibling_game_files, windows_ui_language)
+                       inspect_folder, install_subfolder, launcher_game_folder, parse_line, sibling_game_files,
+                       windows_ui_language)
 
 POLL_MS = 100
 GLYPH = {PENDING: '\u25cb', RUNNING: '\u25b6', DONE: '\u2714', SKIPPED: '\u2013', FAILED: '\u2716'}
@@ -148,6 +149,12 @@ class App:
         for name in ('base', 'update', 'keys'):
             self.vars[name].trace_add('write', lambda *_: self.refresh_update())
         self.vars['update_dest'].trace_add('write', lambda *_: self.on_update_dest())
+        # Started by RecompLauncher: the game's folder is the one its Play button starts from, so both forms begin
+        # with it (the update form when the game is already built there).
+        self.launcher_folder = '' if rebuild else launcher_game_folder(layout)
+        if self.launcher_folder:
+            built = inspect_folder(self.launcher_folder)
+            self.vars['update_dest' if built.kind == 'install' and built.finished else 'dest'].set(self.launcher_folder)
         self.refresh_install()
         self.refresh_update()
         if rebuild:
@@ -820,7 +827,9 @@ class App:
         self.finish_title.configure(text=self.cat(title))
         error = None
         if result == 'ok':
-            text = self.cat('ui.updated_text' if updated else 'ui.done_text', dest=m.dest)
+            # In RecompLauncher's folder the setup stays: the launcher unpacks its updates over it.
+            kept = '_launcher' if self.launcher_folder and Path(m.dest or '.') == Path(self.launcher_folder) else ''
+            text = self.cat(('ui.updated_text' if updated else 'ui.done_text') + kept, dest=m.dest)
         elif result == 'cancelled':
             text = self.cat('ui.cancelled_text')
         else:

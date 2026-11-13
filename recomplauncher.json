@@ -3,10 +3,190 @@
     "format": 1,
     "name": "Astral Chain Recomp",
     "repo": "captainj-sparrow/astral-chain-pc-recomp",
+    "min": "0.90.0-beta.27",
+    "requires": ["start", "exit_codes", "settings.ini", "settings.choices", "settings.groups"],
+    "inputs": [
+        {
+            "id": "base",
+            "label": "Your Astral Chain game, version 1.0.0 (NSP or XCI)",
+            "role": "game",
+            "formats": [{"type": "file", "extensions": ["nsp", "xci"], "requires": ["keys"]}]
+        },
+        {
+            "id": "update",
+            "label": "The Astral Chain 1.0.1 update (NSP)",
+            "role": "update",
+            "formats": [{"type": "file", "extensions": ["nsp"], "requires": ["keys"]}]
+        },
+        {
+            "id": "keys",
+            "label": "Nintendo Switch prod.keys",
+            "role": "key",
+            "shared": "switch.prod-keys"
+        }
+    ],
+    "prepare": {
+        "program": ["python/python.exe", "Astral-Chain-Setup-x86_64.AppImage"],
+        "args": [
+            "-m", "installer",
+            "--base", "{input:base}",
+            "--update", "{input:update}",
+            "--keys", "{input:keys}",
+            "--lang", "auto",
+            "--dest", "{install}/Astral Chain",
+            "--progress-lines"
+        ],
+        "label": "Building the game from your files",
+        "timeout": 7200
+    },
     "start": {
         "program": [
-            "astralchain.exe",
-            "Astral Chain-Setup.exe"
+            "Astral Chain/astralchain.exe",
+            "Astral Chain/astralchain",
+            "Astral Chain-Setup.exe",
+            "Astral-Chain-Setup-x86_64.AppImage"
         ]
+    },
+    "config": [
+        {"id": "main", "format": "ini", "file": [{"path": "{install}/Astral Chain/astralchain.ini"}]}
+    ],
+    "settings": [
+        {
+            "id": "window",
+            "label": "Window mode",
+            "help": "Borderless fullscreen or a window. F11 switches it in the game.",
+            "group": "Display",
+            "choices": [
+                {"label": "Fullscreen", "set": {"display/fullscreen": "1"}},
+                {"label": "Window", "set": {"display/fullscreen": "0"}}
+            ],
+            "defaults": {"display/fullscreen": "1"}
+        },
+        {
+            "id": "resolution",
+            "label": "Game resolution",
+            "help": "The size the game draws its picture at. Higher is sharper and needs a faster graphics card with more video memory.",
+            "group": "Display",
+            "choices": [
+                {"label": "1280x720", "set": {"display/output_res": "1280x720"}},
+                {"label": "1920x1080", "set": {"display/output_res": "1920x1080"}},
+                {"label": "2560x1440", "set": {"display/output_res": "2560x1440"}},
+                {"label": "3840x2160", "set": {"display/output_res": "3840x2160"}}
+            ],
+            "defaults": {"display/output_res": "1920x1080"}
+        },
+        {
+            "id": "hdr",
+            "label": "HDR",
+            "help": "HDR10 output. Needs an HDR display with HDR switched on in the system.",
+            "group": "Display",
+            "choices": [
+                {"label": "Off", "set": {"display/hdr": "0"}},
+                {"label": "On", "set": {"display/hdr": "1"}}
+            ],
+            "defaults": {"display/hdr": "0"}
+        },
+        {
+            "id": "fps",
+            "label": "Frame rate",
+            "help": "60 runs the game's 60 fps patch. 30 is the game's own rate on the Switch, for slower PCs.",
+            "group": "Graphics",
+            "choices": [
+                {"label": "60 fps", "set": {"frame rate/fps": "60"}},
+                {"label": "30 fps", "set": {"frame rate/fps": "30"}}
+            ],
+            "defaults": {"frame rate/fps": "60"}
+        },
+        {
+            "id": "upscaling",
+            "label": "Upscaling",
+            "help": "Replaces the game's anti-aliasing for smoother edges. DLSS needs an NVIDIA RTX card and XeSS runs on Windows only; FSR 3 works on any card.",
+            "group": "Graphics",
+            "choices": [
+                {"label": "Off", "set": {"display/upscaling": "off"}},
+                {"label": "Automatic", "set": {"display/upscaling": "auto"}},
+                {"label": "DLSS", "set": {"display/upscaling": "dlss"}},
+                {"label": "XeSS", "set": {"display/upscaling": "xess"}},
+                {"label": "FSR 3", "set": {"display/upscaling": "fsr3"}}
+            ],
+            "defaults": {"display/upscaling": "off"}
+        },
+        {
+            "id": "upscaling_quality",
+            "label": "Upscaling quality",
+            "help": "Used when Upscaling is on. Native keeps the full resolution; the others draw fewer pixels for more frames per second.",
+            "group": "Graphics",
+            "choices": [
+                {"label": "Native", "set": {"display/upscaling_quality": "native"}},
+                {"label": "Quality", "set": {"display/upscaling_quality": "quality"}},
+                {"label": "Balanced", "set": {"display/upscaling_quality": "balanced"}},
+                {"label": "Performance", "set": {"display/upscaling_quality": "performance"}},
+                {"label": "Ultra performance", "set": {"display/upscaling_quality": "ultra_performance"}}
+            ],
+            "defaults": {"display/upscaling_quality": "native"}
+        },
+        {
+            "id": "anti_aliasing",
+            "label": "Anti-aliasing",
+            "help": "The game's own edge smoothing, used when Upscaling is off.",
+            "group": "Graphics",
+            "choices": [
+                {"label": "SMAA", "set": {"display/anti_aliasing": "smaa"}},
+                {"label": "Off", "set": {"display/anti_aliasing": "off"}}
+            ],
+            "defaults": {"display/anti_aliasing": "smaa"}
+        },
+        {
+            "id": "ao",
+            "label": "Ambient occlusion",
+            "help": "Darkens corners and the ground under characters. High looks in more directions and takes more graphics card time.",
+            "group": "Graphics",
+            "choices": [
+                {"label": "Off", "set": {"display/ao": "off"}},
+                {"label": "Low", "set": {"display/ao": "low"}},
+                {"label": "High", "set": {"display/ao": "high"}}
+            ],
+            "defaults": {"display/ao": "off"}
+        },
+        {
+            "id": "language",
+            "label": "Game language",
+            "help": "The language of the game's text and menus.",
+            "group": "Game",
+            "choices": [
+                {"label": "English (US)", "set": {"language/lang": "en-US"}},
+                {"label": "English (UK)", "set": {"language/lang": "en-GB"}},
+                {"label": "Japanese", "set": {"language/lang": "ja"}},
+                {"label": "French", "set": {"language/lang": "fr"}},
+                {"label": "French (Canada)", "set": {"language/lang": "fr-CA"}},
+                {"label": "German", "set": {"language/lang": "de"}},
+                {"label": "Italian", "set": {"language/lang": "it"}},
+                {"label": "Spanish", "set": {"language/lang": "es"}},
+                {"label": "Spanish (Latin America)", "set": {"language/lang": "es-419"}},
+                {"label": "Dutch", "set": {"language/lang": "nl"}},
+                {"label": "Portuguese", "set": {"language/lang": "pt"}},
+                {"label": "Portuguese (Brazil)", "set": {"language/lang": "pt-BR"}},
+                {"label": "Russian", "set": {"language/lang": "ru"}}
+            ],
+            "defaults": {"language/lang": "en-US"}
+        }
+    ],
+    "saves": [
+        "{install}/Astral Chain/profile/save",
+        "{install}/Astral Chain/profile/account.uid"
+    ],
+    "folders": {
+        "logs": [{"path": "{install}/Astral Chain/logs"}],
+        "saves": [{"path": "{install}/Astral Chain/profile/save"}],
+        "mods": [{"path": "{install}/Astral Chain/mods"}]
+    },
+    "actions": [
+        {"id": "open_mods", "label": "Open the mods folder", "open": "mods"},
+        {"id": "open_logs", "label": "Open the logs folder", "open": "logs"}
+    ],
+    "exit_codes": {
+        "0": "ok",
+        "70": "The game stopped on an error: often the graphics driver stopped answering, sometimes the PC ran out of memory. Updating the graphics driver or lowering the game resolution usually helps. astralchain.log in the logs folder says what happened.",
+        "71": "The game crashed. astralchain.log in the logs folder says where; attach it when you report the problem."
     }
 }

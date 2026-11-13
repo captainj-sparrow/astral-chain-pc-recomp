@@ -1,22 +1,28 @@
 """installer/ bookkeeping with fake steps: fresh install, resume after a failure or cancel, transient steps, update
-with a newer release, astralchain.ini and the event stream. No game files, no tools; stdlib only.
+with a newer release, astralchain.ini, the event stream, and what a launcher uses: progress lines, --lang auto and
+recomplauncher.json. No game files, no tools; stdlib only.
 
 Run: python tests/installer_test.py
 """
 import io
 import json
+import os
 import re
+import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from installer import ini, runner, state, steps  # noqa: E402
+from installer import cli, ini, runner, state, steps  # noqa: E402
+from installer import layout as layouts  # noqa: E402
 from installer.events import Reporter  # noqa: E402
 from installer.layout import Layout  # noqa: E402
+from installer.progress import ProgressLines  # noqa: E402
 
 
 class Fake(runner.Step):
@@ -441,6 +447,291 @@ class EventsTest(unittest.TestCase):
             used |= {f'phase.{s}.{p}' for s, p in re.findall(r"progress\('(\w+)', '(\w+)'[,)]",
                                                                   path.read_text(encoding='utf-8'))}
         self.assertEqual(sorted(i for i in used if i not in catalog), [])
+
+
+def progress_lines(text):
+    """[(fraction, text)] of the `progress` lines in text; any other line fails the test that reads them."""
+    rows = []
+    for line in text.splitlines():
+        word, number, rest = line.split(' ', 2)
+        assert word == 'progress', line
+        rows.append((float(number), rest))
+    return rows
+
+
+class ProgressLinesTest(unittest.TestCase):
+    """--progress-lines: the events of a run as the `progress <0..1> <text>` lines a launcher reads (progress.py)."""
+
+    def lines(self, fill):
+        out = io.StringIO()
+        rep = Reporter(out=ProgressLines(out))
+        fill(rep)
+        return progress_lines(out.getvalue())
+
+    @staticmethod
+    def first_install(rep):
+        rep.emit('start', release='1.0', mode='install', dest='D:\\g', log='D:\\g.log', steps=ALL)
+        rep.emit('plan', run=ALL, skip={})
+        for step, phases in (('check', ('host', 'inputs')), ('extract', ('exefs', 'copy', 'merge')),
+                             ('lift', ('discover', 'emit')), ('compile', ('compile', 'link')),
+                             ('prepare', ('seed', 'translate', 'pack')), ('cleanup', ('ini', 'temp'))):
+            rep.step(step, 'started')
+            for phase in phases:
+                rep.progress(step, phase, 0, 10, 'objects', force=True)
+                rep.progress(step, phase, 10, 10, 'objects')
+            rep.step(step, 'done', seconds=1.0)
+        rep.emit('end', result='ok', seconds=6.0)
+
+    def test_fractions_go_from_zero_to_one_and_never_back(self):
+        rows = self.lines(self.first_install)
+        fractions = [f for f, _ in rows]
+        self.assertEqual(fractions, sorted(fractions))
+        self.assertEqual((fractions[0], fractions[-1]), (0.0, 1.0))
+        self.assertTrue(all(f < 1.0 for f in fractions[:-1]))
+        self.assertGreater(len(set(fractions)), 12)   # it moves inside the steps, not only between them
+        self.assertEqual(rows[-1][1], 'The game is ready')
+        self.assertTrue(any(text.startswith('Compiling') for _, text in rows))
+
+    def test_skipped_steps_count_as_done(self):
+        def update(rep):
+            rep.emit('start', release='1.1', mode='update', dest='D:\\g', log='D:\\g.log', steps=ALL)
+            rep.emit('plan', run=['check', 'lift', 'compile', 'cleanup'], skip={'extract': 'current',
+                                                                                'prepare': 'current'})
+            rep.step('check', 'started')
+            rep.step('check', 'done', seconds=0.1)
+            rep.step('extract', 'skipped', reason='current')
+            rep.step('lift', 'started')
+        rows = self.lines(update)
+        self.assertGreater(rows[0][0], 0.5)   # extract and prepare, more than half of a first install, are behind
+        self.assertEqual(rows[-1][1], 'Translating the game code to C')
+
+    def test_an_error_is_the_last_line(self):
+        def failing(rep):
+            rep.emit('start', release='1.0', mode='install', dest='D:\\g', log='D:\\run.log', steps=ALL)
+            rep.emit('plan', run=ALL, skip={})
+            rep.step('check', 'started')
+            rep.error('check.disk_space', {'path': 'D:\\g', 'need_gb': 40, 'free_gb': 3}, step='check')
+            rep.emit('end', result='failed', seconds=0.2)
+        rows = self.lines(failing)
+        self.assertIn('40 GB needed, 3 GB free', rows[-1][1])
+        self.assertIn('D:\\run.log', rows[-1][1])   # the launcher shows no stderr: the log's place is in the line
+        self.assertLess(rows[-1][0], 1.0)
+
+    def test_the_cli_prints_only_progress_lines_and_fails_with_exit_code_1(self):
+        with tempfile.TemporaryDirectory() as d:
+            env = dict(os.environ, PYTHONIOENCODING='cp1252')   # the launcher's pipe: the lines stay UTF-8
+            r = subprocess.run([sys.executable, '-m', 'installer', '--lang', 'auto', '--dest', str(Path(d) / 'game'),
+                                '--temp', str(Path(d) / 'temp'), '--progress-lines'], cwd=ROOT, env=env,
+                               capture_output=True, timeout=600)
+            rows = progress_lines(r.stdout.decode('utf-8'))   # no game files given: the check step stops the run
+            self.assertEqual(r.returncode, 1, r.stderr.decode(errors='replace'))
+            self.assertTrue(rows and rows[-1][1], rows)
+            self.assertLess(rows[-1][0], 1.0)
+
+
+LIFELINE_PARENT = """
+import subprocess, sys, time
+sys.path.insert(0, sys.argv[1])
+from installer import lifeline
+assert lifeline.arm()
+tool = subprocess.Popen([sys.executable, '-c', sys.argv[2]], stdout=subprocess.PIPE, text=True,
+                        start_new_session=sys.platform != 'win32')
+lifeline.watch(tool.pid)
+print(tool.pid, tool.stdout.readline(), flush=True)
+time.sleep(120)
+"""
+
+# A tool that starts a program in a process group of its own, as ninja starts the compilers
+LIFELINE_TOOL = """
+import os, subprocess, sys, time
+job = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'],
+                       **({} if sys.platform == 'win32' else {'preexec_fn': os.setpgrp}))
+print(job.pid, flush=True)
+time.sleep(120)
+"""
+
+
+def process_alive(pid):
+    if os.name != 'nt':
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            return False
+        # a killed child of a dead parent stays as a zombie until init reaps it: that is not running
+        try:
+            return Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[0] != 'Z'
+        except OSError:
+            return False
+    out = subprocess.run(['tasklist', '/FI', f'PID eq {pid}', '/NH', '/FO', 'CSV'], capture_output=True,
+                         text=True).stdout
+    return f'"{pid}"' in out
+
+
+class LifelineTest(unittest.TestCase):
+    """A launcher stops the setup by killing its process, with no signal to handle: the tools must not outlive it
+    (lifeline.py)."""
+
+    def test_the_tools_end_when_the_setup_is_killed(self):
+        parent = subprocess.Popen([sys.executable, '-c', LIFELINE_PARENT, str(ROOT), LIFELINE_TOOL],
+                                  stdout=subprocess.PIPE, text=True)
+        try:
+            tool, job = map(int, parent.stdout.readline().split())
+            self.assertTrue(process_alive(tool) and process_alive(job))
+            parent.kill()   # TerminateProcess on Windows, SIGKILL elsewhere: what the launcher does
+            parent.wait()
+            for _ in range(50):
+                if not (process_alive(tool) or process_alive(job)):
+                    break
+                time.sleep(0.1)
+            self.assertFalse(process_alive(tool), 'the tool outlived the setup')
+            self.assertFalse(process_alive(job), 'a program the tool started in its own process group outlived it')
+        finally:
+            parent.kill()
+            parent.stdout.close()
+
+
+class AutoLanguageTest(unittest.TestCase):
+    """--lang auto (cli.auto_language): the launcher has no language to pass."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dest = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_first_install_takes_the_system_language(self):
+        self.assertIn(cli.auto_language(self.dest, None), ini.LANGUAGES)
+
+    def test_the_system_language_maps_to_a_language_of_the_game(self):
+        from installer.guilogic import game_language_for_langid, game_language_for_locale
+        langids = {0x040c: 'fr', 0x0c0c: 'fr-CA', 0x0407: 'de', 0x0410: 'it', 0x0c0a: 'es', 0x080a: 'es-419',
+                   0x0413: 'nl', 0x0416: 'pt-BR', 0x0816: 'pt', 0x0419: 'ru', 0x0411: 'ja', 0x0409: 'en-US',
+                   0x0809: 'en-GB', 0x0804: 'en-US', 0x0412: 'en-US', 0x041f: 'en-US'}
+        self.assertEqual({k: game_language_for_langid(k) for k in langids}, langids)
+        locales = {'fr_FR.UTF-8': 'fr', 'fr_CA.UTF-8': 'fr-CA', 'de_AT': 'de', 'es_ES.UTF-8': 'es', 'es_MX': 'es-419',
+                   'pt_BR.UTF-8': 'pt-BR', 'pt_PT': 'pt', 'en_GB.UTF-8': 'en-GB', 'en_US.UTF-8': 'en-US',
+                   'ja_JP.eucJP': 'ja', 'zh_CN.UTF-8': 'en-US', 'ko_KR': 'en-US', 'C': 'en-US', '': 'en-US',
+                   'ru_RU@euro': 'ru', 'nl-NL': 'nl'}
+        self.assertEqual({k: game_language_for_locale(k) for k in locales}, locales)
+        every = {game_language_for_langid(k) for k in langids} | {game_language_for_locale(k) for k in locales}
+        self.assertEqual(every - (set(ini.LANGUAGES) - set(ini.NEED_SHARED_FONTS)), set())
+
+    def test_an_installed_game_keeps_its_recorded_language(self):
+        self.assertIsNone(cli.auto_language(self.dest, {'lang': 'de'}))
+
+    def test_the_language_set_in_the_ini_wins(self):
+        (self.dest / 'astralchain.ini').write_text('[language]\nlang = fr\n', encoding='utf-8')
+        self.assertEqual(cli.auto_language(self.dest, {'lang': 'de'}), 'fr')
+
+    def test_an_unknown_language_in_the_ini_is_ignored(self):
+        (self.dest / 'astralchain.ini').write_text('[language]\nlang = xx\n', encoding='utf-8')
+        self.assertIsNone(cli.auto_language(self.dest, {'lang': 'de'}))
+
+
+class AppImageRebuildTest(unittest.TestCase):
+    """rebuild.txt from an AppImage names the AppImage file, not the mount that goes away with the setup."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        base = Path(self.tmp.name)
+        self.image, self.mount = base / 'Setup.AppImage', base / 'mount'
+        self.image.write_bytes(b'image')
+        self.mount.mkdir()
+        self.saved = (layouts.WIN, {k: os.environ.get(k) for k in ('APPIMAGE', 'APPDIR')})
+        layouts.WIN = False
+        os.environ.update(APPIMAGE=str(self.image), APPDIR=str(self.mount))
+
+    def tearDown(self):
+        layouts.WIN = self.saved[0]
+        for key, value in self.saved[1].items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        self.tmp.cleanup()
+
+    def ctx(self, root, dev=False):
+        return SimpleNamespace(dest=Path('/games/Astral Chain'),
+                               layout=SimpleNamespace(root=root, dev=dev, python=root / 'python' / 'bin' / 'python3'))
+
+    def test_the_appimage_is_the_rebuild_command(self):
+        self.assertEqual(steps.rebuild_command(self.ctx(self.mount)),
+                         [str(self.image), '--rebuild', str(Path('/games/Astral Chain'))])
+
+    def test_the_appimage_of_another_program_is_not_taken(self):
+        for ctx in (self.ctx(Path(self.tmp.name) / 'unpacked'), self.ctx(self.mount, dev=True)):
+            self.assertNotIn(str(self.image), steps.rebuild_command(ctx))
+
+
+class ManifestTest(unittest.TestCase):
+    """recomplauncher.json against the code it drives: the CLI's options, the settings table of runtime/cfg.c and the
+    languages of installer/ini.py."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.manifest = json.loads((ROOT / 'recomplauncher.json').read_text(encoding='utf-8'))
+        text = (ROOT / 'runtime' / 'cfg.c').read_text(encoding='utf-8')
+        cls.sections, cls.metas = {}, {}
+        for key, section in re.findall(r'\{"([A-Z0-9_]+)", "([a-z ]+)"\}', text):
+            cls.sections.setdefault(key, section)   # the section table comes first in the file
+        for key, default, choices in re.findall(r'\{"([A-Z0-9_]+)", "([^"]*)", (?:"([^"]*)"|NULL), (?:LIVE|RESTART)\}',
+                                                text):
+            cls.metas[key] = (default, choices.split('|'))
+
+    def test_the_prepare_arguments_are_those_of_the_cli(self):
+        prepare = self.manifest['prepare']
+        self.assertEqual(prepare['args'][:2], ['-m', 'installer'])
+        args = cli.build_parser().parse_args([a.replace('{install}', 'D:/x') for a in prepare['args'][2:]])
+        self.assertEqual((args.lang, args.progress_lines, args.dest), ('auto', True, Path('D:/x/Astral Chain')))
+        self.assertTrue(all((args.base, args.update, args.keys)))
+        used = set(re.findall(r'\{input:([\w-]+)\}', ' '.join(prepare['args'])))
+        self.assertEqual(used, {i['id'] for i in self.manifest['inputs']})
+
+    def test_the_game_lives_in_the_folder_the_window_suggests(self):
+        from installer.guilogic import GAME_FOLDER
+        game = '{install}/' + GAME_FOLDER
+        self.assertIn(game, self.manifest['prepare']['args'])
+        self.assertEqual(self.manifest['start']['program'][:2], [GAME_FOLDER + '/astralchain.exe',
+                                                                 GAME_FOLDER + '/astralchain'])
+        places = [self.manifest['config'][0]['file'][0]['path'], *self.manifest['saves'],
+                  *(p[0]['path'] for p in self.manifest['folders'].values())]
+        self.assertTrue(all(p.startswith(game + '/') for p in places), places)
+
+    def test_every_setting_is_a_key_of_the_runtime_with_its_values_and_default(self):
+        for setting in self.manifest['settings']:
+            (name, default), = setting['defaults'].items()
+            section, _, key = name.partition('/')
+            key = key.upper()
+            self.assertEqual(self.sections.get(key), section, name)
+            meta_default, allowed = self.metas[key]
+            values = [c['set'][name] for c in setting['choices']]
+            self.assertIn(default, values, name)
+            if key == 'LANG':   # no default in the table: the setup always writes the line
+                self.assertEqual(set(values), set(ini.LANGUAGES) - set(ini.NEED_SHARED_FONTS))
+                continue
+            self.assertEqual(default, meta_default, name)
+            if key != 'OUTPUT_RES':   # a size, not a list of choices
+                self.assertEqual(set(values) - set(allowed), set(), name)
+
+    def test_the_launcher_switches_on_the_line_the_setup_wrote(self):
+        """The launcher edits astralchain.ini line by line (its profile.rs File::set): inside the key's section it
+        rewrites the first active `key = value` line, else the first commented line that starts with `key =`, else it
+        adds a line at the section's end. The file the setup writes starts as astralchain.ini.example, whose lines are
+        all commented, so for every setting that first commented line must be the setting's own `# key = default`
+        line, not a sentence of the comments above it that happens to start with the key."""
+        lines = (ROOT / 'astralchain.ini.example').read_text(encoding='utf-8').splitlines()
+        for setting in self.manifest['settings']:
+            (name, default), = setting['defaults'].items()
+            section, _, key = name.partition('/')
+            start = next(i for i, l in enumerate(lines) if l.strip().lower() == f'[{section}]') + 1
+            end = next((i for i in range(start, len(lines)) if lines[i].strip().startswith('[')), len(lines))
+            body = lines[start:end]
+            self.assertFalse([l for l in body if re.match(rf'^\s*{re.escape(key)}\s*=', l)], name)
+            commented = [l for l in body if re.match(rf'^\s*[;#]+\s*{re.escape(key)}\s*=', l)]
+            self.assertTrue(commented, f'{name}: no commented line, the launcher would add one at the section end')
+            if key != 'lang':   # the example shows en-US; the setup writes the language itself
+                self.assertEqual(re.sub(r'^\s*[;#]+\s*', '', commented[0]).replace(' ', ''), f'{key}={default}', name)
 
 
 if __name__ == '__main__':

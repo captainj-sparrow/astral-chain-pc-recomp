@@ -216,6 +216,8 @@
  "ui.choose_files": "选择游戏文件",
  "ui.result_updated": "游戏已是最新版本",
  "ui.updated_text": "你的存档、设置和模组都已保留。点击“开始游戏”即可游玩；可以删除此安装程序文件夹。",
+ "ui.done_text_launcher": "点击“开始游戏”即可游玩。请保留此安装程序文件夹：游戏就生成在其中，RecompLauncher 会从这里启动它。",
+ "ui.updated_text_launcher": "你的存档、设置和模组都已保留。点击“开始游戏”即可游玩。",
  "param.input.base": "游戏本体",
  "param.input.update": "更新",
  "param.input.keys": "密钥",
