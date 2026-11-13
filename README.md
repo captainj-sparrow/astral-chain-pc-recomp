@@ -48,7 +48,6 @@ Download `Astral Chain-Setup-<version>-windows.zip` from [Releases](../../releas
 `Astral Chain-Setup.exe`. It asks for:
 
 - your own copy of the base game (version 1.0.0, XCI or NSP) and of the 1.0.1 update (NSP);
-- your `prod.keys`;
 - the game language and the folder to install into.
 
 It then extracts the game's data, merges the update into it, lifts the game's code to C, and builds `astralchain.exe` on

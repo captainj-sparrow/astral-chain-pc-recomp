@@ -31,9 +31,11 @@ from installer import state as statefile  # noqa: E402
 from installer.events import Reporter  # noqa: E402
 from installer.runner import Context  # noqa: E402
 from installer.steps import all_steps  # noqa: E402
-from installer.guilogic import (DONE, FAILED, PENDING, RUNNING, SKIPPED, UI_LANGUAGE_LABELS,  # noqa: E402
-                                UI_LANGUAGES, Catalog, Form, Model, Process, amount, default_game_language,
-                                describe_event, parse_line, ui_language_for_langid, windows_ui_language)
+from installer.guilogic import (BUILT_STEPS, DONE, FAILED, PENDING, RUNNING, SKIPPED,  # noqa: E402
+                                UI_LANGUAGE_LABELS, UI_LANGUAGES, UPDATE, Catalog, Form, Model, Process, amount,
+                                default_game_language, describe_event, find_keys, inspect_folder, install_subfolder,
+                                keys_places, parse_line, sibling_game_files, ui_language_for_langid,
+                                windows_ui_language)
 
 INSTALLED = ROOT / 'build' / 'install-test'
 FIXTURE = ROOT / 'build' / 'inst-gui' / 'e2e-install'
@@ -222,35 +224,133 @@ class FormTest(unittest.TestCase):
         cmd = self.form().command('py.exe', accept_version=True)
         self.assertEqual(cmd[-1], '--accept-unknown-version')
 
+    BUILT = {s: {'key': 'k'} for s in BUILT_STEPS}
+
+    def installed(self, name='out', **fields):
+        out = self._mkdir(self.dir / name)
+        statefile.save(out, statefile.empty('r0') | {'lang': 'ru', 'version': '1.0.1', 'steps': dict(self.BUILT)}
+                       | fields)
+        return out
+
     def test_installed_folder_needs_only_itself(self):
-        out = self.dir / 'out'
-        statefile.save(self._mkdir(out), statefile.empty('r0') | {'lang': 'ru', 'version': '1.0.1'})
-        form = Form(dest=str(out))
+        out = self.installed()
+        form = Form(dest=str(out), mode=UPDATE)
         self.assertTrue(form.update_mode())
+        self.assertFalse(form.needs_game_files())
         self.assertEqual(form.problems(), [])
         cmd = form.command('py.exe')
         self.assertEqual(cmd, ['py.exe', '-m', 'installer', '--dest', str(out)])
 
     def test_old_install_asks_for_the_game_files_again(self):
-        out = self.dir / 'out'
-        statefile.save(self._mkdir(out), statefile.empty('r0') | {'version': '1.0.0'})
-        self.assertEqual(Form(dest=str(out)).problems(),
+        out = self.installed(version='1.0.0')
+        self.assertEqual(Form(dest=str(out), mode=UPDATE).problems(),
                          ['ui.need_base', 'ui.need_update', 'ui.need_keys', 'ui.need_lang'])
 
+    def test_update_of_an_install_that_never_extracted_asks_for_the_game_files(self):
+        # a first setup that stopped before the extraction finished: the next run extracts, so it reads the files
+        out = self.installed(steps={})
+        self.assertEqual(Form(dest=str(out), lang='ru', mode=UPDATE).problems(),
+                         ['ui.need_base', 'ui.need_update', 'ui.need_keys'])
+        out = self.installed('out2', steps={'extract': {'key': 'k'}})
+        self.assertEqual(Form(dest=str(out), lang='ru', mode=UPDATE).problems(), [])
+
     def test_installed_folder_still_checks_given_files(self):
-        out = self.dir / 'out'
-        statefile.save(self._mkdir(out), statefile.empty('r0') | {'version': '1.0.1'})
-        self.assertEqual(Form(dest=str(out), base=str(self.dir / 'no.nsp')).problems(), ['ui.missing_base'])
+        out = self.installed()
+        self.assertEqual(Form(dest=str(out), base=str(self.dir / 'no.nsp'), mode=UPDATE).problems(),
+                         ['ui.missing_base'])
+
+    def test_update_needs_an_installation(self):
+        self.assertEqual(Form(mode=UPDATE).problems(), ['ui.need_install_folder'])
+        self.assertEqual(Form(dest=str(self.dir / 'nothing'), mode=UPDATE).problems(), ['ui.no_install'])
+        self.assertEqual(Form(dest=str(self.dir), mode=UPDATE).problems(), ['ui.no_install'])
+
+    def test_first_install_refuses_a_finished_installation(self):
+        self.assertEqual(self.form(dest=str(self.installed())).problems(), ['ui.dest_has_install'])
+
+    def test_first_install_continues_a_stopped_setup(self):
+        out = self.installed(steps={'extract': {'key': 'k'}})
+        self.assertEqual(self.form(dest=str(out)).problems(), [])
+
+    def test_first_install_wants_an_empty_folder(self):
+        self.assertEqual(self.form(dest=str(self.dir)).problems(), ['ui.dest_not_empty'])
+        self.assertEqual(self.form(dest=str(self.dir / 'prod.keys')).problems(), ['ui.dest_is_file'])
+        self.assertEqual(self.form(dest=str(self._mkdir(self.dir / 'empty'))).problems(), [])
 
     def test_broken_state_is_a_new_install(self):
         out = self._mkdir(self.dir / 'out')
         (out / statefile.NAME).write_text('{nope', encoding='utf-8')
         self.assertFalse(Form(dest=str(out)).update_mode())
+        self.assertEqual(inspect_folder(str(out)).kind, 'broken')
+        self.assertEqual(Form(dest=str(out), mode=UPDATE).problems(), ['ui.install_unreadable'])
+
+    def test_folder_kinds(self):
+        self.assertEqual(inspect_folder('').kind, '')
+        self.assertEqual(inspect_folder(str(self.dir / 'new')).kind, 'new')
+        self.assertEqual(inspect_folder(str(self.dir)).kind, 'other')
+        folder = inspect_folder(str(self.installed(version='1.0.1', lang='zh-CN')))
+        self.assertEqual((folder.kind, folder.version, folder.lang, folder.finished), ('install', '1.0.1', 'zh-Hans', True))
+
+    def test_install_subfolder(self):
+        # a folder that holds other files gets the game in a new folder inside it; a new or empty one is used as is
+        self.assertEqual(install_subfolder(str(self.dir)), os.path.join(str(self.dir), 'Astral Chain'))
+        self.assertEqual(install_subfolder(str(self.dir / 'new')), str(self.dir / 'new'))
+        empty = str(self._mkdir(self.dir / 'empty'))
+        self.assertEqual(install_subfolder(empty), empty)
 
     @staticmethod
     def _mkdir(path):
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+
+class FindersTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def touch(self, *names):
+        for name in names:
+            (self.dir / name).write_bytes(b'x')
+        return [str(self.dir / n) for n in names]
+
+    def test_dumper_names(self):
+        base, update = self.touch('Astral Chain [01007300020FA000][v0].nsp',
+                                  'Astral Chain [UPD][01007300020FA800][v65536].nsp')
+        self.touch('notes.txt')
+        self.assertEqual(sibling_game_files(base), {'base': base, 'update': update})
+        self.assertEqual(sibling_game_files(update), {'base': base, 'update': update})
+
+    def test_xci_and_version_tag(self):
+        base, update = self.touch('astral.xci', 'astral v65536.nsp')
+        self.assertEqual(sibling_game_files(base), {'base': base, 'update': update})
+
+    def test_several_candidates_fill_nothing(self):
+        first, _ = self.touch('a [01007300020FA000].nsp', 'b [01007300020FA000].nsp')
+        self.assertEqual(sibling_game_files(first), {'base': None, 'update': None})
+
+    def test_keys_beside_the_game_come_first(self):
+        game, keys = self.touch('game.xci', 'prod.keys')
+        self.assertEqual(keys_places([game])[0], Path(keys))
+        self.assertEqual(find_keys([game]), keys)
+
+    def test_emulator_folders(self):
+        env = 'APPDATA' if os.name == 'nt' else 'XDG_DATA_HOME'
+        old = os.environ.get(env)
+        os.environ[env] = str(self.dir)
+        try:
+            self.assertEqual(find_keys(), '')
+            ryujinx = self.dir / 'Ryujinx' / 'system'
+            ryujinx.mkdir(parents=True)
+            (ryujinx / 'prod.keys').write_bytes(b'x')
+            self.assertEqual(find_keys(), str(ryujinx / 'prod.keys'))
+        finally:
+            if old is None:
+                os.environ.pop(env, None)
+            else:
+                os.environ[env] = old
 
 
 class CatalogTest(unittest.TestCase):
@@ -278,8 +378,10 @@ class CatalogTest(unittest.TestCase):
 
     def test_every_id_the_window_uses_exists(self):
         cat = Catalog('en')
-        ids = ['ui.' + n for n in ('title', 'start', 'cancel', 'open_folder', 'notice', 'space_one', 'space_two',
-                                   'process_died', 'result_ok', 'result_failed', 'result_cancelled')]
+        ids = ['ui.' + n for n in ('title', 'do_install', 'do_update', 'cancel', 'open_folder', 'notice', 'space_one',
+                                   'space_two', 'process_died', 'result_ok', 'result_updated', 'result_failed',
+                                   'result_cancelled', 'play', 'open_log', 'choice_install', 'choice_update')]
+        ids += [f'ui.{n}_hint' for n in ('base', 'update', 'keys')]
         ids += [f'step.{s}' for s in ('check', 'fonts', 'extract', 'lift', 'compile', 'prepare', 'cleanup')]
         ids += ['ui.state_' + n for n in ('started', 'done', 'skipped', 'pending', 'running', 'failed')]
         for lang in UI_LANGUAGES:

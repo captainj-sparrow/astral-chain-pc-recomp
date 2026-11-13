@@ -3,9 +3,14 @@
 gui.py draws; everything it decides lives here so tests/installer_gui_test.py runs it headless.
 
     Catalog      text of an id in the window language (installer/text/<lang>.json), English when that lacks it
-    Form         what the player entered; command() and problems() build and check the CLI call
+    Folder       what an install folder holds (inspect_folder): nothing, other files, or an installation and its record
+    Form         what the player entered for a first install or an update; command() and problems() build and check
+                 the CLI call
     Model        folds the CLI's JSON events (events.py) into step states, progress, space, errors and the result
     Process      runs `python -m installer ...`, cancels it with Ctrl+Break and feeds lines to a queue
+
+The finders (find_keys, sibling_game_files) fill the form's empty fields from where dumpers and emulators usually put
+the files; the player can still choose others.
 """
 import ctypes
 import json
@@ -128,7 +133,147 @@ def amount(cat, done, total, unit):
     return cat(id if cat.has(id) else 'ui.amount_other', done=done or 0, total=total, unit=unit or '')
 
 
+# ---- the install folder ------------------------------------------------------------------------------------------
+
+# The steps whose records make a finished installation (installer/steps.py all_steps, without the always-run check and
+# cleanup). A record lacking one is a setup that stopped: running the setup again continues it.
+BUILT_STEPS = ('extract', 'lift', 'compile', 'prepare')
+
+
+@dataclass
+class Folder:
+    """What an install folder holds. kind:
+        ''          no folder entered
+        new         does not exist yet, or an empty folder: a first install goes there
+        file        a file, not a folder
+        other       a folder with files but no installation record
+        install     an installation (state holds its record)
+        broken      a record the installer cannot read (error: the state.* message id)"""
+    kind: str
+    path: str = ''
+    state: dict = None
+    error: str = ''
+
+    @property
+    def version(self):
+        return (self.state or {}).get('version', '')
+
+    @property
+    def release(self):
+        return (self.state or {}).get('release', '')
+
+    @property
+    def lang(self):
+        return ini.canonical_language((self.state or {}).get('lang'))
+
+    @property
+    def finished(self):
+        """Every build step is recorded: the setup of this folder ran to its end at least once."""
+        steps = (self.state or {}).get('steps') or {}
+        return all(s in steps for s in BUILT_STEPS)
+
+    @property
+    def needs_game_files(self):
+        """The next run must extract the game, so it reads the game files: the extraction never finished, or the folder
+        was made before update support (recorded as 1.0.0, or with no version) and is rebuilt from the update. The CLI
+        can still ask for them later, when the kept game data fails its hash (check.inputs_needed)."""
+        steps = (self.state or {}).get('steps') or {}
+        return self.version not in SUPPORTED or 'extract' not in steps
+
+
+def inspect_folder(dest):
+    """The Folder of the path the player entered. Never raises."""
+    text = (dest or '').strip()
+    if not text:
+        return Folder('')
+    path = Path(text)
+    try:
+        if path.is_file():
+            return Folder('file', text)
+        if not path.is_dir():
+            return Folder('new', text)
+        try:
+            state = statefile.load(path)
+        except statefile.StateError as e:
+            return Folder('broken', text, error=e.id)
+        if state is not None:
+            return Folder('install', text, state=state)
+        return Folder('other' if any(path.iterdir()) else 'new', text)
+    except OSError:
+        return Folder('other', text)
+
+
+# The title ids of the game and of its update (the update's is the game's with 0x800 added), and the version tag of the
+# 1.0.1 update. Dumpers (nxdumptool, DBI, NXDT) put them in the file names, like "Astral Chain [01007300020FA000][v0]".
+BASE_TITLE = '01007300020FA000'
+UPDATE_TITLE = '01007300020FA800'
+UPDATE_TAG = 'V65536'
+
+
+def sibling_game_files(path):
+    """The base game and the update files in the folder of path, recognized by name: {'base': str|None, 'update':
+    str|None}. A name is taken only when it is the one candidate of its kind, so a folder of several dumps fills
+    nothing; the setup's check step identifies the files by their contents anyway."""
+    folder = Path(path).parent
+    try:
+        files = [p for p in folder.iterdir() if p.suffix.lower() in ('.nsp', '.xci') and p.is_file()]
+    except OSError:
+        return {'base': None, 'update': None}
+
+    def update(name):
+        return UPDATE_TITLE in name or (name.endswith('.NSP') and (UPDATE_TAG in name or '[UPD]' in name))
+
+    def base(name):
+        return not update(name) and (BASE_TITLE in name or name.endswith('.XCI'))
+
+    def one(match):
+        found = [p for p in files if match(p.name.upper())]
+        return str(found[0]) if len(found) == 1 else None
+
+    return {'base': one(base), 'update': one(update)}
+
+
+def keys_places(near=()):
+    """Where prod.keys usually is, in the order find_keys tries them: beside the given game files, then the key folders
+    of the Switch emulators (Ryujinx, yuzu and its forks), in the user's roaming folder on Windows and the XDG data and
+    config folders elsewhere."""
+    places = [Path(p).parent / 'prod.keys' for p in near if p and p.strip()]
+    if os.name == 'nt':
+        roots = [Path(os.environ['APPDATA'])] if os.environ.get('APPDATA') else []
+    else:
+        home = Path.home()
+        roots = [Path(os.environ.get('XDG_DATA_HOME') or home / '.local' / 'share'),
+                 Path(os.environ.get('XDG_CONFIG_HOME') or home / '.config')]
+    for root in roots:
+        places.append(root / 'Ryujinx' / 'system' / 'prod.keys')
+        for emulator in ('yuzu', 'suyu', 'sudachi', 'citron', 'eden', 'torzu'):
+            places.append(root / emulator / 'keys' / 'prod.keys')
+    return places
+
+
+def find_keys(near=()):
+    """The first prod.keys of keys_places, or ''. Only its existence is checked: the file is never opened here."""
+    for place in keys_places(near):
+        try:
+            if place.is_file():
+                return str(place)
+        except OSError:
+            continue
+    return ''
+
+
+def install_subfolder(path, name='Astral Chain'):
+    """The folder a first install should use when the player picked path: path itself when it is new or empty, else a
+    new folder inside it (a player who picks "D:\\Games" means "in D:\\Games", and the setup needs an empty folder)."""
+    if inspect_folder(path).kind in ('new', 'install'):
+        return path
+    return os.path.join(path, name)
+
+
 # ---- the form ----------------------------------------------------------------------------------------------------
+
+INSTALL, UPDATE = 'install', 'update'
+
 
 @dataclass
 class Form:
@@ -137,43 +282,61 @@ class Form:
     keys: str = ''
     lang: str = ''
     dest: str = ''
+    mode: str = INSTALL   # the screen the player chose: INSTALL (a first install) or UPDATE (an existing folder)
+
+    def folder(self):
+        return inspect_folder(self.dest)
 
     def installed_state(self):
         """The recorded state of the install folder (astralchain-install.json), or None. Never raises."""
-        if not self.dest.strip():
-            return None
-        try:
-            return statefile.load(Path(self.dest.strip()))
-        except statefile.StateError:
-            return None
+        folder = self.folder()
+        return folder.state if folder.kind == 'install' else None
 
     def update_mode(self):
         return self.installed_state() is not None
 
+    def needs_game_files(self):
+        """Whether this run must be given the base game, the update and the keys."""
+        folder = self.folder()
+        return folder.kind != 'install' or folder.needs_game_files
+
     def problems(self):
-        """Ids of the entries that are missing or wrong, in screen order. A folder with an install record of a supported
-        version needs only itself; the CLI asks for the game files when it must extract again. A first install (or one
-        made before update support, recorded as 1.0.0) takes the base game (1.0.0), the update NSP (1.0.1) and the keys
-        file; the Switch system fonts come from the game data."""
+        """Ids of the entries that are missing or wrong, in screen order.
+
+        A first install takes an empty or new folder (or one whose setup stopped, which it continues), the base game
+        (1.0.0), the update NSP (1.0.1), the keys file and the game language. An update takes a folder with an
+        installation; it needs the game files only when that installation must extract the game again (see
+        Folder.needs_game_files). A file that was entered must exist either way."""
         found = []
-        state = self.installed_state()
-        update = state is not None
-        if not self.dest.strip():
-            found.append('ui.need_dest')
-        if not update or state.get('version') not in SUPPORTED:
-            for name in ('base', 'update', 'keys'):
-                value = getattr(self, name).strip()
-                if not value:
-                    found.append(f'ui.need_{name}')
-                elif not Path(value).is_file():
-                    found.append(f'ui.missing_{name}')
-            if self.lang not in ini.LANGUAGES:
-                found.append('ui.need_lang')
+        folder = self.folder()
+        if self.mode == UPDATE:
+            if not folder.kind:
+                found.append('ui.need_install_folder')
+            elif folder.kind == 'broken':
+                found.append('ui.install_unreadable')
+            elif folder.kind != 'install':
+                found.append('ui.no_install')
         else:
-            for name in ('base', 'update', 'keys'):
-                value = getattr(self, name).strip()
-                if value and not Path(value).is_file():
-                    found.append(f'ui.missing_{name}')
+            if not folder.kind:
+                found.append('ui.need_dest')
+            elif folder.kind == 'file':
+                found.append('ui.dest_is_file')
+            elif folder.kind == 'other':
+                found.append('ui.dest_not_empty')
+            elif folder.kind == 'broken':
+                found.append('ui.install_unreadable')
+            elif folder.kind == 'install' and folder.finished:
+                found.append('ui.dest_has_install')
+        required = self.mode == INSTALL or (folder.kind == 'install' and folder.needs_game_files)
+        for name in ('base', 'update', 'keys'):
+            value = getattr(self, name).strip()
+            if not value:
+                if required:
+                    found.append(f'ui.need_{name}')
+            elif not Path(value).is_file():
+                found.append(f'ui.missing_{name}')
+        if required and self.lang not in ini.LANGUAGES:
+            found.append('ui.need_lang')
         return found
 
     def command(self, python, root=None, temp=None, verify_hashes=False, accept_version=False):

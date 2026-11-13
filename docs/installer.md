@@ -12,13 +12,33 @@ folder to read: the game's own data carries everything.
 
 1. Downloads `Astral Chain-Setup-<version>-windows.zip` from GitHub Releases, unpacks it anywhere and starts
    `Astral Chain-Setup.exe`.
-2. Picks:
+2. Picks **Install the game for the first time**, then:
    - the base game (XCI or NSP, version 1.0.0);
    - the update (NSP, version 1.0.1);
    - their `prod.keys`;
-   - the game language and the install folder.
+   - the install folder and the game language.
 3. Waits for the setup, one time. The window shows each step and its progress.
-4. Plays `astralchain.exe` from the install folder. The installer and the source files can be deleted.
+4. Clicks **Play**, or later starts `astralchain.exe` from the install folder. The installer and the source files can
+   be deleted.
+
+To update, the player unpacks the newer release, picks **Update my installed game** and chooses the install folder
+alone (see "Updating the port").
+
+The window helps a first-time player (`installer/guilogic.py`):
+
+- Each file row has a line saying what the file is and how its name usually looks, and a mark (✔ or ✖) saying whether
+  it exists. Choosing the base game fills the update when it is the one dump beside it named with the update's title
+  id (`01007300020FA800`) or version tag (`v65536`), and the other way round (`sibling_game_files`).
+- `prod.keys` is filled in when one is found beside the chosen game files or in the key folder of Ryujinx, yuzu or a
+  yuzu fork (`find_keys`). Only its existence is checked there.
+- A folder picked for a first install that already holds other files gets the game in a new `Astral Chain` folder
+  inside it (`install_subfolder`). A folder with a finished installation offers to update it instead; one whose setup
+  stopped is continued.
+- The update screen says what the folder holds (`inspect_folder`): the installed game version and the release that
+  built it. It asks for the game files only when the next run must extract the game, which happens when the folder was
+  made before update support or its extraction never finished (`Folder.needs_game_files`). If the kept game data
+  fails its hash, the CLI stops with `check.inputs_needed` and the finish screen offers to choose the game files.
+- The window declares itself DPI-aware on Windows (`gui.py` `dpi_aware`), so it stays sharp at 125 % and 150 %.
 
 The install folder (`main.c` `portable_paths()` reads this layout; it stays portable):
 
@@ -112,12 +132,12 @@ python -m installer --base FILE --update FILE --keys FILE --lang CODE --dest DIR
   process group.
 - Each step records a key over its inputs (runner.py). A step with the recorded key and intact output is skipped, so
   resume and update are one rule; output kept from another release is re-hashed first.
-- Window (`python -m installer.gui`, `installer/gui.py` draws, `installer/guilogic.py` decides): form, step list with
-  progress, space line, collapsible log, Cancel (Ctrl+Break to the CLI's process group, then it waits for the exit),
-  finish screen with Open folder. English, Russian, Brazilian Portuguese or Simplified Chinese, chosen from the Windows
+- Window (`python -m installer.gui`, `installer/gui.py` draws, `installer/guilogic.py` decides): a first screen with
+  the two choices (first install, update), one form for each, step list with progress, space line, collapsible log,
+  Cancel (Ctrl+Break to the CLI's process group, then it waits for the exit), finish screen with Play, Open folder and,
+  after a failure, Open the log. English, Russian, Brazilian Portuguese or Simplified Chinese, chosen from the Windows
   display language (zh-CN and zh-SG give Chinese; the Traditional Chinese regions give English), switchable in the
-  window; every sentence is an id in `installer/text/<en|ru|pt-BR|zh-Hans>.json`. A folder with
-  `astralchain-install.json` needs only the folder. `--selftest [--shots DIR]` builds every screen in every language and
+  window; every sentence is an id in `installer/text/<en|ru|pt-BR|zh-Hans>.json`. `--selftest [--shots DIR]` builds every screen in every language and
   closes itself.
 - `tests/installer_gui_test.py`: event model, form, catalogs, cancel, the self-closing window and one end-to-end run of
   the CLI in `--verify` mode (needs `build/install-test`; see its docstring).
