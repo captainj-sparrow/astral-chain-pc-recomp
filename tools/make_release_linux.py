@@ -21,6 +21,7 @@ the .NET 10 SDK and Python 3.12+ with Pillow (.venv). The folder holds:
     bin/       ac_xlate (+ .id), hactool, ninja, libSDL3.so.0 (the sysroot's; the game finds it beside itself)
     recomp/, tools/, data/, installer/, licenses/, THIRD_PARTY_NOTICES.md, astralchain.ini.example, VERSION
     AppRun, astralchain-setup.desktop, astralchain-setup.png   the AppImage entry: python/bin/python3 -m installer.gui
+    recomplauncher.json   at the AppDir root, where RecompLauncher reads it from the AppImage without mounting it
 
 --appimage packs the folder with appimagetool and the static type-2 runtime (no libfuse2 on the host). --prove compiles
 the generated C and links build/release-linux-check/astralchain with the folder's tools only, then runs the probes
@@ -517,12 +518,17 @@ def sys_version(out):
 
 APPRUN = '''#!/bin/sh
 # The AppImage entry: the setup window, run by the bundled Python from the read-only mount (no bytecode written there).
+# With -m as the first argument the bundled Python runs that module instead: RecompLauncher's prepare step calls
+# "-m installer ... --progress-lines" (recomplauncher.json), the same arguments as python.exe gets on Windows.
 HERE="$(dirname "$(readlink -f "$0")")"
 export PYTHONDONTWRITEBYTECODE=1
 # lld links the SDK's libxml2.so.2 beside the LLVM binaries, which recent distributions no longer ship themselves.
 export LD_LIBRARY_PATH="$HERE/llvm/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export TCL_LIBRARY="$HERE/python/lib/tcl9.0"
 export TK_LIBRARY="$HERE/python/lib/tk9.0"
+if [ "$1" = "-m" ]; then
+    exec "$HERE/python/bin/python3" "$@"
+fi
 exec "$HERE/python/bin/python3" -m installer.gui "$@"
 '''
 
@@ -616,6 +622,16 @@ def check_bundle(out):
     if r.returncode:
         sys.exit(f'bundle check: window selftest exit {r.returncode}\n{r.stdout[-2000:]}\n{r.stderr[-2000:]}')
     print('bundle check: the window built every screen in both languages and closed')
+    # The launcher's prepare step enters through AppRun: `-m installer` must reach the CLI, not the window.
+    r = subprocess.run([str(out / 'AppRun'), '-m', 'installer', '--lang', 'auto', '--dest', str(chk / 'install'),
+                        '--temp', str(chk / 'temp'), '--progress-lines'], cwd='/', env=env, capture_output=True,
+                       text=True, timeout=600)
+    lines = [line for line in r.stdout.splitlines() if line.startswith('progress ')]
+    if r.returncode != 1 or not lines or 'game files are needed' not in lines[-1]:
+        sys.exit(f'bundle check: AppRun -m installer --progress-lines: exit {r.returncode}\n{r.stdout[-2000:]}\n'
+                 f'{r.stderr[-2000:]}')
+    mr.check_manifest(out)
+    print('bundle check: AppRun ran the setup without a window and recomplauncher.json names files of the folder')
 
 
 def prove(out, cpu='v3'):

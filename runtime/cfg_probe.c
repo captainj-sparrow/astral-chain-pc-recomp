@@ -316,6 +316,11 @@ int probe_cfg(void) {
               input_prompts_auto_for_kind(PAD_KIND_PLAYSTATION) == PROMPTS_PLAYSTATION &&
               input_prompts_auto_for_kind(PAD_KIND_NONE) == PROMPTS_NINTENDO,
           "prompts: auto follows the gamepad kind, Nintendo without one");
+    CHECK(input_pad_kind_named("xbox") == PAD_KIND_XBOX &&
+              input_pad_kind_named("PlayStation") == PAD_KIND_PLAYSTATION &&
+              input_pad_kind_named("nintendo") == PAD_KIND_NONE && input_pad_kind_named("") == PAD_KIND_NONE &&
+              input_pad_kind_named(NULL) == PAD_KIND_NONE,
+          "prompts: a launcher's RECOMPLAUNCHER_PAD names an Xbox or a PlayStation pad, nothing else");
     CHECK(!input_prompts_folder(PROMPTS_NINTENDO, "nintendo") && !input_prompts_folder(PROMPTS_NINTENDO, "xbox") &&
               !input_prompts_folder(PROMPTS_AUTO, NULL),
           "prompts: the game's own and unresolved auto need no folder");

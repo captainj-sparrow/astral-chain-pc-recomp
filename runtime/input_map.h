@@ -108,6 +108,11 @@ int input_prompts_pick(const char *prompts, const char *pad_layout);
 // probes check it without a gamepad; the callers detect the kind (input_detect_pad_kind at start, input_pad_kind
 // live).
 int input_prompts_auto_for_kind(int kind);
+// The gamepad kind a launcher names: RecompLauncher starts the game with RECOMPLAUNCHER_PAD=xbox or playstation, the
+// controller it sees plugged in. PAD_KIND_NONE for anything else or NULL. It stands in for the kind only while the
+// game itself sees no gamepad (input.c input_prompts_auto, input_prompts_auto_live), so the prompts are right from
+// the first frame when the pad is switched on after the game started.
+int input_pad_kind_named(const char *name);
 // The folder next to romfs-index.bin that holds those prompts, NULL for the game's own or AUTO (resolve AUTO
 // first). One folder per mod; a loaded mod forces its layout (input_prompts_layout).
 const char *input_prompts_folder(int prompts, const char *pad_layout);

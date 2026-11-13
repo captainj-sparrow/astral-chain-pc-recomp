@@ -34,8 +34,8 @@ from installer.steps import all_steps  # noqa: E402
 from installer.guilogic import (BUILT_STEPS, DONE, FAILED, PENDING, RUNNING, SKIPPED,  # noqa: E402
                                 UI_LANGUAGE_LABELS, UI_LANGUAGES, UPDATE, Catalog, Form, Model, Process, amount,
                                 default_game_language, describe_event, find_keys, inspect_folder, install_subfolder,
-                                keys_places, parse_line, sibling_game_files, ui_language_for_langid,
-                                windows_ui_language)
+                                keys_places, launcher_game_folder, parse_line, sibling_game_files,
+                                ui_language_for_langid, windows_ui_language)
 
 INSTALLED = ROOT / 'build' / 'install-test'
 FIXTURE = ROOT / 'build' / 'inst-gui' / 'e2e-install'
@@ -301,6 +301,24 @@ class FormTest(unittest.TestCase):
     def _mkdir(path):
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+
+class LauncherFolderTest(unittest.TestCase):
+    """The folder the window starts with when RecompLauncher opened it (guilogic.launcher_game_folder)."""
+
+    RELEASE = SimpleNamespace(dev=False, root=Path('C:/Launcher/games/astral-chain'))
+
+    def test_the_game_goes_inside_the_folder_of_the_launcher(self):
+        self.assertEqual(launcher_game_folder(self.RELEASE, {'RECOMPLAUNCHER': '1'}),
+                         str(self.RELEASE.root / 'Astral Chain'))
+
+    def test_nothing_is_suggested_without_the_launcher(self):
+        self.assertEqual(launcher_game_folder(self.RELEASE, {}), '')
+        self.assertEqual(launcher_game_folder(self.RELEASE, {'RECOMPLAUNCHER': '0'}), '')
+
+    def test_nothing_is_suggested_in_a_checkout(self):
+        checkout = SimpleNamespace(dev=True, root=Path('C:/src/astral'))
+        self.assertEqual(launcher_game_folder(checkout, {'RECOMPLAUNCHER': '1'}), '')
 
 
 class FindersTest(unittest.TestCase):

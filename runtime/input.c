@@ -675,7 +675,9 @@ int input_pad_kind(void) {
     return (int)plat_cas32(&pad_kind_shown, 0, 0);
 }
 
-int input_detect_pad_kind(void) {
+// *none_found: the scan ran and found no gamepad at all (not: a gamepad of another kind, or input switched off).
+static int detect_pad_kind(int *none_found) {
+    *none_found = 0;
     const char *e = cfg_get("AC_INPUT");
     if (e && !strcmp(e, "none")) return PAD_KIND_NONE;
     if (!SDL_InitSubSystem(SDL_INIT_GAMEPAD)) {
@@ -692,11 +694,34 @@ int input_detect_pad_kind(void) {
         kind = kind_of(found);
         SDL_CloseGamepad(found);
     }
+    *none_found = !found;
     return kind;
 }
 
+int input_detect_pad_kind(void) {
+    int none_found;
+    return detect_pad_kind(&none_found);
+}
+
+// The controller the launcher that started the game sees (input_map.h input_pad_kind_named).
+static int launcher_pad_kind(void) {
+    return input_pad_kind_named(getenv("RECOMPLAUNCHER_PAD"));
+}
+
 int input_prompts_auto(void) {
-    return input_prompts_auto_for_kind(input_detect_pad_kind());
+    int none_found, kind = detect_pad_kind(&none_found);
+    if (none_found && launcher_pad_kind() != PAD_KIND_NONE) {
+        kind = launcher_pad_kind();
+        rt_log("input: auto prompts: no gamepad found, the launcher names a%s controller",
+               kind == PAD_KIND_XBOX ? "n Xbox" : " PlayStation");
+    }
+    return input_prompts_auto_for_kind(kind);
+}
+
+int input_prompts_auto_live(void) {
+    int kind = input_pad_kind();
+    if (kind == PAD_KIND_NONE && input_pad_layout() < 0) kind = launcher_pad_kind();
+    return input_prompts_auto_for_kind(kind);
 }
 
 int input_pad_label(int pad_id) {
