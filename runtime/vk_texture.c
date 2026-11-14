@@ -2622,35 +2622,13 @@ void vk_sampler_register(int id, const samp_par *s) {
     unlock();
 }
 
-// Upscaling (vk_sampler_dlss_bias, set by vk_dlaa.c while an upscaler scales a smaller scene): the scene's material
-// textures, the filtered mipmapped ones that repeat, are sampled for the output's resolution (resolution.c
-// res_dlss_lod_bias); clamped ones (post effects, LUTs, the UI) keep the game's bias. After the TotK Recomp's
-// vk_texture.c (same author, MIT).
-static float dlss_bias;
-
-static int dlss_biased(const samp_par *k) {
-    int rep_s = k->ws == NVN_WRAP_MODE_REPEAT || k->ws == NVN_WRAP_MODE_MIRRORED_REPEAT;
-    int rep_t = k->wt == NVN_WRAP_MODE_REPEAT || k->wt == NVN_WRAP_MODE_MIRRORED_REPEAT;
-    return !k->cmp_mode && k->minf == NVN_MIN_FILTER_LINEAR_MIPMAP_LINEAR && (rep_s || rep_t);
-}
-
-void vk_sampler_dlss_bias(float b) {
-    lock();
-    if (b != dlss_bias) {
-        dlss_bias = b;
-        for (int i = 0; i < nsslots; i++) sslots[i].s = sslots[i].sp = VK_NULL_HANDLE;   // looked up again (the key moves)
-        samp_gen++;
-        rt_log("vk: texture LOD bias %+.2f for the scene's materials (upscaling)", (double)b);
-    }
-    unlock();
-}
-
-// Caller holds the lock.
+// Caller holds the lock. A sampler keeps the game's LOD bias while an upscaler scales the scene too: the bias of
+// log2(scene / output) the upscalers' guides ask for (-0.80 at 1472x828 for 2560x1440) made the road's fine dot
+// pattern in Harmony Square shimmer in rings as the camera moved, which the temporal upscalers did not settle.
 static VkSampler sampler_for(VkCtx *c, const samp_par *s) {
     samp_par k;
     memset(&k, 0, sizeof k);
     k = *s;
-    if (dlss_bias != 0 && dlss_biased(&k)) k.lod_bias += dlss_bias;   // part of the key: samplers live until shutdown
     VkSampler v = (VkSampler)nvn_hm_get(&samplers, &k);
     if (!v) {
         v = make_sampler(c, &k);

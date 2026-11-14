@@ -683,14 +683,6 @@ void res_init(void) {
            scene_on ? "" : " (the game's own 5/6 of the output)", (unsigned long long)res_heap_extra_kib());
 }
 
-// Upscaling: textures are sampled for the output's resolution, not the scene's (NVIDIA's DLSS guide, and AMD's and
-// Intel's: a mip bias of log2(render / output)), so their detail survives the scaling. 0 while the scene is the game
-// resolution's size; vk_dlaa.c applies it only while an upscaler scales (the game's plain scaling of a biased scene
-// would only shimmer).
-float res_dlss_lod_bias(void) {
-    return S.reduced ? (float)log2((double)S.w / S.gw) : 0.0f;
-}
-
 // 16:9 within 1% (1366x768 counts): the shape the game's own layouts and camera are made for.
 int res_is_16x9(unsigned w, unsigned h) {
     double rel = ((double)w / h) / ((double)BASE_W / BASE_H);

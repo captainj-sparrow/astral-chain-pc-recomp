@@ -274,7 +274,6 @@ int res_heapdef_build(const void *in, size_t n, void **out, size_t *out_n);   //
                                                            // the grown heaps, malloc'd; 0 = cannot (logged)
 void res_heapdef_served(void);                             // romfs.c serves the grown table
 void res_init(void);                                       // after rt_patches_init: the patch page and the sets
-float res_dlss_lod_bias(void);                             // upscaling: texture LOD bias (<= 0), 0 at the game's size
 // Upscaling on 1.0.1 (the scene set): the scene the game renders (the game resolution unless an upscaling mode reduced
 // it at start), whether it is reduced, and the scene a mode ("native", "quality" ... "ultra_performance") gives at the
 // game resolution (the menu's mode row).

@@ -219,8 +219,9 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   signature), so the blend copies the upscaled picture and the HUD is drawn over it unjittered. The jitter sequence
   has 8 x (output / scene)^2 phases (16 to 72), DLSS gets the quality value and model per mode, XeSS the quality
   setting whose input range holds the scene (`xessGetOptimalInputResolution`), FSR 3 its output-size images and an
-  LDR build of its passes (`tools/ffx_sdk.py`). Material textures (filtered, mipmapped, repeating) get a LOD bias of
-  log2(scene / output) while an upscaler scales (`vk_sampler_dlss_bias`, part of the sampler key). With `upscaler =
+  LDR build of its passes (`tools/ffx_sdk.py`). Textures keep the game's LOD bias while an upscaler
+  scales: the bias of log2(scene / output) the upscalers' guides ask for made fine regular patterns (the road's dot
+  grid in Harmony Square) shimmer in rings as the camera moved (`vk_texture.c` `sampler_for`). With `upscaler =
   fsr`, sharpness above 0, no HDR and a window that shows the picture 1:1, RCAS sharpens the upscaled picture before
   the HUD and the present copies the frame (`vk_fsr_rcas`, `vk_fsr_presharp_set`). A backend that fails during play
   with a smaller scene leaves the first that can of DLSS, XeSS and FSR 3 until a restart, so the game's plain scaling

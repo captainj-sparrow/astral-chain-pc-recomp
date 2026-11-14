@@ -452,7 +452,6 @@ void vk_texture_new_submit(void);                   // a queue submit starts: dr
 uint32_t vk_texture_epoch(void);                    // the write-watch snapshot epoch vk_texture_new_submit started
 VkSampler vk_sampler_by_id(int id);                 // VK_NULL_HANDLE for an empty slot
 VkSampler vk_sampler_for(const samp_par *s);        // cached by content
-void vk_sampler_dlss_bias(float b);                 // vk_dlaa.c: LOD bias of the scene's material textures (<= 0)
 int vk_sampler_params(int id, samp_par *out);       // parameters of a sampler slot; 0 for an empty slot
 
 // 8-bit RGBA PNG with stored deflate blocks (boot.c); stops with rt_fatal when the file cannot be written.

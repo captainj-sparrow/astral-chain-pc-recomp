@@ -1137,11 +1137,6 @@ int vk_dlaa_frame(void) {
     const char *name = backend_name(D.backend, D.last && (D.last->ow != D.last->w || D.last->oh != D.last->h));
     __atomic_store_n(&running, !dl_active() ? NULL : resolved ? name : D.gap + 1 < GAP_PRESENTS ? running : NULL,
                      __ATOMIC_RELAXED);
-    // Textures are sampled for the output's resolution while an upscaler scales the scene (res_dlss_lod_bias); the
-    // game's plain scaling of a biased scene would only shimmer.
-    static float bias;
-    float b = bk != BK_NONE ? res_dlss_lod_bias() : 0.0f;
-    if (b != bias) bias = b, vk_sampler_dlss_bias(b);
     // What no longer runs gives its video memory back after OFF_PRESENTS presents (not at once: a click through the
     // menu's choices would make and free the work images per click). Without DLSS (XeSS, nothing, or DLSS failed) the
     // sizes' DLSS features go, without FSR 3 its internal images; with no temporal AA at all the sizes' work images too.
