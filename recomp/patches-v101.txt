@@ -138,6 +138,25 @@ site fov main 9a3010 bd427f00 bd427f00 @fn:rt_fov_lens24_s0   # ldr s0,[x24,#0x2
 site fov main 9a3054 bd427d00 bd427d00 @fn:rt_fov_lens8_s0    # ldr s0,[x8,#0x27c]; then s0 *= factor (second target)
 site fov main 998b5c bd014260 @fn:rt_fov_s0 bd014260   # str s0,[x19,#0x140] -> s0 *= factor; the same store
 site fov main 998f90 bd014260 @fn:rt_fov_s0 bd014260   # str s0,[x19,#0x140] -> s0 *= factor; the same store
+# Draw distance (AC_DRAW_DISTANCE, runtime/resolution.c res_drawdist_live). A model holds up to four rates in 0..1 at
+# *(model+0x390), their count at +0x398: DistRate0, DistRate1 and DistRate2, the thresholds between its levels of
+# detail (LOD0 to LOD3), and LostDistRate, below which the model is not drawn while UseLostLOD (+0x3a0) is set. The
+# model's set-up (main+0x551bc0) stores the defaults 0.7, 0.2, 0.1 and 0.0005; the reader of a model's named
+# parameters (main+0x55eee0) stores the values the model names, clamped to 0..1. Each store gets the rate divided by
+# the factor on page +80 (rt_drawdist_w9 for the defaults' bit patterns, rt_drawdist_s0 for the named values), so the
+# finer level and the model itself last to a greater distance. Measured in Harmony Square: a scene load stores about
+# 4100 default and 1800 named rates; with the rates times four the cars and passers-by of the street are gone, with a
+# quarter of them the alley yard shows about 15 red shards where the game's own rates show 3. Off while
+# AC_DRAW_DISTANCE is 100, so the rates are the game's own.
+set  drawdist AC_DRAW_DISTANCE_PATCH 0
+site drawdist main 551df0 b9000109 @fn:rt_drawdist_w9 b9000109   # str w9,[x8]: the default DistRate0 (0.7)
+site drawdist main 551e0c b9000509 @fn:rt_drawdist_w9 b9000509   # str w9,[x8,#4]: the default DistRate1 (0.2)
+site drawdist main 551e28 b9000909 @fn:rt_drawdist_w9 b9000909   # str w9,[x8,#8]: the default DistRate2 (0.1)
+site drawdist main 551e44 b9000d09 @fn:rt_drawdist_w9 b9000d09   # str w9,[x8,#0xc]: the default LostDistRate (0.0005)
+site drawdist main 55f0ec bd000100 @fn:rt_drawdist_s0 bd000100   # str s0,[x8]: a model's DistRate0
+site drawdist main 55f134 bd000500 @fn:rt_drawdist_s0 bd000500   # str s0,[x8,#4]: a model's DistRate1
+site drawdist main 55f17c bd000900 @fn:rt_drawdist_s0 bd000900   # str s0,[x8,#8]: a model's DistRate2
+site drawdist main 55f1c4 bd000d00 @fn:rt_drawdist_s0 bd000d00   # str s0,[x8,#0xc]: a model's LostDistRate
 
 # Dynamic frame rate for the 60 fps mode (the menu's AC_FPS: 30 = shipping 30 fps, 60 = 60 fps with the fix).
 # The game's frame timer (main+0x91DBB0) clamps its step to [1, 2] frames of 1/30 s, so at 60 fps everything runs at

@@ -38,7 +38,7 @@ static const char *const known[] = {
     "BIND_SKIP", "BIND_STATS", "BIND_UP", "BIND_X", "BIND_Y",
     "BIND_ZL", "BIND_ZR", "BLOCK_VIEWS_3D", "CLOTH_REALTIME", "COLOR_BRIGHTNESS", "COLOR_CONTRAST", "COLOR_GAMMA",
     "COLOR_PRESET", "COLOR_SATURATION", "CONTACT_DEBUG", "CONTACT_SHADOWS", "CORE_DIAG", "CPU_BOOST", "CPU_BOOST_SPIN_US", "CRIT", "CRIT_OUT",
-    "DECK_RES_MIGRATED", "DESC_TEMPLATE", "DEVICE_PROFILE", "DLAA", "DLAA_JITTER", "DLAA_MV", "DLAA_MVDEBUG", "DLAA_OBJMV", "DLAA_TIMES", "DLSS", "DUMP", "DUMP_AUTO", "DUMP_BUF", "DUMP_DIR", "DUMP_DRAWS",
+    "DECK_RES_MIGRATED", "DESC_TEMPLATE", "DEVICE_PROFILE", "DLAA", "DLAA_JITTER", "DLAA_MV", "DLAA_MVDEBUG", "DLAA_OBJMV", "DLAA_TIMES", "DLSS", "DRAW_DISTANCE", "DRAW_DISTANCE_PATCH", "DUMP", "DUMP_AUTO", "DUMP_BUF", "DUMP_DIR", "DUMP_DRAWS",
     "DUMP_KEY", "DUMP_LOG", "DUMP_N", "DUMP_SKIP_RUNS", "DUMP_TEX", "DUMP_UBO", "EXEFS", "FEEDBACK", "FIX_C0", "FIX_ZERO", "FLIGHT", "FLIGHT_AT", "FLIGHT_DIR", "FLIGHT_FRAMES",
     "FLIGHT_SPIKE_MS", "FLIGHT_THUMBS", "FOV", "FOV_PATCH", "FPS", "FREEZE_IDLE", "FREE_CORES",
     "FULLSCREEN", "FXAA", "GPL", "GPL_DRAW_BUILD", "GPU", "GPU_INDEX", "GPU_NAME", "GPU_PASSES", "HDR", "HDR_GAME_NITS",
@@ -69,7 +69,8 @@ static const struct { const char *key, *section; } sections[] = {
     {"HUD", "display"},
     {"FULLSCREEN", "display"}, {"WINDOW_SIZE", "display"}, {"PERF_OVERLAY", "display"}, {"VK_PRESENT", "display"},
     {"GPU_INDEX", "display"}, {"OUTPUT_RES", "display"}, {"RENDER_SCALE", "display"}, {"UPSCALER", "display"},
-    {"SHARPNESS", "display"}, {"ASPECT", "display"}, {"FOV", "display"}, {"ANISO", "display"},
+    {"SHARPNESS", "display"}, {"ASPECT", "display"}, {"FOV", "display"}, {"DRAW_DISTANCE", "display"},
+    {"ANISO", "display"},
     {"COLOR_PRESET", "display"},
     {"COLOR_BRIGHTNESS", "display"}, {"COLOR_CONTRAST", "display"}, {"COLOR_SATURATION", "display"},
     {"COLOR_GAMMA", "display"}, {"HDR", "display"}, {"HDR_PEAK_NITS", "display"}, {"HDR_GAME_NITS", "display"},
@@ -126,6 +127,7 @@ static const CfgMeta metas[] = {
     {"UPSCALING_QUALITY", "native", "native|quality|balanced|performance|ultra_performance", RESTART},
     {"ANTI_ALIASING", "smaa", "off|smaa", LIVE},
     {"ASPECT", "wide", "fit|stretch|wide", LIVE}, {"FOV", "100", "70..140", LIVE},
+    {"DRAW_DISTANCE", "100", "100..400", LIVE},   // resolution.c res_drawdist_live: on what loads after a change
     {"ANISO", "auto", "auto|game|2|4|8|16", RESTART},   // vk_texture.c sampler_features
     // colour adjustment (vk_color.c); the preset is the menu's, the four values are what the present uses
     {"COLOR_PRESET", "default", "default|vivid|clarity|custom", LIVE}, {"COLOR_BRIGHTNESS", "0", "-30..30", LIVE},
@@ -393,7 +395,7 @@ int cfg_load(const char *path) {
 // ASTC textures of 1024 texels or more without their level 0 (three quarters less each), 512 MiB texture cache, pressure
 // drops at 70%,
 // no automatic anisotropic boost; shadows: fixed 512 sun map (stable, no heap growth past 960), scale 1, range 100,
-// no contact shadows or PCSS; handheld operation mode, as the Deck is a handheld: the game gets the handheld
+// no contact shadows or PCSS; the game's own draw distance; handheld operation mode, as the Deck is a handheld: the game gets the handheld
 // controller and takes its handheld render-target sizes and performance mode (ov_system.c ov_handheld);
 // no CPU boost (platform/linux.c plat_cpu_boost): the CPU and the GPU share one power limit (15 W) there, and a 1.6.0
 // session in the headquarters showed the CPU drawing 9.1 W against the GPU's 2.3 W with the GPU 83% busy at 25 fps:
@@ -403,7 +405,7 @@ static const struct { const char *key, *value; } DECK[] = {
     {"VK_PRESENT", "fifo"}, {"FPS", "30"}, {"OPERATION_MODE", "handheld"},
     {"ASTC_BC", "bc1"}, {"TEX_MIP_SKIP", "1024"}, {"TEX_CACHE_MB", "512"}, {"TEX_VRAM_PRESSURE", "70"}, {"ANISO", "game"},
     {"SHADOW_RES", "512"}, {"SHADOW_SCALE", "1"}, {"SHADOW_RANGE", "100"}, {"CONTACT_SHADOWS", "0"}, {"PCSS", "0"},
-    {"LIB_PREBUILD_KEEP", "512"}, {"CPU_BOOST", "0"},
+    {"DRAW_DISTANCE", "100"}, {"LIB_PREBUILD_KEEP", "512"}, {"CPU_BOOST", "0"},
 };
 static int profile = -1;   // 0 none, 1 Steam Deck
 

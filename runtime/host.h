@@ -296,6 +296,7 @@ void res_game_size(unsigned out[2]);                       // the size the game 
 int res_output_grid(const char *o, unsigned *w, unsigned *h);   // o is a size the 1.0.1 res set takes (16:9, 32n x
                                                            // 18n, 1280x720..3840x2160): 1 and the size; else 0
 void res_fov_live(void);                                   // AC_FOV to the camera (set fov); on a settings change
+void res_drawdist_live(void);                              // AC_DRAW_DISTANCE to the models' detail rates (set drawdist); at start too
 // Wide pictures (aspect = wide, set wide): the game's present asks for the shape (width / height) of the frame it
 // presents, 0 for the picture's own, and the next frame's lens ratio is decided; the present thread reports the
 // window's size with each new swapchain.

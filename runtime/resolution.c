@@ -13,7 +13,8 @@
 // Patch page: +16 the scene size {w, h} as floats, +32 the output size and +48 the swapchain size as {w, h} in one
 // 64-bit word, +40 the renderer (1.2.1) or display configuration (1.4.3) the patched code stores there.
 // +56 the camera's aspect ratio as a float when the output is not 16:9 (set aspect), +60 the field-of-view factor
-// (set fov, res_fov_live).
+// (set fov, res_fov_live), +64 the four shadow cascade ends (set cascade), +80 the draw-distance factor (set drawdist,
+// res_drawdist_live), +92 the sun shadow map size (set shadow).
 // 1.4.3 scales the scene it reads by output width / 1920 (a 2560x1440 output renders its 1600x900 scene at 2128x1200;
 // MacNativeGames measured the same), so its page holds the wanted size divided by that factor and the game's 5/6 needs
 // no scene patch. 1.2.1 renders the size it reads (1600x900 on a 2560x1440 output): its page holds the wanted size, and
@@ -628,6 +629,7 @@ void res_init(void) {
     wide_init();
     hud_init();
     res_shadow_range();
+    res_drawdist_live();
     if (!output_set()) {   // 1.0.1: the res set took output_res above, the scene set scales the scene for upscaling
         scene_init();
         shadow_init(rt_patch_page());
@@ -742,6 +744,58 @@ void res_fov_live(void) {
     memcpy((uint8_t *)rt_patch_page() + 60, &k, sizeof k);   // before the switch: a site that sees it on reads k
     rt_patch_switch(set, pct != 100);
     rt_log("resolution: field of view %d%% of the game's", pct);
+}
+
+// Draw distance (AC_DRAW_DISTANCE, percent, 100..400): a model's level-of-detail rates divided by percent / 100
+// where the model gets them (recomp/patches-v101.txt, set drawdist; the factor is on page +80). A model holds up to
+// four rates in 0..1 at *(model+0x390), their count at +0x398: DistRate0, DistRate1 and DistRate2, below which it
+// shows its next coarser level, and LostDistRate, below which it is not drawn (UseLostLOD, +0x3a0). The model's
+// set-up (main+0x551bc0) writes the defaults 0.7, 0.2, 0.1 and 0.0005, and the reader of its parameters
+// (main+0x55eee0) the values a model names, kept in 0..1. Smaller rates keep the finer level, and the model itself,
+// to a greater distance: in Harmony Square a quarter of the rates (400) showed about 15 of the red shards in the
+// alley yard where the game's own showed 3, and four times the rates emptied the street of its cars and passers-by.
+// The percentage scales the rates, not a distance in metres: what a rate measures was not read from the code.
+// 100 switches the set off, so the rates are the game's own. A model takes its rates when it is made, so a change
+// shows on what the game loads after it. Runs at start (res_init) and on a settings change (gfx_present.c
+// window_settings_live).
+#define DRAWDIST_MIN 100
+#define DRAWDIST_MAX 400
+#define DRAWDIST_PAGE 80
+
+static float drawdist_rate(float rate) {
+    float k;
+    memcpy(&k, (const uint8_t *)rt_patch_page() + DRAWDIST_PAGE, sizeof k);
+    return rate / k;
+}
+
+// A default rate, as the float's bits in w9 before the game stores it.
+void rt_drawdist_w9(Cpu *c) {
+    uint32_t bits = (uint32_t)c->x[9];
+    float r;
+    memcpy(&r, &bits, sizeof r);
+    r = drawdist_rate(r);
+    memcpy(&bits, &r, sizeof bits);
+    c->x[9] = bits;
+}
+
+// A rate a model names, in s0 before the game stores it.
+void rt_drawdist_s0(Cpu *c) { FP_SETS(0, drawdist_rate(VSF32(0))); }
+
+void res_drawdist_live(void) {
+    static int set = -2, shown = 100;
+    if (set == -2) set = rt_patch_set("drawdist");
+    int pct = cfg_int("AC_DRAW_DISTANCE");
+    pct = pct < DRAWDIST_MIN ? DRAWDIST_MIN : pct > DRAWDIST_MAX ? DRAWDIST_MAX : pct;
+    if (pct == shown) return;
+    shown = pct;
+    if (set < 0) {
+        rt_log("resolution: this game version has no draw-distance patch; AC_DRAW_DISTANCE=%d does nothing", pct);
+        return;
+    }
+    float k = pct / 100.0f;
+    memcpy((uint8_t *)rt_patch_page() + DRAWDIST_PAGE, &k, sizeof k);   // before the switch: a site that sees it on reads k
+    rt_patch_switch(set, pct != 100);
+    rt_log("resolution: draw distance %d%%: models take their level-of-detail rates divided by %g", pct, (double)k);
 }
 
 void res_wanted(unsigned out[2]) {

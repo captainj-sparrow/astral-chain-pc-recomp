@@ -717,6 +717,7 @@ static void tab_screen(float scale) {
     opt_choice("AC_UPSCALER", UI_MENU_UPSCALER, up, 2, UI_MENU_UPSCALER_DESC);
     opt_slider("AC_SHARPNESS", UI_MENU_SHARPNESS, 0, 100, UI_MENU_SHARPNESS_DESC, 5, "%.0f %%");
     opt_slider("AC_FOV", UI_MENU_FOV, 70, 140, UI_MENU_FOV_DESC, 5, "%.0f %%");
+    opt_slider("AC_DRAW_DISTANCE", UI_MENU_DRAW_DISTANCE, 100, 400, UI_MENU_DRAW_DISTANCE_DESC, 25, "%.0f %%");
     static const char *const aniso[] = {"auto", "game", "2", "4", "8", "16"};
     const char *aniso_names[] = {menu_text(UI_MENU_ANISO_AUTO), menu_text(UI_MENU_ANISO_GAME), "2x", "4x", "8x", "16x"};
     opt_choice_list("AC_ANISO", UI_MENU_ANISO, aniso, aniso_names, 6, UI_MENU_ANISO_DESC);

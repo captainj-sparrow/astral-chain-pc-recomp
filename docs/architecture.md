@@ -154,6 +154,16 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   or on a part of a block that has moved already), and menus keep their composition in the middle 16:9. Not done:
   widening a layout's own backdrops that span the screen. `--shot` and `AC_SHOTS` save the
   game's 16:9 texture; `AC_PRESENT_SHOT` saves the window's picture.
+- Draw distance (`draw_distance`, 100 to 400 %, 100 by default and in the Steam Deck profile; `resolution.c`
+  `res_drawdist_live`, set `drawdist` of `recomp/patches-v101.txt`). A model holds up to four level-of-detail rates
+  in 0..1 (`DistRate0` to `DistRate2`, the steps between its four levels, and `LostDistRate`, below which it is not
+  drawn). The set divides each rate by the percentage where the model's set-up stores the defaults and where its
+  named parameters are read, so models keep their finer level, and small ones stay drawn, from further away. In
+  Harmony Square at 400 % the alley yard shows about 15 debris pieces where 100 % shows 3. The percentage scales the
+  rates, not a distance in metres, and a model takes its rates when it is made, so a change shows from the next
+  loading screen. Two other distance checks were tried and left out: the visibility test of effect emitters
+  (main+0x991220, one or two entries a frame in the city, nothing visible changed) and the radius placed objects are
+  made within (20 m, main+0x4bb1ac).
 - No HUD (`hud = 0`; F12 and the menu's Game tab switch and save it; `resolution.c` `res_hud_tick`, set `nohud` of
   `recomp/patches-v101.txt`). The game sends a layout instance's parts to the renderer from two functions
   (main+0x9177d0 for an instance with a layer of its own, main+0x915e50 for the queued ones); the set's site in

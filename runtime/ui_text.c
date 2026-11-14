@@ -64,6 +64,8 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_UPSCALER_FSR] = "AMD FSR 1", [UI_MENU_UPSCALER_BILINEAR] = "Bilinear",
     [UI_MENU_FOV] = "Field of view",
     [UI_MENU_FOV_DESC] = "How much of the world the camera shows, in percent of the game's own (50 degrees vertically in play). Cutscenes keep the game's own framing.",
+    [UI_MENU_DRAW_DISTANCE] = "Draw distance",
+    [UI_MENU_DRAW_DISTANCE_DESC] = "How far away objects keep their detailed model and small objects stay visible, in percent of the game's own. Higher shows less pop-in and draws more. Takes effect on what the game loads after the change, at the next loading screen.",
     [UI_MENU_ANISO] = "Texture filtering",
     [UI_MENU_ANISO_DESC] = "Anisotropic filtering of surface textures: ground, roads and walls seen at a shallow angle stay sharp into the distance instead of blurring. Game: the level the game asks for, as on the Switch. Auto: 16x with 3D render scale 1440p, twice the game's level at 2160p, the game's level otherwise.",
     [UI_MENU_ANISO_GAME] = "Game",
@@ -458,6 +460,8 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_UPSCALER_FSR] = "AMD FSR 1", [UI_MENU_UPSCALER_BILINEAR] = "Билинейное",
     [UI_MENU_FOV] = "Поле зрения",
     [UI_MENU_FOV_DESC] = "Сколько мира показывает камера, в процентах от игрового (50 градусов по вертикали в игре). Ролики сохраняют исходное кадрирование.",
+    [UI_MENU_DRAW_DISTANCE] = "Дальность прорисовки",
+    [UI_MENU_DRAW_DISTANCE_DESC] = "Насколько далеко объекты сохраняют детальную модель, а мелкие объекты остаются видимыми, в процентах от игрового значения. Чем выше, тем реже объекты появляются на глазах и тем больше рисуется. Действует на то, что игра загрузит после изменения, со следующего экрана загрузки.",
     [UI_MENU_ANISO] = "Фильтрация текстур",
     [UI_MENU_ANISO_DESC] = "Анизотропная фильтрация текстур поверхностей: земля, дороги и стены под острым углом остаются чёткими вдали, а не размываются. Игра: уровень, который запрашивает игра, как на Switch. Авто: 16x при масштабе 3D-отрисовки 1440p, удвоенный уровень игры при 2160p, иначе уровень игры.",
     [UI_MENU_ANISO_GAME] = "Игра",
@@ -1106,6 +1110,8 @@ static const char *const text_pt_br[UI_TEXT_COUNT] = {
     [UI_MENU_FOV] = "Campo de visão",
     [UI_MENU_FOV_DESC] = "Quanto do mundo a câmera mostra, em porcentagem do original do jogo (50 graus na vertical "
                          "durante o jogo). As cenas mantêm o enquadramento original.",
+    [UI_MENU_DRAW_DISTANCE] = "Distância de renderização",
+    [UI_MENU_DRAW_DISTANCE_DESC] = "Até que distância os objetos mantêm o modelo detalhado e os objetos pequenos continuam visíveis, em porcentagem do original do jogo. Valores maiores reduzem o surgimento repentino de objetos e desenham mais. Vale para o que o jogo carregar depois da mudança, a partir da próxima tela de carregamento.",
     [UI_MENU_ANISO] = "Filtragem de texturas",
     [UI_MENU_ANISO_DESC] = "Filtragem anisotrópica das texturas de superfície: chão, estradas e paredes vistos em "
                            "ângulo raso continuam nítidos ao longe em vez de borrar. Jogo: o nível que o jogo pede, "
@@ -1321,6 +1327,8 @@ static const char *const text_zh_hans[UI_TEXT_COUNT] = {
     [UI_MENU_FOV] = "视野",
     [UI_MENU_FOV_DESC] = "镜头能看到多大范围，以游戏自身视野的百分比表示。"
                           "游戏中垂直视角为 50 度；过场动画保持原有构图。",
+    [UI_MENU_DRAW_DISTANCE] = "绘制距离",
+    [UI_MENU_DRAW_DISTANCE_DESC] = "物体在多远处仍保持精细模型、小物体在多远处仍然可见，以游戏自身数值的百分比表示。数值越高，物体突然出现的情况越少，绘制量也越大。对更改之后游戏加载的内容生效，即从下一次加载画面开始。",
     [UI_MENU_SHARPNESS] = "FSR 锐度",
     [UI_MENU_SHARPNESS_DESC] = "FSR 缩放后的锐化强度；0 为关闭。",
     [UI_MENU_COLOR] = "色彩",

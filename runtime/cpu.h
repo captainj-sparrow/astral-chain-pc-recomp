@@ -93,6 +93,8 @@ void rt_free_step(Cpu *c);          // frame timer at 30 fps: a frame without th
 void rt_fov_s0(Cpu *c);             // field of view: s0 (the scene's vertical angle) *= AC_FOV factor (resolution.c)
 void rt_fov_lens24_s0(Cpu *c);      // the same for a lens's projection (lens x24 / x8), then a taller frame's angle
 void rt_fov_lens8_s0(Cpu *c);
+void rt_drawdist_w9(Cpu *c);        // draw distance: w9 (a default level-of-detail rate, float bits) /= the factor
+void rt_drawdist_s0(Cpu *c);        // the same for s0, a rate a model names (resolution.c)
 void rt_wide_dirty_w8(Cpu *c);      // wide pictures: a 16:9 lens (x24) takes the frame's ratio; w8 = its dirty word
 void rt_wide_angle24_s0(Cpu *c);    // wide pictures: s0 (a lens's vertical angle; lens x24 / x8) for a taller frame
 void rt_wide_angle8_s0(Cpu *c);
