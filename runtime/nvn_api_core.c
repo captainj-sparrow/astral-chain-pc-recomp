@@ -456,7 +456,7 @@ NVN_API(nvnBufferFlushMappedRange) {
                  (unsigned long long)size, (unsigned long long)o->size);
     if (rt_trace & RT_TRACE_PERF) flush_note(1, o->pool, size);
     uint64_t a = buf_address(o);
-    if (a && !nvn_gpu_only(a)) nvn_guest_written(a + (uint64_t)off, size);
+    if (a && !nvn_gpu_only(a) && size) gfx_backend()->guest_flushed(a + (uint64_t)off, size);
 }
 
 // ---------- Sync and events

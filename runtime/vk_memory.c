@@ -766,6 +766,23 @@ void vk_guest_written(uint64_t addr, uint64_t size) {
     plat_mutex_unlock(&gen_lock);
 }
 
+// nvnBufferFlushMappedRange. Without shadow storage the range is stamped as a write, as before. With it, the write
+// watch already reports every page the game wrote, at the snapshot of the submission that uses the range: the stamp
+// only made the sync copy the pages a second time, a submission later. Astral Chain flushes whole buffers it rewrote
+// (about 500 calls and 7.4 MiB a frame in the headquarters), and the copies into the shadows fell from about 17 to
+// 8 MiB a frame without the stamp, the shadow sync from 3.7 to 2.6 ms a frame and the replay from 9.5 to 8.2 ms
+// (Z1 Extreme at 15 W, 4 cores, camera turning; 56.4 to 57.5 fps). AC_FLUSH_STAMP=1 stamps as before; ab
+// alternates with the AC_AB blocks.
+void vk_guest_flushed(uint64_t addr, uint64_t size) {
+    static int mode = -1;
+    if (mode < 0) {
+        mode = rt_knob("FLUSH_STAMP", shadow_on ? "0" : "1");
+        if (shadow_on) rt_log("mem: buffer flushes %s (AC_FLUSH_STAMP)", mode == 2 ? "stamp their pages in the B blocks (AC_AB)"
+                              : mode ? "stamp their pages as writes" : "stamp nothing: the write watch reports the writes");
+    }
+    if (RT_KNOB_ON(mode)) vk_guest_written(addr, size);
+}
+
 int vk_mem_changed(uint64_t addr, uint64_t size, uint32_t since, uint32_t *now) {
     if (!size) { *now = since; return 0; }
     uint64_t lo = addr & ~0xfffull, hi = (addr + size + 0xfff) & ~0xfffull;

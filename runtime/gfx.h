@@ -136,6 +136,7 @@ typedef struct {
     void (*read_texels)(const tex_t *t, const view_t *v, const NVNcopyRegion *r, uint8_t *dst, uint64_t row, uint64_t img);
     void (*write_texels)(const tex_t *t, const view_t *v, const NVNcopyRegion *r, const uint8_t *src, uint64_t row, uint64_t img);
     void (*guest_written)(uint64_t addr, uint64_t size);   // host wrote pool storage (3.2)
+    void (*guest_flushed)(uint64_t addr, uint64_t size);   // the game flushed a mapped buffer range it wrote
     void (*guest_read)(uint64_t addr, uint64_t size);      // the CPU reads pool storage: GPU-written texels go there first
     // The CPU waited for fence: small render targets written by work up to it go to their storage (vk_texture.c
     // vk_texture_write_back_small).

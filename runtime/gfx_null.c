@@ -151,6 +151,7 @@ const GfxBackend gfx_null_backend = {
     .read_texels = null_read_texels,
     .write_texels = null_write_texels,
     .guest_written = null_guest_written,
+    .guest_flushed = null_guest_written,
     .guest_read = null_guest_read,
     .cpu_synced = null_cpu_synced,
 };

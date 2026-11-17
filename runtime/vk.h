@@ -217,6 +217,8 @@ void vk_sampler_register(int id, const samp_par *s);                // sampler d
 void vk_texture_release(const tex_t *t);   // TextureFinalize: the image stays for slots that still name its storage
 void vk_read_texels(const tex_t *t, const view_t *v, const NVNcopyRegion *r, uint8_t *dst, uint64_t row, uint64_t img);
 void vk_write_texels(const tex_t *t, const view_t *v, const NVNcopyRegion *r, const uint8_t *src, uint64_t row, uint64_t img);
+void vk_guest_flushed(uint64_t addr, uint64_t size);   // nvnBufferFlushMappedRange: vk_guest_written unless the write
+                                                      // watch already reports the game's writes (vk_memory.c)
 void vk_guest_written(uint64_t addr, uint64_t size);   // a CPU write the write-watch may miss (WriteTexels into
                                                       // mirrored storage): stamps the CPU domain, so the mirror picks
                                                       // it up and textures overlapping it re-upload

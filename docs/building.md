@@ -190,7 +190,10 @@ host-visible copy (shadow storage, `runtime/vk_memory.c`): the pages the CPU wro
 writes come back at its fence. In play that costs about 0.2 ms a frame and doubles the memory of those pools (about
 1.1 GB). `AC_SHADOW=1` turns it on under Windows too. The written pages come from per-submission write-watch snapshots,
 each 2 MiB region queried at most once per submission and shared with the texture checks; `AC_SHADOW_SNAP=0` queries
-each pool at every part of a submission, as before. The Steam Deck's RADV has `VK_EXT_external_memory_host` as
+each pool at every part of a submission, as before. A game's `nvnBufferFlushMappedRange` stamps nothing under shadow
+storage, since the write watch already reports those writes (in the headquarters, copies fell from about 17 to 8 MiB a
+frame and the sync from 3.7 to 2.6 ms a frame on a Z1 Extreme at 15 W); `AC_FLUSH_STAMP=1` stamps the range as a
+write again. The Steam Deck's RADV has `VK_EXT_external_memory_host` as
 well: the shadow copies are chosen for the measured cost above, not for a missing extension.
 
 On a discrete GPU the pools the replay binds as buffers get a copy in video memory instead (the VRAM mirror,
