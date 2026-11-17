@@ -965,7 +965,16 @@ const char *cfg_upscaling(void) {
 
 const char *cfg_upscaling_quality(void) { return legacy_upscaler() ? "native" : cfg_value(PREFIX "UPSCALING_QUALITY"); }
 
-int cfg_smaa(void) { return strcmp(cfg_value(PREFIX "ANTI_ALIASING"), "off") != 0; }
+// Asked at every draw (vk_dlaa_skip_draw): the answer is kept per settings version, so a draw costs one load instead of
+// a getenv and a walk of the entries. The environment does not change during a run.
+int cfg_smaa(void) {
+    static uint64_t cache = UINT64_MAX;   // version << 1 | answer
+    uint64_t c = __atomic_load_n(&cache, __ATOMIC_RELAXED), v = cfg_version();
+    if (c >> 1 == v) return (int)(c & 1);
+    int on = strcmp(cfg_value(PREFIX "ANTI_ALIASING"), "off") != 0;
+    __atomic_store_n(&cache, v << 1 | (uint64_t)on, __ATOMIC_RELAXED);
+    return on;
+}
 
 void cfg_init(void) {
     load_ini();

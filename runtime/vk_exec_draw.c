@@ -2371,7 +2371,7 @@ static int skip_shader(const GfxShader *vs, const GfxShader *fs) {
         }
         if (nv || nf) rt_log("vk_exec: skipping draws by shader hash (%d vs, %d fs)", nv, nf);
     }
-    if (vs) {
+    if (vs && nv) {   // no hash lookup per draw without the switch
         uint64_t h = vk_dump_shader_hash(vs);
         for (int i = 0; i < nv; i++)
             if (h == vsh[i]) {
@@ -2379,7 +2379,7 @@ static int skip_shader(const GfxShader *vs, const GfxShader *fs) {
                 return 1;
             }
     }
-    if (fs) {
+    if (fs && nf) {
         uint64_t h = vk_dump_shader_hash(fs);
         for (int i = 0; i < nf; i++)
             if (h == fsh[i]) {
