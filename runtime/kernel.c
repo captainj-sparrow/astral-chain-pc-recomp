@@ -1048,9 +1048,16 @@ void kern_core_back(int *away) {
 // thread waits for a virtual core, each pass gives the core to the waiter, whatever its priority, yields the host CPU
 // and takes a core again. Shorter waits keep the core: a lock held for a moment would otherwise make the next pass wait
 // for another thread's next SVC (MacNativeGames). AC_SPIN=0 keeps the core always (the gate's own cost only).
+// AC_SPIN_SLEEP_US=<n> (experimental, off when unset or 0): a wait that has lasted n microseconds stops polling at
+// full speed. Each further pass leaves the virtual core and asks for a sleep of an eighth of the time waited so far,
+// at most SPIN_SLEEP_MAX_NS, so the wait ends about an eighth later at worst where the host's timer is that fine
+// (Windows rounds a short sleep up to about half a millisecond). In Harmony Square a priority 59 thread polls a lock
+// word (main+0x3e3e74) for about 2 ms of every frame, a million passes a second on a host core of its own; with 200
+// its CPU time fell from 2.4 to 1.3 ms a frame and the game thread's frame did not get longer (Skymont cores).
 #define SPIN_GAP_NS 20000ull
+#define SPIN_SLEEP_MAX_NS 250000ull
 static int g_spin_on = -1;
-static uint64_t g_spin_handoff_ns;
+static uint64_t g_spin_handoff_ns, g_spin_sleep_ns;
 static _Thread_local uint64_t sw_head, sw_t0, sw_last;
 
 void rt_spin_gate(Cpu *c, uint64_t head) {
@@ -1061,6 +1068,8 @@ void rt_spin_gate(Cpu *c, uint64_t head) {
     if (g_spin_on < 0) {
         const char *e = cfg_get("AC_SPIN_HANDOFF_US");
         g_spin_handoff_ns = (uint64_t)(e && *e ? atoll(e) : 50) * 1000;
+        e = cfg_get("AC_SPIN_SLEEP_US");
+        g_spin_sleep_ns = (uint64_t)(e && *e ? atoll(e) : 0) * 1000;
         g_spin_on = !(cfg_get("AC_SPIN") && !cfg_bool("AC_SPIN"));
     }
     t->sp_n++;
@@ -1071,6 +1080,14 @@ void rt_spin_gate(Cpu *c, uint64_t head) {
         sw_t0 = now;
     }
     sw_last = now;
+    if (g_spin_on && g_spin_sleep_ns && t->cur_core >= 0 && now - sw_t0 >= g_spin_sleep_ns) {
+        uint64_t ns = (now - sw_t0) / 8;
+        int away = kern_core_away();
+        plat_wait_ns(ns < SPIN_SLEEP_MAX_NS ? ns : SPIN_SLEEP_MAX_NS);
+        kern_core_back(&away);
+        sw_last = kern_now_ns();
+        return;
+    }
     if (!g_spin_on || t->cur_core < 0 || now - sw_t0 < g_spin_handoff_ns ||
         !__atomic_load_n(&g_core_wait, __ATOMIC_RELAXED))   // a racy look: a waiter missed now is seen at the next pass
         return;

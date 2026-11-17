@@ -61,6 +61,11 @@ REG_PARAMS = ('d', 'n', 'm', 'a', 't')
 LANE_T = {'sa16': 'vu16', 'sa32': 'vu32', 'sa64': 'vu64', 'saf32': 'vf32', 'saf64': 'vf64', 'uint8_t': 'vu8',
           'uint16_t': 'vu16', 'uint32_t': 'vu32', 'uint64_t': 'vu64', 'float': 'vf32', 'double': 'vf64'}
 CALLEE_SAVED = frozenset(range(8, 16))
+# gen.py --v-abi-trust: what a guest call may read (V0-V7 arguments) and what its caller reads afterwards (V0-V3
+# results); a return hands back the results and V8-V15, which leave as they came.
+ARGS = frozenset(range(0, 8))
+RESULTS = frozenset(range(0, 4))
+GUEST_CALL = re.compile(r'\b(?:f|fb)_[0-9a-f]+\(c\);|\brt_dispatch\(c\);')
 PLAIN = '\n    const unsigned VMASK = 0; u128 *const vr = c->v; unsigned vd_ = 0, *const vdp = &vd_; (void)vr; (void)vdp;'
 
 FN = re.compile(r'^(?:static )?void (?:f|fb)_[0-9a-f]+\(Cpu \*c\) \{$', re.M)
@@ -231,8 +236,13 @@ def unsynced_calls(body):
     return out
 
 
-def rewrite_one(body, k, trust, stats):
-    """Body of one C function (text between its braces)."""
+def rewrite_one(body, k, trust, stats, abi=False):
+    """Body of one C function (text between its braces). abi (gen.py --v-abi-trust, experimental): every register the
+    function names is a local, and a guest call or a return syncs only what AAPCS64 passes through it: before a call
+    the written registers of V0-V7 are stored and after it V0-V3 are loaded again; before a return the written
+    registers of V0-V3 and V8-V15 are stored. V16-V31 are never stored for a callee nor loaded after one. Every other
+    sync point (an SVC, a trap, a spin gate, a host helper of a patched site, a jump to another function) stores all
+    that was written, and the ones that return load all again."""
     try:
         new = accessors(body)
         left = LEFT.search(new)
@@ -251,22 +261,30 @@ def rewrite_one(body, k, trust, stats):
     body = new
     if not cnt:
         return body
-    local = {r for r, _ in sorted(cnt.items(), key=lambda x: (-x[1], x[0]))[:k]}
+    local = set(cnt) if abi else {r for r, _ in sorted(cnt.items(), key=lambda x: (-x[1], x[0]))[:k]}
     written &= local
     load = ''.join(f'VSYNC_IN({r}); ' for r in sorted(local))
     reload = ''.join(f'VSYNC_IN({r}); ' for r in sorted(local - (CALLEE_SAVED if trust else set())))
     store = ''.join(f'VSYNC_OUT_D({r}); ' for r in sorted(written))
+    store_call = ''.join(f'VSYNC_OUT_D({r}); ' for r in sorted(written & ARGS))
+    store_ret = ''.join(f'VSYNC_OUT_D({r}); ' for r in sorted(written & (RESULTS | CALLEE_SAVED)))
+    reload_call = ''.join(f'VSYNC_IN({r}); ' for r in sorted(local & RESULTS))
+    keep = ~sum(1 << r for r in ARGS) & 0xffffffff   # the dirty bits a guest call leaves: what it did not store
     stats['v_local_functions'] += 1
     stats['v_local_registers'] += len(local)
 
     def at_ret(m):
         stats['v_exit_syncs'] += 1
+        if abi and 'musttail' not in m.group(0):
+            return '{ ' + store_ret + m.group(0) + ' }'
         return '{ ' + store + m.group(0) + ' }'
 
     def at_call(m):
         stats['v_call_syncs'] += 1
         if HOST_CALL.fullmatch(m.group(0)):
             stats['v_host_call_syncs'] += 1
+        if abi and GUEST_CALL.fullmatch(m.group(0)):
+            return '{ ' + store_call + m.group(0) + ' ' + reload_call + f'vd_ &= {keep:#x}u; }}'
         return '{ ' + store + m.group(0) + ' ' + reload + 'vd_ = 0; }'
 
     body = RET.sub(at_ret, body)
@@ -277,7 +295,7 @@ def rewrite_one(body, k, trust, stats):
             + body + ('\n    ' + store.rstrip() if store else ''))
 
 
-def rewrite(text, k, trust, stats):
+def rewrite(text, k, trust, stats, abi=False):
     """C text of one emitted guest function (an f_ and, for a computed branch, its fb_) with K registers local."""
     out, pos = [], 0
     for m in FN.finditer(text):
@@ -286,7 +304,7 @@ def rewrite(text, k, trust, stats):
             d += {'{': 1, '}': -1}.get(text[i], 0)
             i += 1
         out.append(text[pos:m.end()])
-        out.append(rewrite_one(text[m.end():i - 1], k, trust, stats) + text[i - 1])
+        out.append(rewrite_one(text[m.end():i - 1], k, trust, stats, abi) + text[i - 1])
         pos = i
     out.append(text[pos:])
     return ''.join(out)

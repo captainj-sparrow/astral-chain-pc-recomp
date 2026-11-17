@@ -30,7 +30,16 @@ SP = 31   # index of SP in the register sets
 # Markers gen.py puts where the Cpu must be current, resolved by Plan.resolve(): spill before; reload all, or reload
 # what a call may change, after.
 SPILL, RELOAD, RELOAD_CALL = '\x00S', '\x00R', '\x00C'
+# gen.py --abi-trust only: the store before a call and the store before a return (see plan_trust()).
+SPILL_CALL, SPILL_RET = '\x00A', '\x00T'
 CALLEE_SAVED = frozenset(range(19, 30)) | {SP}
+# --abi-trust: what a call may read (X0-X7 arguments, X8 the indirect result address, the frame record registers and
+# SP), what a return hands back (X0 and X1, and the callee-saved registers, which leave as they came), and what a
+# call may have changed that its caller reads afterwards (X0 and X1).
+CALL_IN = frozenset(range(0, 9)) | {29, 30, SP}
+RET_OUT = frozenset({0, 1}) | CALLEE_SAVED
+CALL_OUT = frozenset({0, 1})
+NEVER_LOCAL = frozenset({18})   # the platform register stays in the Cpu
 # Locals per function: the most used registers. More cost more than they save, as clang then spills them to the stack
 # and the syncs stay (300 hot Astral Chain functions: fewest instructions and memory operands at 4-6).
 LOCALS = 6
@@ -54,11 +63,12 @@ def written(text):
 
 
 class Plan:
-    def __init__(self, regs, spill, kept):
+    def __init__(self, regs, spill, kept, call_out=None):
         self.regs = regs     # sorted registers the function keeps in locals
         self.local = set(regs)
         self.spill = spill   # per instruction: registers to store at its sync points
         self.kept = kept     # registers a call leaves as they were (CALLEE_SAVED, or none)
+        self.call_out = call_out   # --abi-trust: the only registers reloaded after a call
 
     def decl(self):
         """Locals at the top of the function, loaded from the Cpu."""
@@ -71,9 +81,16 @@ class Plan:
             return name(r) if r in self.local else m.group(0)
 
         text = REG.sub(local, text)
-        spill = ''.join(f'{cpu(r)} = {name(r)}; ' for r in sorted(self.spill[i]))
+        def stores(regs):
+            return ''.join(f'{cpu(r)} = {name(r)}; ' for r in sorted(regs))
+
+        spill = stores(self.spill[i])
         reload = ''.join(f' {name(r)} = {cpu(r)};' for r in self.regs)
-        reload_call = ''.join(f' {name(r)} = {cpu(r)};' for r in self.regs if r not in self.kept)
+        if self.call_out is None:
+            reload_call = ''.join(f' {name(r)} = {cpu(r)};' for r in self.regs if r not in self.kept)
+        else:
+            reload_call = ''.join(f' {name(r)} = {cpu(r)};' for r in self.regs if r in self.call_out)
+            text = text.replace(SPILL_CALL, stores(self.spill[i] & CALL_IN)).replace(SPILL_RET, stores(self.spill[i] & RET_OUT))
         return text.replace(SPILL, spill).replace(RELOAD, reload).replace(RELOAD_CALL, reload_call)
 
 
@@ -105,3 +122,43 @@ def plan(texts, succ, clean, n_locals=LOCALS, kept=CALLEE_SAVED):
     # A sync point stores what was dirty on entry to its instruction and what the instruction wrote before it
     # (c->x[30] of a call): all the instruction's writes, which is at most a little more.
     return Plan(sorted(regs), [dirty[i] | writes[i] if SPILL in texts[i] else set() for i in range(n)], kept)
+
+
+def plan_trust(texts, succ, calls, full):
+    """The plan of gen.py --abi-trust: every register the function uses is a local (X18 excepted), and a call or a
+    return syncs only what AAPCS64 passes through it. Before a call the changed registers of CALL_IN are stored
+    (SPILL_CALL); after it only CALL_OUT is loaded again; before a return the changed registers of RET_OUT are stored
+    (SPILL_RET). X9-X17 are never stored for a callee nor loaded after one, and X19-X28 are stored only at a return,
+    where they hold again what the function was entered with. Every other sync point (an SVC, a trap, a host helper
+    of a patched site, a jump to another function) stores all that changed, and SVCs and helpers load all again.
+
+    calls: instructions that are an unpatched call (after them CALL_IN is no longer dirty); full: instructions after
+    which every local equals the Cpu (an SVC)."""
+    n = len(texts)
+    regs = {r for t in texts for r in refs(t)} - NEVER_LOCAL
+    writes = [written(t) & regs for t in texts]
+    dirty = [set() for _ in range(n)]
+    seen = [False] * n
+    work = [0] if n else []
+    if n:
+        seen[0] = True
+    while work:
+        i = work.pop()
+        if i in full:
+            out = set()
+        elif i in calls:
+            out = (dirty[i] | writes[i]) - CALL_IN
+        else:
+            out = dirty[i] | writes[i]
+        for s in succ[i]:
+            if not seen[s] or not out <= dirty[s]:
+                seen[s] = True
+                dirty[s] |= out
+                work.append(s)
+    every = set().union(*writes) if writes else set()
+    for i in range(n):
+        if not seen[i]:
+            dirty[i] = every
+    marks = (SPILL, SPILL_CALL, SPILL_RET)
+    return Plan(sorted(regs), [dirty[i] | writes[i] if any(m in texts[i] for m in marks) else set() for i in range(n)],
+                CALLEE_SAVED, CALL_OUT)

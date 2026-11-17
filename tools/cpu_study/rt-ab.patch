@@ -1,0 +1,212 @@
+--- a/kernel.c
++++ b/kernel.c
+@@ -88,6 +88,7 @@
+     uint64_t wake_at, grant_at;   // when a wait was signalled and a core granted, until the thread runs again
+     uint64_t lw_ns, lw_n, lw_max, lg_ns, lg_n, lg_max, sl_n, sl_req, sl_act;   // those latencies; SleepThread asked/took
+     uint64_t sp_n, sp_ho, sp_site;   // spin wait passes and core handoffs, the last loop head (the thread writes them)
++    uint64_t sp_sl;                  // spin wait passes that slept (AC_SPIN_SLEEP_US)
+     RtThread *target;          // as a core waiter: the owner core_kick asked to give its core up for it (holding G)
+     // AC_ASYNC_PREEMPT (holding G)
+     PlatIntr *hthr;            // the host thread, for plat_intr_stop / resume; open while it may own a core
+@@ -1049,11 +1050,10 @@
+ // and takes a core again. Shorter waits keep the core: a lock held for a moment would otherwise make the next pass wait
+ // for another thread's next SVC (MacNativeGames). AC_SPIN=0 keeps the core always (the gate's own cost only).
+ // AC_SPIN_SLEEP_US=<n> (experimental, off when unset or 0): a wait that has lasted n microseconds stops polling at
+-// full speed. Each further pass leaves the virtual core and asks for a sleep of an eighth of the time waited so far,
+-// at most SPIN_SLEEP_MAX_NS, so the wait ends about an eighth later at worst where the host's timer is that fine
+-// (Windows rounds a short sleep up to about half a millisecond). In Harmony Square a priority 59 thread polls a lock
+-// word (main+0x3e3e74) for about 2 ms of every frame, a million passes a second on a host core of its own; with 200
+-// its CPU time fell from 2.4 to 1.3 ms a frame and the game thread's frame did not get longer (Skymont cores).
++// full speed. Each further pass leaves the virtual core and sleeps an eighth of the time waited so far, at most
++// SPIN_SLEEP_MAX_NS, so the wait ends at most an eighth later than it would have. In Harmony Square a priority 59
++// thread polls a lock word (main+0x3e3e74) for about 2 ms of every frame, a million passes a second on a host core
++// of its own.
+ #define SPIN_GAP_NS 20000ull
+ #define SPIN_SLEEP_MAX_NS 250000ull
+ static int g_spin_on = -1;
+@@ -1080,8 +1080,11 @@
+         sw_t0 = now;
+     }
+     sw_last = now;
+-    if (g_spin_on && g_spin_sleep_ns && t->cur_core >= 0 && now - sw_t0 >= g_spin_sleep_ns) {
++    static int study_spin = -1;
++    if (study_spin < 0) study_spin = rt_knob("STUDY_SPIN", "1");
++    if (g_spin_on && g_spin_sleep_ns && RT_KNOB_ON(study_spin) && t->cur_core >= 0 && now - sw_t0 >= g_spin_sleep_ns) {
+         uint64_t ns = (now - sw_t0) / 8;
++        t->sp_sl++;
+         int away = kern_core_away();
+         plat_wait_ns(ns < SPIN_SLEEP_MAX_NS ? ns : SPIN_SLEEP_MAX_NS);
+         kern_core_back(&away);
+@@ -1475,9 +1478,16 @@
+     return h;
+ }
+ 
++// STUDY: AC_STUDY_GUEST_AFF=<hex mask> keeps the guest threads on those logical processors
++static void study_guest_aff(void) {
++    const char *e = cfg_get("AC_STUDY_GUEST_AFF");
++    if (e && *e) plat_thread_affinity(NULL, strtoull(e, NULL, 16));
++}
++
+ static void thread_main(void *p) {
+     RtThread *t = p;
+     tcur = t;
++    study_guest_aff();
+     t->tid = plat_thread_id();
+     PlatIntr *self = ap_open_self();
+     lock();
+@@ -1547,6 +1557,7 @@
+     void (*fn)(Cpu *) = (void (*)(Cpu *))p;
+     Cpu *c;
+     kern_main_thread(&c);
++    study_guest_aff();
+     if (!plat_jmp_save(&tcur->exit_jmp)) fn(c);
+     thread_finish(tcur);
+     return;
+--- a/cfg.c
++++ b/cfg.c
+@@ -53,7 +53,7 @@
+     "REPLAY_CHECK", "RES", "RES1062", "RESOLVE_CHECK", "RESTART_WAIT", "ROMFS", "ROMFS_INDEX", "ROMFS_MMAP", "ROMFS_MODS", "ROMFS_PATCHES",
+     "ROMFS_PROOF_DIR", "ROMFS_VERIFY", "RSTICK_DEADZONE", "RUMBLE", "RUMBLE_CURVE", "RUMBLE_STRENGTH", "RUMBLE_TRIGGERS", "SHADER_CACHE",
+     "SHADER_MEMO", "SHADOW", "SHADOW_RANGE", "SHADOW_RES", "SHADOW_SCALE", "SHADOW_SNAP", "SHARED_FONTS", "SHARPNESS", "SHOTS", "SHOTS_DIR",
+-    "SHOTS_FULL", "SKIP_FS", "SKIP_VS", "SPEED_PROBE", "SPIN", "SPIN_HANDOFF_US", "SPIN_SLEEP_US", "SPLIT_DRAWS", "SPLIT_US", "STICK_DEADZONE", "STICK_SENS",
++    "SHOTS_FULL", "SKIP_FS", "SKIP_VS", "SPEED_PROBE", "SPIN", "SPIN_HANDOFF_US", "SPIN_SLEEP_US", "STUDY_GUEST_AFF", "STUDY_LIBC", "STUDY_SPIN", "STUDY_WORLD", "SPLIT_DRAWS", "SPLIT_US", "STICK_DEADZONE", "STICK_SENS",
+     "SWKBD_ANSWER",
+     "SWKBD_TEST", "TEST_AUDIO_STALL", "TEST_FREEZE", "TEST_HITCH", "TEST_PAD", "TEST_PREPARE_SHADERS", "TEX_ALIAS", "TEX_CACHE_MB", "TEX_MEMO", "TEX_MIP_SKIP", "TEX_PREFETCH", "TEX_VRAM_PRESSURE", "TIMER_1MS", "TRACE", "UBO_SNAPSHOT", "UPSCALER", "UPSCALING", "UPSCALING_FAIL",
+     "UPSCALING_QUALITY", "VERIFY_MIB", "VK_DYN_A2C", "VK_DYN_VERTEX", "VK_NO_FLOAT64",
+--- a/dispatch.c
++++ b/dispatch.c
+@@ -32,6 +32,13 @@
+ 
+ static const RtModule *g_mods[MAX_MODULES];   // sorted by base
+ static struct { const uint32_t *slot; uint64_t base, slots, bytes; } g_t[MAX_MODULES];   // per-module tables, g_mods order
++// STUDY (build/cpu-study): world B of a build made by mkworlds.py. g_tb mirrors g_t with the g_<addr> functions.
++int rt_world;
++extern const GuestFn main_fn_ptrs_b[], sdk_fn_ptrs_b[];
++static const uint32_t *g_tb[MAX_MODULES];
++static const GuestFn *world_b(const RtModule *m) {
++    return !strcmp(m->name, "main") ? main_fn_ptrs_b : !strcmp(m->name, "sdk") ? sdk_fn_ptrs_b : NULL;
++}
+ static int g_nmods;
+ static bool g_ready;
+ static uint64_t g_table_bytes, g_functions, g_lo, g_hi, g_slots;
+@@ -129,6 +136,11 @@
+             if (!f) rt_fatal("dispatch: %s_fn_ptrs[%llu] is NULL", m->name, (unsigned long long)k);
+             if (f < host_lo) host_lo = f;
+             if (f > host_hi) host_hi = f;
++            if (world_b(m)) {
++                uintptr_t g = (uintptr_t)world_b(m)[k];
++                if (g < host_lo) host_lo = g;
++                if (g > host_hi) host_hi = g;
++            }
+         }
+         if (m->count) {
+             if (m->addrs[0] < lo) lo = m->addrs[0];
+@@ -161,6 +173,15 @@
+             slot[(m->addrs[k] - m->base) >> 2] = (uint32_t)((uintptr_t)m->fns[k] - anchor);
+         table_seal(slot, bytes);
+         g_t[i] = (typeof(g_t[0])){slot, m->base, slots, bytes};
++        g_tb[i] = slot;
++        if (world_b(m)) {
++            uint32_t *sb = table_alloc(bytes);
++            if (!sb) rt_fatal("dispatch: cannot allocate the world B table of %s", m->name);
++            for (uint64_t k = 0; k < m->count; k++)
++                sb[(m->addrs[k] - m->base) >> 2] = (uint32_t)((uintptr_t)world_b(m)[k] - anchor);
++            table_seal(sb, bytes);
++            g_tb[i] = sb;
++        }
+         g_table_bytes += bytes;
+         g_slots += slots;
+         g_functions += m->count;
+@@ -209,7 +230,7 @@
+     uint32_t off = 0;
+     for (int i = 0; i < g_nmods && !off; i++) {
+         uint64_t j = __builtin_rotateright64(c->pc - g_t[i].base, 2);   // a pc outside the module lands far above its slots
+-        off = j < g_t[i].slots ? g_t[i].slot[j] : 0;
++        off = j < g_t[i].slots ? (rt_world ? g_tb[i] : g_t[i].slot)[j] : 0;
+     }
+     if (__builtin_expect(!off, 0)) __attribute__((musttail)) return dispatch_slow(c);
+     GuestFn f = (GuestFn)(D.anchor + off);
+--- a/perf.c
++++ b/perf.c
+@@ -327,6 +327,12 @@
+     prof_sampler_frame(frame, now, last ? d : 0);
+     uint64_t rep = ft_frame(frame, now, d);   // d is 0 on the first present: it only starts the period
+     ab_b += rt_ab();
++    {   // STUDY: the lifted code's world for the next frame
++        extern int rt_world;
++        static int mode = -1;
++        if (mode < 0) mode = rt_knob("STUDY_WORLD", "0");
++        rt_world = RT_KNOB_ON(mode);
++    }
+     cpu_placement();
+     if (__atomic_load_n(&overlay, __ATOMIC_RELAXED))   // the overlay's only cost while it is off: this branch
+         perfmon_frame(now, d, frame_ns, rep, __atomic_load_n(&counts[PERF_CNT_TEX_UP], __ATOMIC_RELAXED));
+--- a/simd_fp.h
++++ b/simd_fp.h
+@@ -187,7 +187,11 @@
+         return FN(minmax)(c, op, a, b);
+     }
+     T r = FCALC(op, a, b, d, K);
++#ifdef STUDY_FP_NOCHECK   /* STUDY: the ceiling of the result checks */
++    if (op == FOP_RSQRTS && __builtin_expect(FREDO(op, r) | simd_directed(c), 0))
++#else
+     if (__builtin_expect(op == FOP_RSQRTS ? FREDO(op, r) | simd_directed(c) : !FOKT(r, SIMD_CAT(simd_th, F)(c)), 0))
++#endif
+         r = FN(redo)(c, op, a, b, d, r);
+     return r;
+ }
+@@ -241,8 +245,12 @@
+         return r;
+     }
+     r = FCALC(op, a, b, d, VK);
++#ifdef STUDY_FP_NOCHECK
++    if (op == FOP_RSQRTS && __builtin_expect((__builtin_reduce_or(FREDO(op, r)) != 0) | simd_directed(c), 0)) {
++#else
+     if (__builtin_expect(op == FOP_RSQRTS ? (__builtin_reduce_or(FREDO(op, r)) != 0) | simd_directed(c)
+                                           : __builtin_reduce_and(FOKT(r, SIMD_CAT(simd_thv, F)(c))) == 0, 0)) {
++#endif
+         memcpy(&c->fp_arg[0], &a, sizeof a);
+         memcpy(&c->fp_arg[1], &b, sizeof b);
+         memcpy(&c->fp_arg[2], &d, sizeof d);
+--- a/ov_libc.c
++++ b/ov_libc.c
+@@ -0,0 +1,39 @@
++// Host versions of the C library functions the game spends measurable time in. The sdk's own are portable C compiled
++// for ARM64 (musl's): memcmp compares a byte at a time unless both pointers share their alignment, 8 bytes at a time
++// otherwise. The game calls it after every uniform block it fills, to compare the block with the previous one of the
++// same ring (main+0x9d6510, sizes rounded up to 256 bytes): in Harmony Square the lifted memcmp took 7.5% of the main
++// thread's running time. memcpy is replaced in nvn_api_core.c, where it also reads back what the GPU wrote.
++#include <string.h>
++
++#include "host.h"
++
++// musl's result is the difference of the first two bytes that differ; the host's memcmp only promises its sign. Equal
++// blocks, the common case, take the host's fast path; otherwise the first differing byte is found in 32-byte steps.
++void f_7267aa7a80(Cpu *c), f_7267ae6760(Cpu *c);   // STUDY: the sdk's lifted memcmp and memset
++static int study_libc(void) {
++    static int mode = -1;
++    if (mode < 0) mode = rt_knob("STUDY_LIBC", "1");
++    return RT_KNOB_ON(mode);
++}
++static void ov_memcmp(Cpu *c) {
++    if (!study_libc()) return f_7267aa7a80(c);
++    const unsigned char *a = arg_p(c, 0), *b = arg_p(c, 1);
++    uint64_t n = arg_x(c, 2);
++    int r = 0;
++    if (n && memcmp(a, b, (size_t)n)) {
++        uint64_t i = 0;
++        while (n - i > 32 && !memcmp(a + i, b + i, 32)) i += 32;
++        while (a[i] == b[i]) i++;
++        r = a[i] - b[i];
++    }
++    ret_x(c, (uint32_t)r);
++}
++HOST_OVERRIDE("memcmp", ov_memcmp);
++
++static void ov_memset(Cpu *c) {
++    if (!study_libc()) return f_7267ae6760(c);
++    void *d = arg_p(c, 0);
++    memset(d, (int)arg_x(c, 1), (size_t)arg_x(c, 2));
++    ret_x(c, (uint64_t)(uintptr_t)d);
++}
++HOST_OVERRIDE("memset", ov_memset);

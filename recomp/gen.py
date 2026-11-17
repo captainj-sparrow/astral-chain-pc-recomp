@@ -213,7 +213,7 @@ class Emitter:
     """C for the functions of one module. starts is the set of every function start of the module."""
 
     def __init__(self, mod, starts, patched=None, reg_locals=regs.LOCALS, callee_saved=True, spins=None,
-                 v_locals=vlocals.LOCALS, v_trust=False):
+                 v_locals=vlocals.LOCALS, v_trust=False, abi_trust=False, v_abi_trust=False):
         self.mod = mod
         self.starts = starts
         self.patched = patched or {}   # {address: [(set index, [replacement words])]} (recomp/patches.py)
@@ -222,6 +222,8 @@ class Emitter:
         self.kept = regs.CALLEE_SAVED if callee_saved else frozenset()   # not reloaded after a call
         self.v_locals = v_locals   # recomp/vlocals.py: V registers per function in C locals (0: all in c->v)
         self.v_trust = v_trust     # with v_locals: V8-V15 are not reloaded after a call
+        self.abi_trust = abi_trust   # recomp/regs.py plan_trust: every register a local, AAPCS64 syncs at calls
+        self.v_abi_trust = v_abi_trust   # recomp/vlocals.py: every V register a local, AAPCS64 syncs at calls
         self.uses_patches = False
         self.stats = Counter()
         self.unsupported = Counter()
@@ -391,6 +393,9 @@ class Emitter:
         # The same holds for registers in locals (recomp/regs.py): fb_<entry> keeps them in the Cpu too.
         local = not all_labels
         spill, reload, reload_call = (regs.SPILL, regs.RELOAD, regs.RELOAD_CALL) if local else ('', '', '')
+        trust = local and self.abi_trust
+        spill_call, spill_ret = (regs.SPILL_CALL, regs.SPILL_RET) if trust else (spill, spill)
+        reload_fn = reload if trust else reload_call   # after a host helper of a patched site
         succ = self.flow(insns, entry, end, tables) if local else None
         fp = self.flag_plan(insns, entry, end, tables, succ) if local else None
         if fp and fp.used:
@@ -438,9 +443,9 @@ class Emitter:
         def call(t, a):
             if t in starts:
                 refs.add(t)
-                return f'c->x[30] = {hx(a + 4)}; {spill}{fname(t)}(c);{reload_call}'
+                return f'c->x[30] = {hx(a + 4)}; {spill_call}{fname(t)}(c);{reload_call}'
             self.stats['external_calls'] += 1
-            return f'c->x[30] = {hx(a + 4)}; {spill}c->pc = {hx(t)}; rt_dispatch(c);{reload_call}'
+            return f'c->x[30] = {hx(a + 4)}; {spill_call}c->pc = {hx(t)}; rt_dispatch(c);{reload_call}'
 
         def op(i, code):
             code = fx(i, code)
@@ -454,7 +459,7 @@ class Emitter:
                 # A host helper: spill locals, call, reload what the call may change. The helper writes flags
                 # itself (a @fnz returns packed NZCV, which fx above rewrites onto F.nz), so it is not a
                 # flag-clobbering guest call.
-                return f'{spill}{fx(i, r.code)}{reload_call}'
+                return f'{spill}{fx(i, r.code)}{reload_fn}'
             if r.kind == 'bl':
                 return call(r.target, a)
             if r.kind == 'b':
@@ -462,7 +467,7 @@ class Emitter:
             if r.kind == 'bcond':
                 return f'if ({fx(i, r.cond)}) {{ {jump(r.target, i)} }}'
             if r.kind == 'ret':
-                return f'{spill}return;'
+                return f'{spill_ret}return;'
             raise patches.PatchError(f'{a:#x}: patched instruction is a {r.kind}')
 
         def patch(i, ins, a):
@@ -502,7 +507,7 @@ class Emitter:
             elif k == 'bl':
                 emit(i, '    ' + call(ins.target, a))
             elif k == 'blr':
-                emit(i, f'    c->pc = {ins.target}; c->x[30] = {hx(a + 4)}; {spill}rt_dispatch(c);{reload_call}')
+                emit(i, f'    c->pc = {ins.target}; c->x[30] = {hx(a + 4)}; {spill_call}rt_dispatch(c);{reload_call}')
             elif k == 'br':
                 jt = tables.get(a)
                 if jt == 'all':
@@ -514,7 +519,7 @@ class Emitter:
                 else:
                     emit(i, f'    {publish(i)}{spill}c->pc = {ins.target}; {MUSTTAIL} rt_dispatch(c);')
             elif k == 'ret':
-                emit(i, f'    {spill}return;')
+                emit(i, f'    {spill_ret}return;')
             else:
                 raise ValueError(f'{a:#x}: unknown instruction kind {k!r}')
         n = len(insns)
@@ -530,7 +535,11 @@ class Emitter:
                     texts[i] += line
             clean = {i for i, ins in enumerate(insns) if entry + 4 * i not in self.patched
                      and (ins.kind in ('bl', 'blr') or (ins.kind == 'op' and regs.RELOAD in texts[i]))}
-            rp = regs.plan(texts, succ, clean, self.reg_locals, self.kept)
+            if trust:
+                full = {i for i in clean if regs.RELOAD in texts[i]}
+                rp = regs.plan_trust(texts, succ, clean - full, full)
+            else:
+                rp = regs.plan(texts, succ, clean, self.reg_locals, self.kept)
             if rp.regs:
                 out.append('    ' + rp.decl())
             self.stats['local_reg_functions'] += bool(rp.regs)
@@ -540,7 +549,8 @@ class Emitter:
             out += [line for _, line in body]
         out.append('}')
         if self.v_locals:
-            out = vlocals.rewrite('\n'.join(out), self.v_locals, self.v_trust, self.stats).split('\n')
+            out = vlocals.rewrite('\n'.join(out), self.v_locals, self.v_trust, self.stats,
+                                  self.v_abi_trust).split('\n')
         self.stats['functions'] += 1
         self.stats['instructions'] += len(insns)
         return out, refs
@@ -707,9 +717,16 @@ def main():
     ap.add_argument('--v-trust', action='store_true',
                     help='with --v-locals: do not reload V8-V15 after a call (AAPCS64: the callee preserves their low '
                          '64 bits)')
+    ap.add_argument('--abi-trust', action='store_true',
+                    help='EXPERIMENTAL: every register of a function in a C local, synced with the Cpu at calls and '
+                         'returns only as far as AAPCS64 passes it (recomp/regs.py plan_trust)')
+    ap.add_argument('--v-abi-trust', action='store_true',
+                    help='EXPERIMENTAL, with --v-locals: every V register of a function in a C local, synced at guest '
+                         'calls and returns only as far as AAPCS64 passes it (recomp/vlocals.py)')
     args = ap.parse_args()
     opts = {'reg_locals': args.reg_locals, 'callee_saved': not args.no_callee_saved_trust, 'v_locals': args.v_locals,
-            'v_trust': args.v_trust}
+            'v_trust': args.v_trust, 'abi_trust': args.abi_trust,
+            'v_abi_trust': args.v_abi_trust}
 
     t0 = time.perf_counter()
     romfs_base = base_of(args.version)
