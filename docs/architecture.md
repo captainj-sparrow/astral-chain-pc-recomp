@@ -89,9 +89,9 @@ MacNativeGames cannot run on x86-64 as is: its CPU path executes ARM64 code nati
   libzstd on the host (`ov_zstd.c`, `AC_ZSTD_NATIVE`); the lifted decoder took almost three times as long.
 - Settings and menu: every key with its default is in one table (`cfg.c`), read from `astralchain.ini` and `AC_*`
   variables and written back when the in-game menu changes it. The menu and the performance overlay are Dear ImGui,
-  drawn into the swapchain image (`runtime/ui/`); their text is in `ui_text.c` (English, Russian, Brazilian Portuguese,
-  Simplified Chinese). The Chinese glyphs come from a system font (Microsoft YaHei, `plat_font_path`) merged into the
-  font atlas.
+  drawn into the swapchain image (`runtime/ui/`); their text is in `ui_text.c` (English, Italian, Russian, Brazilian
+  Portuguese, Simplified Chinese). The Chinese glyphs come from a system font (Microsoft YaHei, `plat_font_path`) merged
+  into the font atlas.
 - OS calls the host makes go through `runtime/platform/` (`platform.h`, `win32.c`), so a Linux or macOS host adds one file instead of touching the rest. The split is not finished: `tools/check_platform.py` lists the Win32 uses left in the other files.
 
 #### Threads and cores

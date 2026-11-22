@@ -297,8 +297,8 @@
 # lang = en-US
 # System mode reported to the game: docked or handheld (handheld by default on a Steam Deck).
 # operation_mode = docked
-# Language of the settings menu and the overlay: en, ru, pt-BR or zh-Hans. Default: the Windows display language, English if
-# it is none of them.
+# Language of the settings menu and the overlay: en, it, ru, pt-BR or zh-Hans. Default: the Windows display language,
+# English if it is none of them.
 # menu_lang = en
 
 [audio]

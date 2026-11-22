@@ -11,8 +11,8 @@ typedef enum {
     UI_SWKBD_CANCEL,
     UI_SWKBD_PAD_HINT,       // how a controller answers
 
-    // Menu: window, tabs, bottom row. UI_MENU_FIRST..UI_MENU_LAST_ID carry English, Russian, Brazilian Portuguese and
-    // Simplified Chinese texts.
+    // Menu: window, tabs, bottom row. UI_MENU_FIRST..UI_MENU_LAST_ID carry English, Italian, Russian, Brazilian
+    // Portuguese and Simplified Chinese texts.
     UI_MENU_FIRST,
     UI_MENU_TITLE = UI_MENU_FIRST,
     UI_MENU_TAB_SCREEN, UI_MENU_TAB_GAME, UI_MENU_TAB_MODS, UI_MENU_TAB_SOUND, UI_MENU_TAB_CONTROLS,
@@ -266,7 +266,7 @@ int ui_text_defined(const char *lang, UiTextId id);
 // The catalog language for a Switch language code ("en-GB" -> "en", "zh-CN" -> "zh-Hans", ...).
 const char *ui_text_lang(const char *switch_code);
 
-// Menu text: ui_text_in(menu language, id). The menu language is AC_MENU_LANG ("en", "ru", "pt-BR", "zh-Hans");
-// unset, the system UI language when the catalog has menu text for it (English, Russian, Brazilian Portuguese,
+// Menu text: ui_text_in(menu language, id). The menu language is AC_MENU_LANG ("en", "it", "ru", "pt-BR", "zh-Hans");
+// unset, the system UI language when the catalog has menu text for it (English, Italian, Russian, Brazilian Portuguese,
 // Simplified Chinese), else English. Follows a live change of the setting.
 const char *menu_text(UiTextId id);
