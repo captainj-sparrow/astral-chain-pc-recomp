@@ -30,12 +30,14 @@ from .events import render
 from .layout import SUPPORTED, running_appimage
 
 TEXT = Path(__file__).resolve().parent / 'text'
-UI_LANGUAGES = ('en', 'ru', 'pt-BR', 'zh-Hans')
+UI_LANGUAGES = ('en', 'it', 'ru', 'pt-BR', 'zh-Hans')
 # what the language switch in the window's corner shows for each
-UI_LANGUAGE_LABELS = {'en': 'English', 'ru': 'Русский', 'pt-BR': 'Português (Brasil)', 'zh-Hans': '简体中文'}
+UI_LANGUAGE_LABELS = {'en': 'English', 'it': 'Italiano', 'ru': 'Русский', 'pt-BR': 'Português (Brasil)',
+                      'zh-Hans': '简体中文'}
 STEP_ORDER = ('check', 'extract', 'lift', 'compile', 'cleanup')
 # message parameter -> catalog id prefix of the names that replace its raw values
 PARAM_NAMES = {'lang': 'lang.', 'known': 'lang.', 'step': 'step.', 'input': 'param.input.'}
+LANG_IT = 0x10   # primary language id of Italian in a Windows LANGID
 LANG_RU = 0x19   # primary language id of Russian in a Windows LANGID
 LANG_PT_BR = 0x0416   # Portuguese (Brazil), the whole LANGID: Portugal's Portuguese stays English
 # Windows LANGIDs that write Simplified Chinese: zh-CN, zh-SG. zh-TW, zh-HK and zh-MO write Traditional Chinese, which
@@ -89,10 +91,11 @@ def flat(value):
 
 def windows_ui_language():
     """The window language for the display language: the Windows one (ui_language_for_langid); elsewhere LC_ALL,
-    LC_MESSAGES or LANG ('ru', 'pt_BR', 'zh_CN' or 'zh_SG', else English)."""
+    LC_MESSAGES or LANG ('it', 'ru', 'pt_BR', 'zh_CN' or 'zh_SG', else English)."""
     if os.name != 'nt':
         loc = (os.environ.get('LC_ALL') or os.environ.get('LC_MESSAGES') or os.environ.get('LANG') or '').lower()
-        return ('ru' if loc.startswith('ru') else 'pt-BR' if loc.startswith(('pt_br', 'pt-br'))
+        return ('it' if loc.startswith('it') else 'ru' if loc.startswith('ru')
+                else 'pt-BR' if loc.startswith(('pt_br', 'pt-br'))
                 else 'zh-Hans' if loc.startswith(('zh_cn', 'zh-cn', 'zh_sg', 'zh-sg', 'zh_hans', 'zh-hans')) else 'en')
     try:
         langid = ctypes.windll.kernel32.GetUserDefaultUILanguage()
@@ -102,8 +105,10 @@ def windows_ui_language():
 
 
 def ui_language_for_langid(langid):
-    """'ru' for a Russian Windows LANGID, 'pt-BR' for Brazilian Portuguese, 'zh-Hans' for a Simplified Chinese one,
-    else 'en'."""
+    """'it' for an Italian Windows LANGID, 'ru' for Russian, 'pt-BR' for Brazilian Portuguese, 'zh-Hans' for a
+    Simplified Chinese one, else 'en'."""
+    if langid & 0x3ff == LANG_IT:
+        return 'it'
     if langid & 0x3ff == LANG_RU:
         return 'ru'
     if langid == LANG_PT_BR:
@@ -118,7 +123,7 @@ def default_game_language(ui):
     with the Switch shared fonts (ini.NEED_SHARED_FONTS), which the setup does not install; the runtime stands in
     for shared font 0 only (runtime/ov_system.c font_substitute) and has not been tried with Chinese text beyond the
     player's name. The player can still pick Chinese."""
-    return 'ru' if ui == 'ru' else 'en-US'
+    return 'it' if ui == 'it' else 'ru' if ui == 'ru' else 'en-US'
 
 
 # Windows primary language ids (the low 10 bits of a LANGID) and the game language of each, for system_game_language.

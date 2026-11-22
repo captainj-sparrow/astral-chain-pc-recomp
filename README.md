@@ -35,8 +35,7 @@ Report problems as issues, following [CONTRIBUTING.md](CONTRIBUTING.md).
 - In-game settings menu (F1), performance overlay (F10)
 - No-HUD mode for screenshots and videos: F12 (or the menu's Game tab) hides the gauges, map, prompts and markers
   during play and shows them again; the menus stay
-- In-game menu and overlay in English, Italian, Russian, Brazilian Portuguese and Simplified Chinese; the setup
-  installer in English, Russian, Brazilian Portuguese and Simplified Chinese
+- In-game menu, overlay and setup installer in English, Italian, Russian, Brazilian Portuguese and Simplified Chinese
 - Keyboard, mouse and gamepad, with remapping, rumble and gyro
 - Xbox and PlayStation button prompts, each with its matching button layout (PlayStation mod from https://gamebanana.com/mods/604666)
 - Shaders prepared at install instead of during play

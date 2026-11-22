@@ -408,7 +408,8 @@ class CatalogTest(unittest.TestCase):
             self.assertEqual([i for i in ids if not cat.has(i)], [])
 
     def test_codes_become_names(self):
-        for lang, korean in (('en', 'Korean'), ('ru', 'Корейский'), ('pt-BR', 'Coreano'), ('zh-Hans', '韩语')):
+        for lang, korean in (('en', 'Korean'), ('it', 'Coreano'), ('ru', 'Корейский'), ('pt-BR', 'Coreano'),
+                             ('zh-Hans', '韩语')):
             cat = Catalog(lang)
             self.assertIn(korean, cat('check.lang_unknown', lang='ko', known='ja'))
             self.assertNotIn(' ko ', cat('check.lang_unknown', lang='ko', known='ja'))
@@ -440,13 +441,14 @@ class CatalogTest(unittest.TestCase):
         self.assertIn(windows_ui_language(), UI_LANGUAGES)
 
     def test_windows_langid_picks_the_window_language(self):
-        for langid, lang in ((0x0419, 'ru'), (0x0819, 'ru'), (0x0416, 'pt-BR'), (0x0816, 'en'),
-                             (0x0804, 'zh-Hans'), (0x1004, 'zh-Hans'),
+        for langid, lang in ((0x0410, 'it'), (0x0810, 'it'), (0x0419, 'ru'), (0x0819, 'ru'), (0x0416, 'pt-BR'),
+                             (0x0816, 'en'), (0x0804, 'zh-Hans'), (0x1004, 'zh-Hans'),
                              (0x0404, 'en'), (0x0c04, 'en'), (0x1404, 'en'), (0x0409, 'en'), (0x0411, 'en')):
             self.assertEqual(ui_language_for_langid(langid), lang, hex(langid))
 
     def test_chinese_window_starts_with_a_game_language_that_needs_no_shared_fonts(self):
         self.assertEqual(default_game_language('zh-Hans'), 'en-US')
+        self.assertEqual(default_game_language('it'), 'it')
         self.assertEqual(default_game_language('ru'), 'ru')
 
 

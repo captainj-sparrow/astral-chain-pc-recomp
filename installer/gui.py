@@ -4,10 +4,10 @@ A front end over the CLI (docs/installer.md). The first screen asks what the pla
 game, the update, the keys file, the game language and an empty install folder) or an update of an installed folder
 (the folder alone; the game files only when that installation needs them again). It runs `python -m installer ...` as
 a subprocess and shows its JSON events. Decisions live in guilogic.py; this file only draws. The window text is in
-installer/text/<en|ru|pt-BR|zh-Hans>.json under "ui.*" and "launcher.*" ids.
+installer/text/<en|it|ru|pt-BR|zh-Hans>.json under "ui.*" and "launcher.*" ids.
 
     --selftest [--shots DIR]   build every screen in every language and close by itself (PNG per screen with --shots)
-    --lang en|ru|pt-BR|zh-Hans window language (default: the Windows display language)
+    --lang en|it|ru|pt-BR|zh-Hans window language (default: the Windows display language)
     --rebuild DIR              rebuild the install folder DIR for its mods (astralchain.exe starts this, build-cache/rebuild.txt):
                                the run starts at once with that folder, and the game starts again when it succeeds
 """

@@ -156,10 +156,10 @@ python -m installer --base FILE --update FILE --keys FILE --lang CODE --dest DIR
 - Window (`python -m installer.gui`, `installer/gui.py` draws, `installer/guilogic.py` decides): a first screen with
   the two choices (first install, update), one form for each, step list with progress, space line, collapsible log,
   Cancel (Ctrl+Break to the CLI's process group, then it waits for the exit), finish screen with Play, Open folder and,
-  after a failure, Open the log. English, Russian, Brazilian Portuguese or Simplified Chinese, chosen from the Windows
-  display language (zh-CN and zh-SG give Chinese; the Traditional Chinese regions give English), switchable in the
-  window; every sentence is an id in `installer/text/<en|ru|pt-BR|zh-Hans>.json`. `--selftest [--shots DIR]` builds every screen in every language and
-  closes itself.
+  after a failure, Open the log. English, Italian, Russian, Brazilian Portuguese or Simplified Chinese, chosen from the
+  Windows display language (zh-CN and zh-SG give Chinese; the Traditional Chinese regions give English), switchable in
+  the window; every sentence is an id in `installer/text/<en|it|ru|pt-BR|zh-Hans>.json`. `--selftest [--shots DIR]`
+  builds every screen in every language and closes itself.
 - `tests/installer_gui_test.py`: event model, form, catalogs, cancel, the self-closing window and one end-to-end run of
   the CLI in `--verify` mode (needs `build/install-test`; see its docstring).
 - `tests/installer_test.py`: bookkeeping with fake steps, the progress lines, `--lang auto` and the tools ending
