@@ -64,6 +64,38 @@ MacNativeGames cannot run on x86-64 as is: its CPU path executes ARM64 code nati
 - Coverage oracle: MacNativeGames' NSO rewriter lists every site where game code touches the OS (SVCs, TLS reads, counter reads, `x18`, exclusive windows, jump tables): 68,968 sites in 1.4.3 `main`. The lifter must handle every one.
 - Memory: guest address equals host address, all below 2^39 (IPC encodes 39-bit addresses). The heap, stacks and the alias region are reserved with `MEM_WRITE_WATCH`, so the graphics back end can ask which pages the CPU wrote since the last upload (`runtime/memory.c`).
 - Indirect branches go through `rt_dispatch` (`runtime/dispatch.c`), which looks the target up and tail-calls it: first in the calling thread's own cache of 1024 targets, then in the address table (`AC_DISPATCH_CACHE=0` leaves the cache empty). On Windows (a Core Ultra 9 285H, standing in a scene at 60 fps) the dispatch takes 2.1-2.2% of the samples inside the executable with the cache and 3.5% without it; the frame time is the same. An import stub (`adrp; ldr; add; br` on a GOT slot) whose slot the generator resolves to a lifted function compares the slot with that function's address and calls it directly when they match (`rt_stub_hit` in `cpu.h`), which they do unless the runtime bound a host function to the name; in the town 15 to 22% of the guest threads' indirect branches were such calls.
+- The sdk's C library on host code (`runtime/ov_libc.c`): `memcpy` always (a linked override, which also reads back
+  GPU-written pool storage), and with `host_libc` (default 1) `memset`, `memmove`, `memcmp`, `strlen`, `strcmp` and
+  `strncmp`, bound with `hostfn_add_override` before the modules load. The lift does not change: their import stubs
+  miss `rt_stub_hit` and reach the host function through `rt_dispatch`, and `host_libc = 0` gives the direct stub
+  calls back. The results match the sdk's in every register the caller sees (`memcmp` and the string compares return
+  the difference of the first unequal bytes, zero-extended; the host functions write x0 and nothing else), which
+  `--probe-libc` checks against the lifted functions. Up to 128 bytes the copies and fills are overlapping SSE stores;
+  on Windows copies of 1 to 8 MiB go in 256 KiB pieces, because ucrtbase's `memmove` switches to non-temporal stores
+  between 1 and 1.75 MiB and the next read of the destination then misses the cache (copy then read 4-14% faster from
+  1.75 to 8 MiB in pieces; the game copies such sizes only while it loads). On Linux they are one `memmove`: glibc's
+  switch was at 12 MiB on a ROG Ally, where the pieces cost 1-7%; not measured on a real Deck. Measured on the
+  Core Ultra 9 285H with the game
+  pinned to four E-cores, in the motorway chase of the opening at 60 fps (2026-11-22; the profile's only save is the
+  start of the game, so no fight on foot or Neuron headquarters run was possible): before, the six lifted functions,
+  their stubs and `memcpy`'s path took 2.3-2.9% of the render thread's running samples (`memcmp` 1.5-1.9%: the
+  uniform block compare at main+0x9d6510 and `strstr`); the render thread makes about 7,000 of these calls a frame,
+  5,500 of them `memcpy`. With `host_libc` on, two in-launch A/Bs (`AC_HOST_LIBC_AB=1`, `AC_AB=16`) gave the render
+  thread -2.5% and -3.0% guest time per frame (+-1.7 and +-1.9), and across six alternated launches its CPU time per
+  frame went from 5.17-5.25 ms to 3.66-4.58 ms. On Linux (ROG Ally at 15 W, 2026-11-21) the copies and fills of
+  64 KiB or more no longer lift the write watch ahead (`plat_mem_will_write`): nearly all their pages are unprotected,
+  and on those the ioctl made a 64 KiB `memcpy` three times and a `memset` five times as slow in `--probe-libc` (in
+  the game about 5% of the time of these copies, 55 ms of CPU time summed over a save load; no copy of that size seen
+  in play). A lower threshold and a lock-free test ahead of `guest_read` were measured as
+  not worth it (the header of `ov_libc.c` has the figures). Not measured: a real Steam Deck, desktops, `--release-opt`
+  builds (whose PGO speeds the lifted functions up).
+  Direct calls from the lifter with a register contract were left out: about 1 ns of
+  stub and dispatch (mostly 0.1-0.5 ns for the dispatch alone since `hostfn_direct`) plus a few ns of register stores
+  per call, at most about 0.5% of the render thread, with the hottest `memcpy` callers reaching the stub by tail calls.
+- Host calls (`runtime/hostfn.c`): on a miss the thread's target cache takes the host function itself in place of
+  `hostfn_entry` (`hostfn_direct`, default 1), except for `nn::fs`, `AC_TRACE=host` and `AC_CORE_DIAG`. On a ROG Ally
+  at 15 W in the town, four in-launch A/Bs took 1.8-2.5% off the draw command thread's CPU time per frame and 0.3-0.6%
+  off the frame interval; twelve alternated launches were too noisy to show a change of the frame.
 - Testing: LAS Recomp's differential harness, every lifted instruction class checked against Unicorn (test-only, never linked into the game).
 
 ### 3. Host
@@ -73,7 +105,11 @@ MacNativeGames cannot run on x86-64 as is: its CPU path executes ARM64 code nati
 - Window, keyboard and mouse: Win32 (`gfx_window.c`, `input_win.c`). Gamepad: SDL3. Audio output: WASAPI on Windows (`audio_out_win.c`), SDL3 elsewhere (`audio_out_sdl.c`). Voice: libopus (BSD). Movies: the SDK's `movie::Decoder` is replaced by a host VP9 decoder over libvpx (BSD, static; `runtime/ov_movie.c`), because FFmpeg from MSYS2 is a GPL build.
 - Sound and 5.1: the game plays everything through `audout:u` (`ov_audout.c`); its Wwise 2019.1 sink asks for stereo,
   then mixes for the channel count `OpenAudioOut` answered, so `audio_output = 5.1` makes the game mix 5.1 itself
-  (FL FR FC LFE SL SR). The effects, voices and reverbs follow the output; the music is authored stereo and stays in
+  (FL FR FC LFE SL SR). `audio_output = auto`, the default since players found the 5.1 better wherever it gets
+  through, picks it from the first output opened (`audio_out_auto_channels`): 5.1 on a mixer of 6 channels or more or
+  with a Windows spatial sound format on, stereo otherwise, including a stereo endpoint that accepts a 6 channel stream
+  only to fold it down. The choice holds for the run (the game reads its channel count once); the menu offers a
+  restart when the output in use would now choose otherwise. The effects, voices and reverbs follow the output; the music is authored stereo and stays in
   front; the LFE gets nothing. Measured on the new game's opening (radio dialogue over traffic, 2 s RMS, 2026-11-21):
   fronts 0.069-0.082 in stereo; in 5.1 fronts 0.049-0.059, centre 0.054-0.079, surrounds 0.005-0.026, LFE 0. The
   voices came out about 3.4 dB louder than in stereo (the mono 2D sounds go to the centre at full level instead of
@@ -85,8 +121,26 @@ MacNativeGames cannot run on x86-64 as is: its CPU path executes ARM64 code nati
   format, and SDL3 opens the endpoint at that count (asked for 6 channels on a PRO X Wireless with Sonic on, it opened
   2), folding the 5.1 before the virtualiser sees it; WASAPI takes the 6 channel stream as it is. 7.1 ran without a
   fault in one test (the sink's table goes to 8 channels) and is left out for now.
-- zstd: most RomFS files of 1.4.3 are zstd frames. The patch set `zstd` sends the game's two decoder entry points to
-  libzstd on the host (`ov_zstd.c`, `AC_ZSTD_NATIVE`); the lifted decoder took almost three times as long.
+- zstd: the 82 `.pkz` archives of Astral Chain 1.0.1's RomFS (7225 MiB, every compressed asset; the rest is Wwise
+  audio and Bink movies) hold zstd frames, and the game's decoder runs lifted. Decoding them on the host's libzstd was
+  measured on 2026-11-22 and not kept. `ov_zstd.c` is TotK Recomp's version, with TotK 1.4.3's guest addresses, and
+  `recomp/patches-v101.txt` has no `zstd` set, so `AC_ZSTD_NATIVE` and `AC_ZSTD_CHECK` change nothing on 1.0.1.
+  The variant tried replaced the one call found into main's decoder from outside it: the `bl ZSTD_decompressStream`
+  (main+0x862300) at main+0x9a4de8, in the decompressor method at main+0x9a4dc0. It decoded whole frames on the host
+  and left frames fed in pieces to the game's decoder. Boot and the load of a first save make 1395 such calls: 1156
+  whole frames (607 MiB out) went to the host, and the other 239 calls are 66 larger frames fed in pieces of up to
+  2 MiB (633 MiB out), so the host covered about half of the bytes. Its check mode found no difference in the frames
+  it took. On a Core Ultra laptop with an Arc 140T, docked at 60 fps, two series of three alternated runs a side:
+  - in check mode the same 1156 frames took 559 ms on the host (into new buffers) and 633 ms lifted, where the lifted
+    decoder took almost three times the host's time on TotK;
+  - the save load went from 2.974 to 2.890 s in the first series and from 3.030 to 2.988 s in the second, whose two
+    sides overlap: 1-3 %;
+  - boot to the title movie went from 3.818 to 3.707 s, then from 3.715 to 3.711 s: no repeatable gain;
+  - giving the virtual core up for frames from 64 KiB, from 128 KiB or never loaded alike (2.88 to 2.93 s, two runs
+    each).
+  That gain did not justify a hook in the game's decoder and a re-lift. Not measured: a Steam Deck, a 4-6 core CPU,
+  other GPUs, area and chapter changes, play past the new game's first scene (about 30 s of it made no decode). Not
+  built: the pieced frames on the host, which would need a host stream per guest stream.
 - Settings and menu: every key with its default is in one table (`cfg.c`), read from `astralchain.ini` and `AC_*`
   variables and written back when the in-game menu changes it. The menu and the performance overlay are Dear ImGui,
   drawn into the swapchain image (`runtime/ui/`). Their text comes from `lang/*.mo` catalogs, keyed by the stable ids in
@@ -120,13 +174,69 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   (`AC_SPIN_SLEEP_US`, 0 to keep polling).
 - `free_cores = 1` (`AC_FREE_CORES=1`) turns the gate off, for experiments only: the game crashes or hangs, usually
   at start, because its job workers all report core 0 and share per-core memory (#212).
+- Pause (`runtime/pause.c`; `menu_pause = 1`, the default: while the menu is open; `assume_focus = 0`: while the
+  window is out of focus). The game sets `FocusHandlingMode` 3, AlwaysSuspend, so a Switch suspends it out of focus
+  and `GetCurrentFocusState` always answers in focus here. At a present the presenting thread
+  calls `kern_pause`: every holder is asked for its core as a better waiter would ask, none is granted again, and once
+  the three are back the guest's clock stops (`rt_ticks`, the kernel's timeouts and sleeps, the GPU timestamps), so
+  guest code never runs on a clock that stands still. The audio output keeps what is queued and plays silence, with
+  5 ms ramps that consume nothing, and the pads' motors, triggers included, are stopped at once
+  (`input_rumble_stop`). The presenting thread then shows the last picture again for the menu
+  (`GfxBackend.repeat`, through the replay queue so that timeline values keep their order) and polls the pad's chords.
+  Out of focus it repeats four times a second and only updates the pads, without reading their buttons. A stored
+  `assume_focus = 0`, which paused nothing up to 1.21.0, is removed once (`cfg_migrate_focus`, marker
+  `assume_focus_migrated = 1`); a 0 picked afterwards stays.
+  The pause waits for a save being written (`fs_save_busy`), and a holder that keeps its core for 500 ms cancels it
+  for 2 s. Host threads go on, so no host lock they need may be held across `kern_core_back` or a call into guest
+  code. Another reason to pause goes into `pause_reasons`. The `free_cores` mode does not pause. The log has a line
+  for each pause's start (reason, number, local time), change of reason and end (its length and the total), for each
+  cause that holds one back, and says when the window closed during one.
+  Measured on 2026-11-22 on a Core Ultra 9 285H with an Arc 140T, docked at 1600x900 and 60 fps, on the motorway:
+  - 108 pauses in a run stopped the threads in 1 ms at most (0.7 ms at the 99th percentile). Over 8 s paused none of
+    the game's 18 threads took a cycle, no SVC or NVN call ran, the sound queue and both clocks stood still and the
+    output was silent; the process went from about 0.7 to 0.06-0.09 of a core. 200 toggles of the menu up to 0.35 s
+    apart left the game at 60 fps. In a play-test of the new game's opening, eight pauses of 0.28 to 2.05 s left
+    the movie 40 ms and the cutscene held with it 27 ms from their sound, with no desync logged.
+  - The repeats run at a tenth under the display's rate (54 a second at 60 Hz). At 60 a second on that 60 Hz display
+    Intel's driver spun in `vkQueuePresentKHR` in mailbox and fifo from the second pause on: a whole core while
+    paused, and the present thread stayed there in play afterwards (3450 Mcycles a second against 205). Immediate
+    did not spin.
+  - `rt_ticks` went from 13.75 to 13.87 ns a call (best of 9 alternated runs of its body).
+  - Out of focus (focus messages posted to the window, same machine): paused 16 ms after the message and running
+    12 ms after the one back, with world, frames, sound, clock, SVCs and NVN calls at a stop and 0.016 of a core
+    (0.023 minimised). 65 pauses through the new game's loads, opening movie and cutscene and 100 fast focus changes
+    ended at 60.0 fps with the sound at 1.000. 38 pauses of 0.04 to 1 s in the opening movie moved picture against
+    sound by at most 2 ms a pause on average. One run of the skipped opening, with pauses, closed its movie 213 ms
+    behind its sound; five more with pauses in those seconds ended at 3 to 83 ms, and the cause of that one was not
+    found.
+  - Vibration (an SDL virtual pad): motors and triggers went to 0 within 0.1 ms of a pause, against 250 ms when left
+    to the send's own duration.
+  - Not measured: NVIDIA and AMD drivers (Reflex's frame IDs across a pause included), displays over 60 Hz, HDR,
+    co-op, the Steam Deck, Linux (the changed sources were only compiled for it) and `tools/av_sync_test.py`'s matrix.
 
 ### 4. Graphics
 
 - NVN front end from MacNativeGames (`nvn_api_*.c`, `nvn_obj.h`, texture layout and deswizzle). The game records command buffers through it; nothing reaches the GPU until the game submits.
 - Vulkan 1.3 back end in place of MacNativeGames' Metal one. At `QueueSubmitCommands` the recorded NVN commands are replayed into Vulkan command buffers (`vk_exec*.c`).
 - Memory pools. Apple's unified memory let MacNativeGames use the game's pools zero-copy. The back end imports the pools as host memory (`VK_EXT_external_memory_host`). On a discrete GPU, pools bound as buffers are mirrored in device-local memory, by the 64 KiB chunks the replay binds, and the pages the CPU wrote in them (write watch, above) are uploaded before a replay; the large storage buffers the shaders write stay in the mirror until the CPU touches them; idle pool regions are made read-only so the write-watch queries skip them (`vk_memory.c`). GPU-rendered textures are written back when the CPU reads them: on a pool invalidate, on a CPU copy, and for small targets once the CPU waits for a fence (`vk_texture.c`).
-- Replay thread. `AC_REPLAY_ASYNC=1` (the default; `=0` turns it off) moves the replay off the submitting thread onto a queue at most one frame behind the game; reads of GPU results wait for the newest writer instead of draining the queue (`vk_backend.c`). It is on because an A/B run on the dev machine with a save load and gameplay showed identical throughput; the waits were under 160 ms over 3,472 frames.
+- Replay thread. `AC_REPLAY_ASYNC=1` (the default; `=0` turns it off) moves the replay off the submitting thread onto a queue at most one frame behind the game; reads of GPU results wait for the newest writer instead of draining the queue (`vk_backend.c`). It is on because an A/B run on the dev machine with a save load and gameplay showed identical throughput; the waits were under 160 ms over 3,472 frames. That A/B predates the fix of the bound (2026-11-22): until then each queued texture release also counted as a present done, so R releases let the game run R more frames ahead. With the fix, one launch of the opening motorway at 60 fps (Arc 140T, 1080p, FIFO on a 60 Hz display, one test executable with the counting switched) kept 60.0 fps and waited for the bound 5 times, 82 ms over 6,471 frames; two launches with the old count waited 4 times (141 ms over 6,471 frames) and twice (78 ms over 6,167). A replay slower than the game, where the bound costs or saves most, was not measured in play; `--probe-vkexec` checks the bound with the replay held up.
+  Early reads (a CPU read of GPU results waiting for the part of the submission that wrote them, `vk_sync_split`,
+  instead of the whole submission) were measured on 2026-11-22 and not kept. On the motorway the game starts on
+  (Arc 140T, docked 1920x1080 at 60 fps, 85 to 170 s of the run, three runs), with the sync fix described below
+  applied so that the waits were real, a release at the writer's part would save 0.026 ms a frame (median; 0.123 in
+  the worst 600-frame window), against a threshold of 1.5 ms and 4 % of the frame. No texture read-back was seen
+  there. The other blocking waits were on queue syncs, which NVN promises the whole submission: 3,582 of 3,650 of
+  them were 3 or more submissions behind the newest (pacing).
+  Known bug, left in place: `nvnCommandBufferFenceSync` takes the newest submitted value when it is recorded, one
+  submission early. The game polls such a sync with a zero timeout in a loop without a yield (main+0x89e784), then
+  maps the results: in seven runs of that ride 18 to 1,767 of about 2,430 polls answered "signalled" before the
+  submission could have completed. No wrong picture or value was observed, and what those results are used for is not
+  known. The fix tried gave the sync the value of the submission that carries it: no poll was early in five runs and
+  the mean stayed at the 60 fps cap, but the worst frame at two places of the ride went from 61.9 to 70.6 ms and from
+  25.0 to 34.9 ms (four runs against five, alternated), and a sync whose command buffer is never submitted would keep
+  that loop spinning for good. It needs a guard against that, and a scene where the bug shows, before it ships.
+  Not measured: Harmony Square, the headquarters and the scenes with grass read-backs (both save slots tried start at
+  the opening movie), the Steam Deck and discrete GPUs.
 - Low latency (`low_latency = off|on|boost`, `vk_lowlat.c`, off by default). The pacer lets the game start a frame
   two periods before its display slot (three window textures), so the pad read for a frame happened 33 ms before its
   present at 60 fps and 67 ms at 30 fps. A frame starts when the game acquires its window texture
@@ -145,7 +255,10 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
 - Uniform snapshot. The game rewrites per-object uniform blocks on other threads soon after it submits the frame
   that reads them, while the replay still records it. At the start of a submission's replay every uniform range it
   binds from CPU-written pools is copied, and the draws bind the copy (`vk_usnap.c`, after MacNativeGames'
-  `AC_UBO_SNAPSHOT`); without it, late draws read another object's matrix.
+  `AC_UBO_SNAPSHOT`); without it, late draws read another object's matrix. The arenas prefer device-local memory
+  the CPU can write, but only within that heap's budget: without resizable BAR it is a 256 MiB window, and AMD's
+  Windows driver on APUs refuses every submit once it is over budget (Longshot issue 1879, Z1 Extreme and 780M);
+  past it the arena goes to host memory.
 - Repeated uniform binds. The game binds all 14 uniform slots of a stage before nearly every draw (54,560 bindings
   a frame in the town, 87% of them the range the recording already holds at that stage and slot). The recorder
   leaves those out (`nvn_api_cmd.c` `ubo_table`; `AC_UBO_DEDUPE=0` records them all): they were 1.7 of the 2.6 MiB of
@@ -233,6 +346,31 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   (`rt_hud_off23_x8`, `rt_hud_off22_x8`). The game keeps updating those layouts, so the HUD is back whole in the
   frame after the set goes off, and the menus, the title screen, the loading screens and the dialogue's lines,
   which are not `hud2` layouts, stay. The game's present switches the set when the setting changed.
+- Photo mode (`photo.c`, `vk_photo.c`, set `photo` of `recomp/patches-v101.txt`, on unless `AC_PHOTO_PATCH=0`).
+  ZR in photo mode runs main+0x57b060, which records passes after the frame's scaling pass and before the HUD: they
+  copy the output texel for texel into targets of the scene's size and draw the result into a 1280x720 RGBA8
+  texture, which main+0x57b150 reads back a few frames later and stores as a JPEG in `GameData.dat`. The copy holds
+  only while the scene is as large as the output, so with the `scene` set of the upscaling modes the album got the
+  output's top-left corner (58 % of each side at FSR 3 balanced for 1920x1080, on the Arc 140T), and its last pass
+  read the light target before tone mapping, a white picture; with `aspect = wide` it stored the wider camera
+  squeezed into 16:9. The set's first site, past the function's checks, asks for a capture: the next
+  `SetRenderTargets` that thread records is preceded by `OP_PHOTO`, naming the last of the window textures set as a
+  target (the frame's output after the scaling pass) and the frame's shape (`res_wide_shape`). The replay copies that
+  image into a host buffer in submission order (no HUD, after any upscaler, at any scene size) and blits the 16:9
+  middle of the picture as shown into an album image of its own. The second site, once the function has recorded its
+  passes, has the next `SetRenderTargets` preceded by `OP_PHOTO_FILL`, which copies that image into the album texture
+  (the photo at x20 names its agl object at +8, the NVNtexture at +0x48), so "save this picture?" shows it and the
+  read-back gets it. A thread of its own then makes a finer album picture (area-averaged in linear light to
+  1280x720), which `JpegEncoder::SetPixelData` (observed) gets in place of the pixels read back, and saves the picture
+  as shown (the output stretched to the frame's shape on one axis, Catmull-Rom) as
+  `screenshots/AstralChain_<date>_<time>.png` next to the executable. The game's album stays 16:9, as its layouts and save slots are. The writer (`png.c`,
+  shared with the flight recorder's thumbnails) picks each row's filter and writes dynamic-Huffman deflate with lazy
+  matching: on a Core Ultra 9 285H a 1920x1080 photo took 3.4 MB in 234 ms on that thread (zlib level 6: 3.3 MB;
+  the former fixed-Huffman writer: 4.7 MB). Checked with one recorded photo replayed in Harmony Square: FSR 3 balanced,
+  XeSS performance at 2560x1440, no upscaler with SMAA off, and `aspect = wide` in 2560x1080 and 1920x1200 windows all
+  gave the whole picture to "save this picture?" and the album, and a PNG of 1920x1080, 2560x1440, 2560x1080 or
+  1920x1200. One copy of the output and two small blits per photo, nothing on other frames. If the finer picture is
+  not ready when the game encodes (no Vulkan back end, the copy failed, 2 s gone) the JPEG keeps what was read back.
 - HDR (`hdr = 1`, `vk_hdr.c`). The game tonemaps its scene (Uchimura's curve, or Hable's, then a 16³ colour LUT) into
   an R11G11B10F target at the output's size, sRGB-encoded; its SMAA reads that target and writes the 8-bit window
   texture it presents, and the HUD and menus draw into the window texture afterwards. With HDR on, the tonemap's
@@ -285,10 +423,25 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   flight uses it. The library compiles its shaders when it makes a context (0.2 to 1 s for 1920x1080, 2.6 s for
   3840x2160 on the Z1 Extreme), so the context of the game's sizes is made while the game starts (`vk_dlaa_warm`,
   `boot.c`) and not at the first frame with a 3D scene, where it stalled the frame after a load and left a cutscene's
-  audio ahead of its picture. With `upscaling = fsr4` at start the device also enables
+  audio ahead of its picture. XeSS is made there too, for the pair of sizes it evaluates first (the scene at its own
+  size, or the reduced scene to the game resolution): the pair's work images, and its context, kernels and
+  `xessVKInit` on a thread of their own that the first evaluation joins. XeSS also builds its kernels into the back
+  end's `VkPipelineCache` (`pipeline-cache.bin`), whose saves wait meanwhile (`vk_pipeline_cache_hold`): without the
+  wait both cold starts with the thread crashed inside Intel's driver on the autosave thread, with it none of four
+  did. Measured on the Arc 140T (driver 101.9033), docked 1920x1080, XeSS native, on the motorway, with a measurement
+  build that held the AA point off until 90 s so that the first evaluation fell in 3D play (2 runs per arm,
+  alternated): with a cold driver cache and no kernels in the pipeline cache the first resolved frame took 5602 and
+  6261 ms without the pre-warm and 16.2 and 18.0 ms with it, the start unchanged; with warm caches frames 1-5 stayed
+  at 14-21 ms either way, and a throw-away evaluation changed nothing. Upscaled with a cold cache and other GPUs: not
+  measured. `AC_UPSCALER_PREWARM` is the test knob: `0` as before, `2` synchronous, `3` with the throw-away
+  evaluation. DLSS's feature is made there only with `2` or `3`: that path has never run (no NVIDIA GPU at hand), so
+  by default DLSS still makes its feature at its first frame, and its gain is not measured. With `upscaling = fsr4`
+  at start the device also enables
   `VK_KHR_compute_shader_derivatives`, which the shaders of AMD's library declare, and `VK_KHR_cooperative_matrix`
-  and `VK_EXT_shader_float8`, which its FP8 model for the RX 9000 names (not run here: no such GPU at hand), when the
-  GPU has them. Astral Chain renders forward: a depth-only prepass
+  and `VK_EXT_shader_float8`, which its FP8 model for the RX 9000 names (not run here: no such GPU at hand; a contributor ran it on an RX 9060 XT,
+  RADV, Mesa 26.3.1, for 30 s through the title movie, once the Linux release's SPIR-V parser knew the FP8 capability:
+  the sniper SDK's SPIRV-Tools rejected `Float8CooperativeMatrixEXT` at the first dispatch, so the release now builds a
+  pinned Khronos SPIRV-Tools), when the GPU has them. Astral Chain renders forward: a depth-only prepass
   writes the scene depth (D32F_S8), the opaque draws and the transparents go into an R11G11B10F light target with it (two images,
   alternating per frame), the bloom chain reads it at half size and down, a composite tonemaps, SMAA anti-aliases and
   the HUD is drawn over the result. The AA arms on the first light-target pass after a prepass and runs, in place on
@@ -307,9 +460,11 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   (vertex program, index buffer, first vertex, counts) and the translation of its first matrix. `AC_DLAA_MVDEBUG=1`
   shows the vectors in place of the anti-aliased picture. Camera cuts, a missed AA point for 6 presents, another scene
   size or another light target start a new history. DLSS is created with model K (the transformer) and given the
-  measured frame time. After 600 presents without DLSS its features are released, and without any temporal AA the work
-  images too, without waiting for the GPU; at exit NGX is shut down before the device goes. The performance overlay's
-  Scaling line names the AA while it resolves frames.
+  measured frame time. After 600 presents with DLSS no longer chosen (another backend picked in the menu, or DLSS
+  failed) its features are released, and without any temporal AA the work images too, without waiting for the GPU;
+  a load, a movie or a menu keeps them, so a run makes its feature once per pair of sizes (by the code, untested). At
+  exit NGX is shut down before the device goes. The performance overlay's Scaling line names the AA while it resolves
+  frames.
   A smaller scene (`resolution.c`, the `scene` patch set of `recomp/patches-v101.txt`): the six `csel` of the game's
   dynamic-resolution ladder (main+0x40f18c..0x40f1dc) take every level's size from the patch page, so the game makes
   its scene targets (depth prepass, light target, bloom, composite) at the mode's share of the game resolution, on the

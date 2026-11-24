@@ -33,7 +33,8 @@
 // binding strides only); and, where VK_EXT_extended_dynamic_state3 offers them, depth clamp, polygon mode, blend enables,
 // equations, write masks and alpha to coverage. The key holds the rest: shaders, target formats, sample count, topology
 // class, depth clip mode, logic op and what is not dynamic on the GPU. The VkPipelineCache persists to
-// pipeline-cache.bin next to totk.exe (AC_PIPELINE_CACHE overrides the path).
+// pipeline-cache.bin next to astralchain.exe (AC_PIPELINE_CACHE overrides the path); XeSS builds its kernels into it
+// too (vk_pipeline_cache, vk_xess.c), and they reach the file with the next save.
 //
 // Provenance: the NVN -> Vulkan enum mappings (blend factors and equations, compare functions, stencil ops), the vertex
 // format table with its 3-component fallback and the pipeline cache file handling follow LAS Recomp
@@ -144,8 +145,8 @@ static uint64_t fnv(uint64_t h, const void *p, size_t n) {
 // than the lookup. Only the in-memory table uses it; the key file keeps fnv.
 static uint64_t key_hash(const void *k, size_t n) { return nvn_hm_hash(k, (uint32_t)n); }
 
-// The cache file lives next to totk.exe, so every build dir (the main build and each private fork) has its own:
-// forks that shared build\v121's cache broke each other's runs (2026-10-22).
+// The cache file lives next to astralchain.exe, so every build dir (the main build and each private fork) has its own:
+// in the TotK Recomp this file comes from, forks that shared one build's cache broke each other's runs (2026-10-22).
 static void cache_path_init(void) {
     const char *cfg_path = cfg_get("AC_PIPELINE_CACHE");
     if (cfg_path && *cfg_path && strlen(cfg_path) < sizeof P.cache_path) {
@@ -626,6 +627,9 @@ int vk_pipeline_vertex_input_dynamic(void) { return ensure_init() && P.dyn_vi; }
 PFN_vkCmdPushDescriptorSetKHR vk_pipeline_push_fn(void) { return ensure_init() ? P.push : NULL; }
 PFN_vkCmdPushDescriptorSetWithTemplateKHR vk_pipeline_push_tpl_fn(void) { return ensure_init() && P.tpl ? P.tpl_push : NULL; }
 PFN_vkUpdateDescriptorSetWithTemplate vk_pipeline_update_tpl_fn(void) { return ensure_init() && P.tpl ? P.tpl_update : NULL; }
+// The pipeline cache, for a library that builds pipelines of its own (vk_xess.c): created without
+// VK_PIPELINE_CACHE_CREATE_EXTERNALLY_SYNCHRONIZED_BIT, so any thread may build into it without P.lock.
+VkPipelineCache vk_pipeline_cache(void) { return ensure_init() ? P.cache : VK_NULL_HANDLE; }
 
 int vk_pipeline_set_indep(int on) {
     if (!ensure_init()) return 0;
@@ -3502,6 +3506,16 @@ void vk_pipeline_stats(VkPipeStats *s) {
 }
 
 static PlatMutex save_lock = PLAT_MUTEX_INIT;   // one cache save at a time; shutdown takes it to destroy the cache
+
+// XeSS (vk_xess.c) builds its kernels into P.cache from inside its library and holds the saves off meanwhile: on the
+// Arc 140T (driver 101.9033), in both runs with a cold driver cache and XeSS building on the pre-warm thread, the
+// autosave thread crashed inside the driver during that build, under the title screen; with the saves held off, none
+// of four such runs did. That the overlap is the cause is inferred from those six runs. A save waits for the build, up
+// to 7.6 s measured, on the autosave thread or at exit.
+void vk_pipeline_cache_hold(int on) {
+    if (on) plat_mutex_lock(&save_lock);
+    else plat_mutex_unlock(&save_lock);
+}
 
 void vk_pipeline_save(void) {
     if (P.ready) keys_flush();

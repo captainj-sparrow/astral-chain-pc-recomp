@@ -24,7 +24,7 @@
 #include "vk.h"
 #include "platform/platform.h"
 
-enum { STICK_MAX = 32767, STICK_DIR = 16384, TRIGGER_ON = 16384, RESCAN_MS = 1000 };
+enum { STICK_MAX = 32767, STICK_DIR = 16384, RESCAN_MS = 1000 };
 
 static PlatMutex lock = PLAT_MUTEX_INIT;
 static int state;                    // 0 not started, 1 running, -1 disabled or SDL failed
@@ -351,6 +351,17 @@ static float stick_dead_get(int s) {
     return stick_dead[s];
 }
 
+// input_pad_trigger_on, live (cfg_version). Up to 1.21.1 it was a fixed half of the travel, which made ZL and ZR wait
+// for a half-pulled trigger on the PC pads (the Switch's ZL and ZR are buttons).
+static int32_t trigger_on = -1;
+static unsigned trigger_on_seen;
+
+static int32_t trigger_on_get(void) {
+    unsigned ver = cfg_version();
+    if (trigger_on < 0 || ver != trigger_on_seen) trigger_on_seen = ver, trigger_on = input_pad_trigger_on();
+    return trigger_on;
+}
+
 // One gamepad stick through the dead zone; SDL's Y grows downwards, the Switch's upwards.
 static void stick(SDL_Gamepad *g, SDL_GamepadAxis ax, SDL_GamepadAxis ay, float dead, int32_t out[2]) {
     input_pad_stick(SDL_GetGamepadAxis(g, ax), -(int32_t)SDL_GetGamepadAxis(g, ay), dead, out);
@@ -523,7 +534,9 @@ static void binds_refresh(void) {
 
 // AC_TEST_PAD=<lx>,<ly>,<rx>,<ry> (test runs): an SDL virtual gamepad whose sticks rest at these raw SDL axis values
 // (-32768..32767, down is +y), attached before the first scan so it is the gamepad the game reads: drift and full
-// deflection go through the same mapping and dead zone as a real pad.
+// deflection go through the same mapping and dead zone as a real pad. With AC_INPUT set to anything but "none" (which
+// run_game.py sets) and AC_MENU_TEST it also shows that a pad resting past its dead zone still reaches the game after
+// the menu closed: "3500,0,0,0" rests at 10.7 %, past the default 8 %.
 static void test_pad_attach(void) {
     static SDL_Joystick *joy;   // kept open: a virtual joystick's axes are set through an open handle
     const char *e = cfg_get("AC_TEST_PAD");
@@ -583,8 +596,9 @@ static void pick(int32_t *x, int32_t *y, int32_t kx, int32_t ky) {
 static int pad_buttons(SDL_Gamepad *g, uint8_t pd[PAD_COUNT]) {
     if (!g || !SDL_GamepadConnected(g)) return 0;
     for (int p = PAD_SOUTH; p < PAD_ZL; p++) pd[p] = SDL_GetGamepadButton(g, pad_sdl[p]);
-    pd[PAD_ZL] = SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > TRIGGER_ON;
-    pd[PAD_ZR] = SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > TRIGGER_ON;
+    int32_t on = trigger_on_get();
+    pd[PAD_ZL] = SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > on;
+    pd[PAD_ZR] = SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > on;
     for (int p = PAD_ZR + 1; p < PAD_COUNT; p++) pd[p] = SDL_GetGamepadButton(g, pad_sdl[p]);   // false without paddles
     return 1;
 }
@@ -644,8 +658,33 @@ int input_pad_stick_percent(double pct[2]) {
     return ok;
 }
 
+int input_pad_trigger_percent(double pct[2]) {
+    int ok = 0;
+    pct[0] = pct[1] = 0;
+    plat_mutex_lock(&lock);
+    if (state == 1 && pad && SDL_GamepadConnected(pad)) {
+        pct[0] = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) * 100.0 / STICK_MAX;
+        pct[1] = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) * 100.0 / STICK_MAX;
+        ok = 1;
+    }
+    plat_mutex_unlock(&lock);
+    return ok;
+}
+
+// The keys and mouse buttons the last keyboard read saw down, a bit per KEY_* id (input_key_held): what the bindings
+// were applied to, so a mouse button counts only while the cursor is captured, and nothing while another window is in
+// front (poll_merged).
+_Static_assert(KEY_COUNT <= 128, "keys_seen holds 128 keys");
+static volatile int64_t keys_seen[2];
+static void keys_seen_set(uint64_t lo, uint64_t hi) {
+    __atomic_store_n(&keys_seen[0], (int64_t)lo, __ATOMIC_RELAXED);
+    __atomic_store_n(&keys_seen[1], (int64_t)hi, __ATOMIC_RELAXED);
+}
+
 // Under lock, the window in front: the keyboard's and the mouse's buttons and sticks ORed and picked into b, sl, sr.
-static void kb_read(uint64_t *b, int32_t sl[2], int32_t sr[2]) {
+// *tilt: bit 0 set when keys tilt the left stick, bit 1 the right one (input_release_held: with the walk key they
+// tilt it part way, under the direction bits).
+static void kb_read(uint64_t *b, int32_t sl[2], int32_t sr[2], int *tilt) {
     uint8_t down[KEY_COUNT] = {0};
     // Mouse buttons count only while the cursor is captured, and a button already held when the capture began
     // (the click that refocused the window) is ignored until it is released.
@@ -660,14 +699,19 @@ static void kb_read(uint64_t *b, int32_t sl[2], int32_t sr[2]) {
         if (!cap || mouse_ignore[k]) down[k] = 0;
     }
     was_captured = cap;
+    uint64_t seen[2] = {0, 0};
+    for (int k = 1; k < KEY_COUNT; k++) seen[k >> 6] |= (uint64_t)down[k] << (k & 63);
+    keys_seen_set(seen[0], seen[1]);
     *b |= input_map_buttons(down);
     int32_t k[2];
     walk_get();
     int walk = walk_key != KEY_NONE && down[walk_key];
     input_map_stick(down, 0, k);
+    *tilt |= (k[0] | k[1]) != 0;
     if (walk) k[0] = (int32_t)(k[0] * walk_scale), k[1] = (int32_t)(k[1] * walk_scale);
     pick(&sl[0], &sl[1], k[0], k[1]);
     input_map_stick(down, 1, k);
+    *tilt |= ((k[0] | k[1]) != 0) << 1;
     if (walk) k[0] = (int32_t)(k[0] * walk_scale), k[1] = (int32_t)(k[1] * walk_scale);
     pick(&sr[0], &sr[1], k[0], k[1]);
     mouse_camera(k);
@@ -675,10 +719,12 @@ static void kb_read(uint64_t *b, int32_t sl[2], int32_t sr[2]) {
 }
 
 // who: -1 the solo controller (the first gamepad, the keyboard and the mouse merged), 0 or 1 a co-op player
-// (player_pad). The recording follows the solo controller, or player 1 in co-op.
-static void poll_merged(int who, uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry) {
+// (player_pad). The recording follows the solo controller, or player 1 in co-op. *held: what the sources hold now, for
+// the release gate (input_release_held), read before the chords and the open menu take anything out of the sample.
+static void poll_merged(int who, uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry, uint32_t *held) {
     uint64_t b = 0;
     int32_t sl[2] = {0, 0}, sr[2] = {0, 0};
+    int tilt = 0;
     plat_mutex_lock(&lock);
     if (!state) start();
     if (state > 0) {
@@ -696,10 +742,15 @@ static void poll_merged(int who, uint64_t *buttons, int32_t *lx, int32_t *ly, in
             if ((b & ab) && (b & ab) != ab) b ^= ab;
             if ((b & xy) && (b & xy) != xy) b ^= xy;
         }
-        if (kb && ikb_foreground()) kb_read(&b, sl, sr);
+        if (kb && ikb_foreground()) kb_read(&b, sl, sr, &tilt);
+        else if (kb) keys_seen_set(0, 0);
     }
     script_apply(who > 0, &b, sl, sr);
     if (who == (players > 1 ? 0 : -1)) rec_apply(b, sl, sr);
+    uint64_t raw = b;
+    stick_bits(&raw, sl[0], sl[1], B_SL_LEFT);
+    stick_bits(&raw, sr[0], sr[1], B_SR_LEFT);
+    *held = input_release_held(raw, tilt);
     // Minus and Plus held together (gamepad or keys) open or close the menu and never reach the game; each source of
     // polls keeps its own memory of the chord
     static int combo_held_of[3], overlay_held_of[3];
@@ -710,57 +761,177 @@ static void poll_merged(int who, uint64_t *buttons, int32_t *lx, int32_t *ly, in
     int toggle = input_menu_gate(combo, menu_is_open(), &b, st);
     sl[0] = st[0], sl[1] = st[1], sr[0] = st[2], sr[1] = st[3];
     plat_mutex_unlock(&lock);
-    if (toggle) menu_toggle();
+    if (toggle) {
+        rt_log("input: Minus and Plus held together%s: the menu's chord", who < 0 ? "" : who ? " (player 2)" : " (player 1)");
+        menu_toggle();
+    }
     if (overlay) menu_perf_cycle();
     stick_bits(&b, sl[0], sl[1], B_SL_LEFT);
     stick_bits(&b, sr[0], sr[1], B_SR_LEFT);
     *buttons = b; *lx = sl[0]; *ly = sl[1]; *rx = sr[0]; *ry = sr[1];
 }
 
-// Text entry (swkbd_*.c): while it is open the game reads no input, as behind the keyboard applet; after it closes
-// the game reads none until every button and stick direction is released, so the press that closed it stays there.
-// g_block: 0 off, 1 text entry open, 2 closed, waiting for the release. The cursor is released while it is open.
-static volatile int32_t g_block;
-static volatile int32_t g_menu;   // the in-game menu, the same way (input_menu)
+// Text entry (swkbd_*.c) and the in-game menu (ui/menu.cpp): while one is open the game reads no input, as behind the
+// keyboard applet, and the cursor is released (for the menu's mouse). After it closes, what is held at that moment
+// stays hidden from the game until it is released, so the press that closed it stays there: the release gate
+// (input.h, which also says why the game no longer waits for a pad that reads all zero). g_wait holds one word per
+// source of polls (the solo controller, co-op's players 1 and 2: each waits for its own inputs), all set when either
+// closes: the inputs still waited for (INPUT_RELEASE_ALL's bits) and, above them, the log lines that close still
+// owes (NOTE_*). It is 0 the rest of the time, which is all a poll in play looks at. A poll only ever clears bits,
+// with one atomic AND whose old value says which lines are its own to write, so the game's thread and the cheats'
+// poll on the presenting thread (cheats.c) can share the solo controller's word.
+//
+// The lines, a handful per close and none in play, are there to tell from a player's log why a game would not react
+// after the menu: the first read after the close (how long after it, what is held and hidden, what the pad reads
+// before the dead zones and the trigger threshold, and what the game gets), the release of what was held, an input
+// still hidden 5 s later (nobody holds a button that long by intent: it reads pressed at rest, a trigger past
+// trigger_threshold or a stick past half its travel, or it is stuck), and the first button the game gets again. No
+// first read after a "menu: closed" line means the game does not read its pad; a button the game gets and does not
+// act on means the fault lies past this file.
+enum { NOTE_READ = 1u << 24, NOTE_BUTTON = 1u << 25, NOTE_LATE = 1u << 26 };
+#define RELEASE_LATE_NS 5000000000ull
+static volatile int32_t g_block;     // a text entry is open
+static volatile int32_t g_menu;      // the in-game menu is open (input_menu)
+static volatile uint32_t g_wait[3];  // by who + 1 (poll_merged)
+static volatile uint64_t g_closed_ns;   // plat_now_ns at the last close
 
 int input_cursor_allowed(void) {
     const char *in = cfg_get("AC_INPUT");
-    return g_block != 1 && g_menu != 1 && mouse_sens_get() > 0 && !(in && !strcmp(in, "none"));
+    return !g_block && !g_menu && mouse_sens_get() > 0 && !(in && !strcmp(in, "none"));
+}
+
+// The words first, the flag after: a poll that still finds the flag set reports nothing and leaves them alone.
+static void release_arm(void) {
+    __atomic_store_n(&g_closed_ns, plat_now_ns(), __ATOMIC_RELAXED);
+    for (int i = 0; i < 3; i++)
+        __atomic_store_n(&g_wait[i], INPUT_RELEASE_ALL | NOTE_READ | NOTE_BUTTON | NOTE_LATE, __ATOMIC_SEQ_CST);
 }
 
 void input_block(int on) {
-    plat_xchg32(&g_block, on ? 1 : 2);
+    if (!on) release_arm();
+    plat_xchg32(&g_block, on != 0);
     ikb_cursor_update();
 }
 
-// The in-game menu (ui/menu.cpp) blocks the game's input the same way: g_menu 0 closed, 1 open, 2 closed, waiting for
-// the release. The cursor is released while it is open, for the menu's mouse.
 void input_menu(int open) {
-    plat_xchg32(&g_menu, open ? 1 : 2);
+    if (!open) release_arm();
+    plat_xchg32(&g_menu, open != 0);
     if (!open) ikb_menu_closed();   // the capture before Esc comes back
     ikb_cursor_update();
 }
 
-// 1 while flag (g_block, g_menu) blocks the game's input; state 2 ends at the first poll with nothing held. A stick
-// axis counts as held as well: with the walk key the keyboard's sticks move part way without setting a direction bit, so
-// a gate that watched the buttons alone would let that movement through the moment the menu or the text entry closes.
-static int blocked(volatile int32_t *flag, uint64_t buttons, const int32_t *axes) {
-    int32_t k = *flag;
-    int held = buttons != 0;
-    for (int i = 0; i < 4; i++) held |= axes[i] != 0;
-    return k && !(k == 2 && !held && plat_cas32(flag, 0, 2) == 2);
+// The inputs of bits (buttons and stick direction bits) by name, "nothing" for none.
+static const char *input_names(uint32_t bits, char *out, size_t n) {
+    size_t len = 0;
+    out[0] = 0;
+#define NAME(s) (len += (size_t)snprintf(out + len, len < n ? n - len : 0, "%s%s", len ? ", " : "", s))
+    for (size_t i = 0; i < sizeof script_buttons / sizeof *script_buttons; i++)
+        if (bits >> script_buttons[i].bit & 1) NAME(script_buttons[i].name);
+    if (bits & 0xfu << B_SL_LEFT) NAME("the left stick");
+    if (bits & 0xfu << B_SR_LEFT) NAME("the right stick");
+#undef NAME
+    return len ? out : "nothing";
+}
+
+// What the gamepad of source who reads now, before the dead zones and the trigger threshold, and those.
+static void pad_reads_text(int who, char *out, size_t n) {
+    int kb;
+    plat_mutex_lock(&lock);
+    SDL_Gamepad *g = state != 1 ? NULL : who < 0 ? pad : player_pad(who, &kb);
+    if (g && SDL_GamepadConnected(g)) {
+        int32_t lx = SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_LEFTX), ly = SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_LEFTY);
+        int32_t rx = SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_RIGHTX), ry = SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_RIGHTY);
+        snprintf(out, n, "gamepad \"%s\" reads sticks %+d,%+d (%.1f %%) and %+d,%+d (%.1f %%), triggers %.1f %% and %.1f %%, "
+                 "before dead zones of %.0f %% and %.0f %% and a trigger threshold of %.0f %%", SDL_GetGamepadName(g),
+                 lx, ly, input_stick_percent(lx, ly), rx, ry, input_stick_percent(rx, ry),
+                 SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) * 100.0 / STICK_MAX,
+                 SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) * 100.0 / STICK_MAX,
+                 stick_dead_get(0) * 100.0, stick_dead_get(1) * 100.0, trigger_on_get() * 100.0 / STICK_MAX);
+    } else {
+        snprintf(out, n, "no gamepad%s", state == 1 ? "" : state > 0 ? " (SDL's gamepads did not start)" : " (input off)");
+    }
+    plat_mutex_unlock(&lock);
+}
+
+// The game's sample of source who after a close, w its word: without what was held at the close until that is
+// released, and the lines this poll owes.
+static __attribute__((noinline, cold)) void game_gate_closed(int who, uint32_t w, uint32_t held, uint64_t *buttons,
+                                                               int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry) {
+    int32_t st[4] = {*lx, *ly, *rx, *ry};
+    uint32_t n = input_release_gate(w & INPUT_RELEASE_ALL, held, buttons, st);
+    *lx = st[0], *ly = st[1], *rx = st[2], *ry = st[3];
+    uint64_t now = plat_now_ns(), closed = __atomic_load_n(&g_closed_ns, __ATOMIC_RELAXED);
+    double ms = now > closed ? (double)(now - closed) / 1e6 : 0;
+    uint32_t clear = (w & INPUT_RELEASE_ALL & ~n) | NOTE_READ;
+    if (*buttons) clear |= NOTE_BUTTON;
+    if (!n || ms >= RELEASE_LATE_NS / 1e6) clear |= NOTE_LATE;
+    if (!(w & clear)) return;
+    uint32_t old = __atomic_fetch_and(&g_wait[who + 1], ~clear, __ATOMIC_RELAXED), did = old & clear;
+    const char *whose = who < 0 ? "" : who ? " (player 2)" : " (player 1)";
+    char names[160], reads[320];
+    if (did & NOTE_READ) {
+        pad_reads_text(who, reads, sizeof reads);
+        rt_log("input: first read %.0f ms after the menu or the text entry closed%s: %s held%s; %s; the game gets "
+               "buttons %#llx and sticks %d,%d %d,%d", ms, whose, input_names(n, names, sizeof names),
+               n ? " (hidden from the game until released)" : "", reads, (unsigned long long)*buttons, st[0], st[1],
+               st[2], st[3]);
+    } else if ((did & INPUT_RELEASE_ALL) && !(old & ~clear & INPUT_RELEASE_ALL)) {
+        rt_log("input: what was held at the close is released %.0f ms after it%s", ms, whose);
+    }
+    if ((did & NOTE_LATE) && n)
+        rt_log("input: %.0f s after the menu or the text entry closed the game still does not get %s%s: held since then, "
+               "or reading pressed at rest (a trigger past trigger_threshold, a stick past half its travel); it comes "
+               "back once it reads released", ms / 1e3, input_names(n, names, sizeof names), whose);
+    if (did & NOTE_BUTTON)
+        rt_log("input: the game gets a button again %.0f ms after the close%s: %s", ms, whose,
+               input_names((uint32_t)*buttons & INPUT_RELEASE_ALL, names, sizeof names));
+}
+
+// The game's sample of source who (poll_merged): nothing while the text entry or the menu is open.
+static inline void game_gate(int who, uint32_t held, uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry) {
+    if (__builtin_expect(g_block | g_menu, 0)) {
+        *buttons = 0; *lx = *ly = *rx = *ry = 0;
+        return;
+    }
+    uint32_t w = __atomic_load_n(&g_wait[who + 1], __ATOMIC_RELAXED);
+    if (__builtin_expect(w != 0, 0)) game_gate_closed(who, w, held, buttons, lx, ly, rx, ry);
+}
+
+int input_key_held(int key) {
+    if (key <= KEY_NONE || key >= KEY_COUNT || (g_block | g_menu)) return 0;
+    return (int)((uint64_t)__atomic_load_n(&keys_seen[key >> 6], __ATOMIC_RELAXED) >> (key & 63) & 1);
 }
 
 void input_poll(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry) {
-    poll_merged(-1, buttons, lx, ly, rx, ry);
-    const int32_t axes[4] = {*lx, *ly, *rx, *ry};
-    int text = blocked(&g_block, *buttons, axes), menu = blocked(&g_menu, *buttons, axes);
-    if (!text && !menu) return;
-    *buttons = 0; *lx = *ly = *rx = *ry = 0;
+    uint32_t held;
+    poll_merged(-1, buttons, lx, ly, rx, ry, &held);
+    game_gate(-1, held, buttons, lx, ly, rx, ry);
 }
 
 void input_poll_ui(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry) {
-    poll_merged(-1, buttons, lx, ly, rx, ry);
+    uint32_t held;
+    poll_merged(-1, buttons, lx, ly, rx, ry, &held);
+}
+
+void input_poll_paused(int away) {
+    uint64_t b;
+    int32_t lx, ly, rx, ry;
+    uint32_t held;
+    if (away) {
+        // SDL sends what a pad's driver put off (a rumble stop included) and renews or expires a rumble only in here
+        plat_mutex_lock(&lock);
+        if (state == 1) SDL_UpdateGamepads();
+        plat_mutex_unlock(&lock);
+        return;
+    }
+    // each source keeps its own memory of the chords (poll_merged), so poll the ones the game polls: another would see
+    // a chord still held from opening the menu as a new press and close it
+    if (players > 1) {
+        poll_merged(0, &b, &lx, &ly, &rx, &ry, &held);
+        poll_merged(1, &b, &lx, &ly, &rx, &ry, &held);
+    } else {
+        poll_merged(-1, &b, &lx, &ly, &rx, &ry, &held);
+    }
 }
 
 void input_players(int n) {
@@ -787,16 +958,14 @@ unsigned input_players_connected(void) {
     return m;
 }
 
-// Player 1 lifts the text entry's and the menu's block (input_poll); player 2 reads nothing while either is set.
+// Each player behind the text entry and the menu as the solo controller is (game_gate), with a wait word of their own.
 int input_poll_player(int player, uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry) {
     int on = (int)(input_players_connected() >> (player & 1) & 1);
     *buttons = 0, *lx = *ly = *rx = *ry = 0;
     if (!on) return 0;
-    poll_merged(player & 1, buttons, lx, ly, rx, ry);
-    const int32_t axes[4] = {*lx, *ly, *rx, *ry};
-    int stop = player & 1 ? g_block || g_menu
-                          : blocked(&g_block, *buttons, axes) | blocked(&g_menu, *buttons, axes);
-    if (stop) *buttons = 0, *lx = *ly = *rx = *ry = 0;
+    uint32_t held;
+    poll_merged(player & 1, buttons, lx, ly, rx, ry, &held);
+    game_gate(player & 1, held, buttons, lx, ly, rx, ry);
     return 1;
 }
 
@@ -946,6 +1115,21 @@ int input_rumble_player(int player, uint16_t low, uint16_t high, uint32_t ms) {
     }
     plat_mutex_unlock(&lock);
     return ok;
+}
+
+// Not left to the 250 ms a send lasts (ov_input.c rumble_update): that is a quarter second of vibration on a still
+// picture. The triggers too, whatever rumble_triggers says now: it may have been switched off since the last send.
+void input_rumble_stop(void) {
+    plat_mutex_lock(&lock);
+    if (state == 1) {
+        SDL_Gamepad *const g[2] = {pad, pad2};
+        for (int i = 0; i < 2; i++)
+            if (g[i]) {
+                SDL_RumbleGamepad(g[i], 0, 0, 0);
+                SDL_RumbleGamepadTriggers(g[i], 0, 0, 0);
+            }
+    }
+    plat_mutex_unlock(&lock);
 }
 
 // SDL gamepad sensor axes (SDL_sensor.h, a gamepad held in front of you): x to the right, y up out of the face (lying

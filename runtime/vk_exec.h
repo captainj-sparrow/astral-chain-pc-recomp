@@ -262,6 +262,10 @@ void vk_exec_op_draw(VkExec *ex, uint32_t op, const void *payload);
 VkImageAspectFlags vk_exec_view_aspect(const VkTexImage *img, const view_t *v, int hv);
 VkImageView vk_exec_target_view(const VkTexImage *img, VkFormat format, VkImageViewType type, uint32_t aspect,
                                 uint32_t level, uint32_t base, uint32_t layers, int blocks);   // kept for the image's life
+// vk_photo.c: OP_PHOTO, the photo mode's copy of the game's output into a host buffer and the album image;
+// OP_PHOTO_FILL, the album image into the texture the game's photo passes drew into (photo.c).
+void vk_photo_copy(VkExec *ex, const p_photo *p);
+void vk_photo_fill(VkExec *ex, const p_photo_fill *p);
 // vk_exec_xfer.c: OP_COPY_B2B, OP_COPY_B2T, OP_COPY_T2B, OP_COPY_T2T, OP_CLEAR_TEX, OP_SIGNAL_EVENT, OP_REPORT_COUNTER,
 // OP_RESET_COUNTER, OP_RENDER_ENABLE, OP_RENDER_COND, OP_CLEAR_BUF.
 void vk_exec_op_xfer(VkExec *ex, uint32_t op, const void *payload);

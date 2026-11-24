@@ -573,9 +573,9 @@ msgstr "Портативный"
 msgid "UI_MENU_ASSUME_FOCUS"
 msgstr "Работать без фокуса"
 
-#. English: "On (the default), the game keeps running while you are in another window, and the keyboard stays quiet until the window is in front again. Off, it pauses when its window loses focus, as on the Switch when Home is pressed; a load interrupted that way can stop for good."
+#. English: "On (the default), the game keeps running while you are in another window, and the keyboard stays quiet until the window is in front again. Off, the whole game, sound included, pauses while its window is out of focus, as on the Switch when Home is pressed."
 msgid "UI_MENU_ASSUME_FOCUS_DESC"
-msgstr "Включено (по умолчанию): игра идёт, пока вы в другом окне, а клавиатура не действует, пока окно не вернётся на передний план. Выключено: игра встаёт на паузу, когда окно теряет фокус, как на Switch при нажатии Home; прерванная так загрузка может остановиться насовсем."
+msgstr "Включено (по умолчанию): игра идёт, пока вы в другом окне, а клавиатура не действует, пока окно не вернётся на передний план. Выключено: вся игра, вместе со звуком, стоит на паузе, пока окно не в фокусе, как на Switch при нажатии Home."
 
 #. English: "HUD"
 msgid "UI_MENU_HUD"
@@ -600,6 +600,34 @@ msgstr "Открыть папку модов"
 #. English: "Shows the folder the game loads mods from. It is created if it is missing."
 msgid "UI_MENU_MODS_OPEN_DESC"
 msgstr "Показывает папку, из которой игра загружает моды. Если её нет, она будет создана."
+
+#. English: "Downloadable content"
+msgid "UI_MENU_DLC_GROUP"
+msgstr "Дополнения"
+
+#. English: "Load DLC"
+msgid "UI_MENU_DLC"
+msgstr "Загружать DLC"
+
+#. English: "Loads the DLCs of the dlc folder next to astralchain.exe: trainings, texts and tutorial windows written by players as XML. They are built into the game's archives from your own game files at start and kept in your profile. Off: the game runs exactly as it is."
+msgid "UI_MENU_DLC_DESC"
+msgstr "Загружает DLC из папки dlc рядом с astralchain.exe: тренировки, тексты и окна обучения, написанные игроками в XML. При запуске они встраиваются в архивы игры из ваших собственных файлов игры и сохраняются в вашем профиле. Выключено: игра работает точно так же, как без них."
+
+#. English: "Loaded at this start: %s."
+msgid "UI_MENU_DLC_LOADED"
+msgstr "Загружены при этом запуске: %s."
+
+#. English: "No DLC was found in the dlc folder at this start."
+msgid "UI_MENU_DLC_NONE"
+msgstr "При этом запуске в папке dlc не найдено ни одного DLC."
+
+#. English: "Open DLC folder"
+msgid "UI_MENU_DLC_OPEN"
+msgstr "Открыть папку DLC"
+
+#. English: "Shows the folder the game loads DLCs from, one folder per DLC with its dlc.xml. It is created if it is missing."
+msgid "UI_MENU_DLC_OPEN_DESC"
+msgstr "Показывает папку, из которой игра загружает DLC, по одной папке на DLC с файлом dlc.xml. Если её нет, она будет создана."
 
 #. English: "Game files it replaces: %u. New files it adds: %u."
 msgid "UI_MENU_MODS_ROW_DESC"
@@ -673,13 +701,17 @@ msgstr "Общая громкость игры."
 msgid "UI_MENU_AUDIO_OUTPUT"
 msgstr "Вывод звука"
 
-#. English: "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output. Elsewhere the 5.1 mix is folded down to stereo."
+#. English: "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output. Elsewhere the 5.1 mix is folded down to stereo. Automatic picks 5.1 when the output takes it at start, stereo otherwise."
 msgid "UI_MENU_AUDIO_OUTPUT_DESC"
-msgstr "Что микширует игра. В 5.1 центр (голоса) и тыловые каналы выводятся отдельно; нужен выход 5.1 или 7.1. Иначе микс 5.1 сводится в стерео."
+msgstr "Что микширует игра. В 5.1 центр (голоса) и тыловые каналы выводятся отдельно; нужен выход 5.1 или 7.1. Иначе микс 5.1 сводится в стерео. «Автоматически» выбирает 5.1, если выход принимает его при запуске, иначе стерео."
 
-#. English: "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output, or a headset with spatial sound on: Windows Sonic for Headphones, Dolby Atmos for Headphones or DTS Headphone:X, in the device's properties in the Windows sound settings. Elsewhere the 5.1 mix is folded down to stereo."
+#. English: "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output, or a headset with spatial sound on: Windows Sonic for Headphones, Dolby Atmos for Headphones or DTS Headphone:X, in the device's properties in the Windows sound settings. Elsewhere the 5.1 mix is folded down to stereo. Automatic picks 5.1 when the output takes it at start, stereo otherwise."
 msgid "UI_MENU_AUDIO_OUTPUT_DESC_WIN"
-msgstr "Что микширует игра. В 5.1 центр (голоса) и тыловые каналы выводятся отдельно; нужен выход 5.1 или 7.1 либо гарнитура с включённым пространственным звуком: Windows Sonic for Headphones, Dolby Atmos for Headphones или DTS Headphone:X, в свойствах устройства в параметрах звука Windows. Иначе микс 5.1 сводится в стерео."
+msgstr "Что микширует игра. В 5.1 центр (голоса) и тыловые каналы выводятся отдельно; нужен выход 5.1 или 7.1 либо гарнитура с включённым пространственным звуком: Windows Sonic for Headphones, Dolby Atmos for Headphones или DTS Headphone:X, в свойствах устройства в параметрах звука Windows. Иначе микс 5.1 сводится в стерео. «Автоматически» выбирает 5.1, если выход принимает его при запуске, иначе стерео."
+
+#. English: "Automatic"
+msgid "UI_MENU_AUDIO_AUTO"
+msgstr "Автоматически"
 
 #. English: "Stereo"
 msgid "UI_MENU_AUDIO_STEREO"
@@ -988,6 +1020,18 @@ msgstr "Насколько нужно отклонить стик геймпад
 #. English: "stick now: %.0f %%"
 msgid "UI_MENU_STICK_DEADZONE_NOW"
 msgstr "стик сейчас: %.0f %%"
+
+#. English: "Trigger threshold"
+msgid "UI_MENU_TRIGGER_THRESHOLD"
+msgstr "Порог курков"
+
+#. English: "How far a gamepad trigger (ZL, ZR) is pulled before the game sees it pressed. 0 reacts to the slightest pull. Raise it if a trigger presses on its own: let go of it, read \"triggers now\" and set the threshold a few percent above it."
+msgid "UI_MENU_TRIGGER_THRESHOLD_DESC"
+msgstr "Насколько нужно нажать курок геймпада (ZL, ZR), чтобы игра засчитала нажатие. 0 реагирует на малейшее нажатие. Увеличьте, если курок нажимается сам: отпустите его, посмотрите «курки сейчас» и поставьте порог на несколько процентов выше."
+
+#. English: "triggers now: L %.0f %%, R %.0f %%"
+msgid "UI_MENU_TRIGGER_THRESHOLD_NOW"
+msgstr "курки сейчас: L %.0f %%, R %.0f %%"
 
 #. English: "Stick camera speed"
 msgid "UI_MENU_STICK_SENS"

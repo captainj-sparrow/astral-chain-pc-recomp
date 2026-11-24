@@ -21,6 +21,7 @@
 #include "host.h"
 #include "nvn_api.h"
 #include "nvn_hmap.h"
+#include "photo.h"
 #include "platform/platform.h"
 
 #define CMD_MAGIC MAGIC('C', 'M', 'D', 'B')
@@ -588,7 +589,75 @@ NVN_API(nvnCommandBufferUpdateUniformBuffer) {
 // ---------- CommandBuffer: render state, payloads of nvn_obj.h
 // void nvnCommandBufferSetRenderTargets(NVNcommandBuffer *cmd, int n, const NVNtexture *const *colors,
 // const NVNtextureView *const *color_views, const NVNtexture *depth, const NVNtextureView *depth_view)
+// The photo mode (photo.c). The game's output is the last of its window textures it set as a colour target, which at
+// the photo's passes is the frame's output after its scaling pass (the HUD comes after them); before the window
+// exists, an RGBA8 target of the game's render size stands in (the SMAA edge and weight targets have that size too,
+// but come before the blending pass that writes the output). The game's photo function, on its guest thread, goes
+// through the stages: 1 it asked for a photo (rt_photo_arm, which names the album texture its passes draw into), and
+// its next SetRenderTargets records the capture of the output (OP_PHOTO) before itself; 2 its passes are being
+// recorded; 3 the function is done (rt_photo_end), and its next SetRenderTargets records the album picture into the
+// album texture (OP_PHOTO_FILL), which the game shows for "save this picture?" and reads back for its JPEG.
+static const tex_t *photo_out;
+static const NVNtexture *photo_album;
+static uint64_t photo_win[4];
+static int photo_nwin;   // read until the window exists (the game makes one, at start)
+static unsigned photo_wh[2];
+static int photo_stage;
+static const void *photo_thread;
+static uint32_t photo_seq;
+
+static int photo_rgba8(const tex_t *t) {
+    int f = t->d.format;
+    return t->d.samples <= 1 && (f == NVN_FORMAT_RGBA8 || f == NVN_FORMAT_RGBA8_SRGB || f == NVN_FORMAT_BGRA8 ||
+                                 f == NVN_FORMAT_BGRA8_SRGB);
+}
+
+static int photo_is_output(const tex_t *t) {
+    if (photo_nwin <= 0) photo_nwin = nvn_window_textures(photo_win);
+    if (photo_nwin > 0) {
+        for (int i = 0; i < photo_nwin; i++)
+            if (t->serial == photo_win[i]) return 1;
+        return 0;
+    }
+    if (!photo_wh[0]) res_game_size(photo_wh);
+    return t->d.width == photo_wh[0] && t->d.height == photo_wh[1] && photo_rgba8(t);
+}
+
+void nvn_photo_stage(const void *thread, int stage, const void *album) {
+    if (stage == 1) {
+        const tex_t *t = album;
+        photo_thread = thread;
+        photo_album = t && t->magic == NVN_TEX_MAGIC && t->serial && photo_rgba8(t) ? album : NULL;
+        if (album && !photo_album)
+            rt_log("photo: the photo's album texture is not an initialized 8-bit RGBA texture at %p; its own picture "
+                   "shows", album);
+        __atomic_store_n(&photo_stage, 1, __ATOMIC_RELEASE);
+    } else if (stage == 3 && photo_stage == 2 && thread == photo_thread) {
+        photo_stage = 3;
+    }
+}
+
+// Before a SetRenderTargets of the photo function's thread is recorded.
+static void photo_before(const Cpu *c, cmd_t *o) {
+    if (c->thread != photo_thread) return;
+    if (photo_stage == 1) {
+        float shape;
+        photo_seq = photo_take(&shape);
+        if (!photo_out) {
+            photo_capture_failed(photo_seq, "no output target recorded yet");
+            photo_stage = 0;
+            return;
+        }
+        *REC(o, OP_PHOTO, p_photo) = (p_photo){photo_out, shape, photo_seq};
+        photo_stage = 2;
+    } else if (photo_stage == 3) {
+        if (photo_album) *REC(o, OP_PHOTO_FILL, p_photo_fill) = (p_photo_fill){tex_pin(photo_album), photo_seq};
+        photo_stage = 0;
+    }
+}
+
 NVN_API(nvnCommandBufferSetRenderTargets) {
+    if (__builtin_expect(__atomic_load_n(&photo_stage, __ATOMIC_ACQUIRE), 0)) photo_before(c, cmd_of(c));
     int n = (int)arg_x(c, 1);
     const NVNtexture *const *ct = arg_p(c, 2);
     const NVNtextureView *const *cv = arg_p(c, 3);
@@ -606,6 +675,7 @@ NVN_API(nvnCommandBufferSetRenderTargets) {
     }
     r->depth = tex_pin(dt);
     copy_view(&r->dview, &r->has_dview, dv);
+    if (n && r->color[0] && photo_is_output(r->color[0])) photo_out = r->color[0];
 }
 // void nvnCommandBufferClearColor(NVNcommandBuffer *cmd, int index, const float *rgba, int mask)
 NVN_API(nvnCommandBufferClearColor) {
@@ -1137,7 +1207,7 @@ const char *nvn_op_name(uint32_t op) {
         "BIND_VSTREAM", "BIND_VBUF", "BIND_UBO", "BIND_SSBO", "BIND_TEX", "BIND_SAMP", "STENCIL", "POLY_OFFSET", "DRAW",
         "DRAW_IDX", "DISPATCH", "BARRIER", "SET_TEX_POOL", "SET_SAMP_POOL", "COPY_B2T", "COPY_STRIDE", "BLEND_COLOR",
         "COPY_T2B", "BIND_IMG", "COPY_T2T", "RESET_COUNTER", "CLEAR_TEX", "DEPTH_CLAMP", "RENDER_ENABLE",
-        "RASTER_DISCARD", "RENDER_COND", "PRIM_RESTART", "DRAW_IDX_IND", "DISPATCH_IND", "CLEAR_BUF",
+        "RASTER_DISCARD", "RENDER_COND", "PRIM_RESTART", "DRAW_IDX_IND", "DISPATCH_IND", "CLEAR_BUF", "PHOTO", "PHOTO_FILL",
     };
     _Static_assert(sizeof names / sizeof *names == OP_COUNT_, "one name per op");
     return op < OP_COUNT_ ? names[op] : "?";

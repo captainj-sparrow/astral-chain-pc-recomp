@@ -551,6 +551,18 @@ uint64_t ldr_plt_stub(const char *module, const char *name) {
     return 0;
 }
 
+int ldr_jump_slots(const char *name, uint64_t *out, int max) {
+    int n = 0;
+    for (int i = 0; i < nmods; i++)
+        for (uint64_t j = 0; j < mods[i].njmprel; j++) {
+            uint32_t si = (uint32_t)(mods[i].jmprel[j].info >> 32);
+            if ((uint32_t)mods[i].jmprel[j].info != R_JUMP_SLOT || strcmp(sym_name(&mods[i], si), name)) continue;
+            if (n < max) out[n] = mods[i].pub.base + mods[i].jmprel[j].off;
+            n++;
+        }
+    return n < max ? n : max;
+}
+
 // ---- --probe-loader
 // No pinned per-version totals yet: the probe reports the measured import and relocation counts and checks the
 // structural invariants only (two modules main and sdk, DT_INIT in .text, init_array in the data image, no strong

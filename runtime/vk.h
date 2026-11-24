@@ -483,6 +483,7 @@ uint32_t vk_texture_slots_gen(void);
 uint64_t vk_texture_slot_token(int id);
 uint32_t vk_sampler_gen(void);                      // changes whenever a sampler slot is registered
 void vk_texture_gpu_written(const tex_t *t);        // rendered or copied into by the GPU: no re-upload from storage
+int vk_format_compressed(VkFormat f);               // a BC or ASTC block format (vkCmdClearColorImage takes none)
 void vk_texture_storage_bound_locked(const VkTexImage *img);   // bound as a storage image in the recording submission
 uint64_t vk_texture_last_write(const tex_t *t);    // timeline value of the newest submission recorded to write it; 0: none
 size_t vk_texture_texel_span(const tex_t *t, const view_t *v, const NVNcopyRegion *r, uint64_t row, uint64_t img);   // bytes ReadTexels spans; 0 for a bad region
@@ -657,6 +658,8 @@ VkPrimitiveTopology vk_pipeline_topology(int nvn_prim);   // quads -> triangle l
                                                           // rewrites those draws; polygon -> fan
 VkFormat vk_vertex_format(int nvn_format, int *type);     // attribute format (supported fallback), GFX_TYPE_* in *type
 PFN_vkCmdPushDescriptorSetKHR vk_pipeline_push_fn(void);  // after the first vk_pipeline_* call
+VkPipelineCache vk_pipeline_cache(void);   // pipeline-cache.bin's cache (driver-synchronised); VK_NULL_HANDLE: none
+void vk_pipeline_cache_hold(int on);       // 1: no save of the cache until 0 (a library building into it, vk_xess.c)
 // Descriptor update templates (after the first vk_pipeline_* call): NULL when templates are off (AC_DESC_TEMPLATE=0,
 // a device below Vulkan 1.1) or, for the push variant, vkCmdPushDescriptorSetWithTemplateKHR is missing.
 PFN_vkCmdPushDescriptorSetWithTemplateKHR vk_pipeline_push_tpl_fn(void);

@@ -9,8 +9,8 @@
 //   AC_LOCALE=<BCP 47 tag>           else the language for this locale ("pt-BR"), else the Windows user locale;
 //                                      a language the game does not ship becomes en-US
 //   AC_OPERATION_MODE=docked|handheld   operation and performance mode reported to the game (default docked)
-//   AC_ASSUME_FOCUS=1|0              1 (default, the Game tab's row): GetCurrentFocusState always reports in focus,
-//                                      whatever the window says; 0: out of focus while the window is, as on a Switch
+//   AC_ASSUME_FOCUS=1|0              1 (default, the Game tab's row): the game runs on out of focus; 0: it stands
+//                                      still then (pause.c). GetCurrentFocusState reports in focus either way
 //   AC_SHARED_FONTS=<dir>            nn::pl shared fonts (tools/extract_fonts.py output), default
 //                                      <romfs>/../../firmware/shared-fonts
 #include <ctype.h>
@@ -149,21 +149,14 @@ static void ov_focus_mode(Cpu *c) {
     rt_log("oe: focus handling mode %lld from %s", (long long)mode, caller(c, lr, sizeof lr));
 }
 
-// FocusState GetCurrentFocusState(): 1 in focus, 2 out of focus (nn::oe::FocusState). The game sets focus handling
-// mode 2: on a Switch the system then suspends the whole process while it is out of focus and sends Resume when it
-// returns. Here only the game's main thread stops (it waits in PopNotificationMessage for the next message) while its
-// loader threads, audio and clocks run on, and a load interrupted that way was seen to never finish (Linux, 1.4.3).
-// So AC_ASSUME_FOCUS=1, the default, keeps it at 1, as MacNativeGames does; with 0 it follows the window through
-// oe_set_focus. The caller of oe_set_focus also pushes OE_MSG_FOCUS_STATE_CHANGED.
-//
-// The setting is read on every focus change rather than once at start: a focus change is rare, the lookup is a short
-// walk of the loaded ini entries, and the Game tab's row then takes effect the next time the window is left, without
-// a restart.
-static volatile int32_t focus_state = 1;
-void oe_set_focus(int in_focus) {
-    plat_xchg32(&focus_state, in_focus || atoi(cfg_value("AC_ASSUME_FOCUS")) ? 1 : 2);
-}
-static void ov_focus_state(Cpu *c) { ret_x(c, (uint64_t)focus_state); }
+// FocusState GetCurrentFocusState(): 1 in focus, 2 out of focus, 3 in the background (nn::oe::FocusState). Always 1:
+// the game sets focus handling mode 3 (main+0x9c2848), AlwaysSuspend, in which the system suspends the whole process
+// whenever it is out of focus, so it only ever runs in focus, and it counts on that: told 2 or 3 it sets flags 0x26
+// in its status word (main+0x9c2ca0), which a few subsystems read, while its frames, sound and clocks run on.
+// With AC_ASSUME_FOCUS=0 pause.c does the suspending. OE_MSG_FOCUS_STATE_CHANGED still goes out at each change
+// (gfx_window_focus_changed). Resume (0x10) is not sent: the game's clocks stood still, so it has nothing to catch
+// up with, and the game acts on that message by itself in play (main+0x495600).
+static void ov_focus_state(Cpu *c) { ret_x(c, 1); }
 
 static volatile int32_t notify_resume, notify_operation, notify_performance;
 static void ov_resume_enabled(Cpu *c) { plat_xchg32(&notify_resume, (int32_t)(arg_x(c, 0) & 0xff)); }
@@ -1077,10 +1070,6 @@ HOST_OVERRIDE("_ZN2nn7account11GetNicknameEPNS0_8NicknameERKNS0_3UidE", ov_nickn
 // implement; the port has no friends service, so accept the call.
 static void ov_friends_initialize(Cpu *c) { c->x[0] = 0; }
 HOST_OVERRIDE("_ZN2nn7friends12UserPresence10InitializeERKNS_7account3UidE", ov_friends_initialize);
-
-// nn::fs::EnsureSaveData: the save mount creates the directory on first use (fs_host.c), so the check is a success.
-static void ov_ensure_save_data(Cpu *c) { c->x[0] = 0; }
-HOST_OVERRIDE("_ZN2nn2fs14EnsureSaveDataERKNS_7account3UidE", ov_ensure_save_data);
 
 HOST_OVERRIDE("_ZN2nn4time10InitializeEv", ov_time_initialize);
 HOST_OVERRIDE("_ZN2nn4time8FinalizeEv", ov_time_finalize);

@@ -118,6 +118,14 @@ void rt_wide_flat_w8(Cpu *c);       // wide pictures: the second flat camera (x1
 void rt_wide_anchor(Cpu *c);        // wide pictures: a layout block (its top part x19) moved to its edge
 void rt_hud_off23_x8(Cpu *c);       // no HUD: x8 = 0 for an instance (x23 / x22) of the gameplay HUD's layouts,
 void rt_hud_off22_x8(Cpu *c);       // which its draw then leaves out (resolution.c)
+void rt_photo_arm(Cpu *c);          // photo mode: the game records a photo's passes next; the output is captured (photo.c)
+void rt_photo_end(Cpu *c);          // photo mode: the photo's passes are recorded; the album texture gets the capture
+void rt_quest_if(Cpu *c);           // quest script: w20 = the answer of a condition the host evaluates (quest.c)
+void rt_quest_menu_index_w0(Cpu *c);   // training menu (quest.c): w0 = the row of value w0 (row 28 or an added row)
+void rt_quest_menu_count_w0(Cpu *c);   // w0 += the added rows when the main list is counted (w19 = 0)
+void rt_quest_menu_quest_w19(Cpu *c), rt_quest_menu_quest_w20(Cpu *c);   // the quest of the chosen value (w8 + 1)
+void rt_quest_window(Cpu *c);   // tutorial window lookup (quest.c): a window of the port is found (w21 = -1, w11 = 1)
+void rt_quest_text(Cpu *c);     // text lookup (quest.c): a text of the port with its {ACTION} fields filled
 // game resolution (resolution.c, set res): the output width or height from the patch page into a register, the
 // ladder's cmp w0 against the width (returns packed NZCV), and the render-target budget for that size into w8
 void rt_res_w8(Cpu *c), rt_res_h8(Cpu *c), rt_res_w9(Cpu *c), rt_res_h9(Cpu *c), rt_res_h22(Cpu *c);

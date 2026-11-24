@@ -574,9 +574,9 @@ msgstr "掌机模式"
 msgid "UI_MENU_ASSUME_FOCUS"
 msgstr "后台保持运行"
 
-#. English: "On (the default), the game keeps running while you are in another window, and the keyboard stays quiet until the window is in front again. Off, it pauses when its window loses focus, as on the Switch when Home is pressed; a load interrupted that way can stop for good."
+#. English: "On (the default), the game keeps running while you are in another window, and the keyboard stays quiet until the window is in front again. Off, the whole game, sound included, pauses while its window is out of focus, as on the Switch when Home is pressed."
 msgid "UI_MENU_ASSUME_FOCUS_DESC"
-msgstr "开启（默认）时，切到其他窗口游戏仍会继续运行，但键盘要等窗口回到前台才会响应。关闭时，窗口失去焦点即暂停，如同在 Switch 上按 Home 键；这样被打断的读取可能会永久卡住。"
+msgstr "开启（默认）时，切到其他窗口游戏仍会继续运行，但键盘要等窗口回到前台才会响应。关闭时，窗口失去焦点期间整个游戏（包括声音）都会暂停，如同在 Switch 上按 Home 键。"
 
 #. English: "HUD"
 msgid "UI_MENU_HUD"
@@ -601,6 +601,34 @@ msgstr "打开模组文件夹"
 #. English: "Shows the folder the game loads mods from. It is created if it is missing."
 msgid "UI_MENU_MODS_OPEN_DESC"
 msgstr "显示游戏加载模组的文件夹。不存在时会创建它。"
+
+#. English: "Downloadable content"
+msgid "UI_MENU_DLC_GROUP"
+msgstr "追加内容"
+
+#. English: "Load DLC"
+msgid "UI_MENU_DLC"
+msgstr "加载 DLC"
+
+#. English: "Loads the DLCs of the dlc folder next to astralchain.exe: trainings, texts and tutorial windows written by players as XML. They are built into the game's archives from your own game files at start and kept in your profile. Off: the game runs exactly as it is."
+msgid "UI_MENU_DLC_DESC"
+msgstr "加载 astralchain.exe 旁边 dlc 文件夹中的 DLC：玩家用 XML 编写的训练、文本和教程窗口。启动时会用你自己的游戏文件把它们构建进游戏的存档包，并保存在你的配置文件夹中。关闭：游戏完全保持原样运行。"
+
+#. English: "Loaded at this start: %s."
+msgid "UI_MENU_DLC_LOADED"
+msgstr "本次启动已加载：%s。"
+
+#. English: "No DLC was found in the dlc folder at this start."
+msgid "UI_MENU_DLC_NONE"
+msgstr "本次启动时 dlc 文件夹中没有找到 DLC。"
+
+#. English: "Open DLC folder"
+msgid "UI_MENU_DLC_OPEN"
+msgstr "打开 DLC 文件夹"
+
+#. English: "Shows the folder the game loads DLCs from, one folder per DLC with its dlc.xml. It is created if it is missing."
+msgid "UI_MENU_DLC_OPEN_DESC"
+msgstr "显示游戏加载 DLC 的文件夹，每个 DLC 一个文件夹，内含 dlc.xml。不存在时会创建它。"
 
 #. English: "Game files it replaces: %u. New files it adds: %u."
 msgid "UI_MENU_MODS_ROW_DESC"
@@ -674,13 +702,17 @@ msgstr "游戏的主音量。"
 msgid "UI_MENU_AUDIO_OUTPUT"
 msgstr "音频输出"
 
-#. English: "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output. Elsewhere the 5.1 mix is folded down to stereo."
+#. English: "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output. Elsewhere the 5.1 mix is folded down to stereo. Automatic picks 5.1 when the output takes it at start, stereo otherwise."
 msgid "UI_MENU_AUDIO_OUTPUT_DESC"
-msgstr "游戏混音的声道。5.1 会把中置（人声）和环绕声输出到各自的声道，需要 5.1 或 7.1 输出。否则 5.1 混音会缩混为立体声。"
+msgstr "游戏混音的声道。5.1 会把中置（人声）和环绕声输出到各自的声道，需要 5.1 或 7.1 输出。否则 5.1 混音会缩混为立体声。“自动”会在启动时输出支持 5.1 时选择 5.1，否则选择立体声。"
 
-#. English: "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output, or a headset with spatial sound on: Windows Sonic for Headphones, Dolby Atmos for Headphones or DTS Headphone:X, in the device's properties in the Windows sound settings. Elsewhere the 5.1 mix is folded down to stereo."
+#. English: "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output, or a headset with spatial sound on: Windows Sonic for Headphones, Dolby Atmos for Headphones or DTS Headphone:X, in the device's properties in the Windows sound settings. Elsewhere the 5.1 mix is folded down to stereo. Automatic picks 5.1 when the output takes it at start, stereo otherwise."
 msgid "UI_MENU_AUDIO_OUTPUT_DESC_WIN"
-msgstr "游戏混音的声道。5.1 会把中置（人声）和环绕声输出到各自的声道，需要 5.1 或 7.1 输出，或开启了空间音效的耳机：Windows Sonic for Headphones、Dolby Atmos for Headphones 或 DTS Headphone:X，在 Windows 声音设置的设备属性中开启。否则 5.1 混音会缩混为立体声。"
+msgstr "游戏混音的声道。5.1 会把中置（人声）和环绕声输出到各自的声道，需要 5.1 或 7.1 输出，或开启了空间音效的耳机：Windows Sonic for Headphones、Dolby Atmos for Headphones 或 DTS Headphone:X，在 Windows 声音设置的设备属性中开启。否则 5.1 混音会缩混为立体声。“自动”会在启动时输出支持 5.1 时选择 5.1，否则选择立体声。"
+
+#. English: "Automatic"
+msgid "UI_MENU_AUDIO_AUTO"
+msgstr "自动"
 
 #. English: "Stereo"
 msgid "UI_MENU_AUDIO_STEREO"
@@ -989,6 +1021,18 @@ msgstr "手柄摇杆要推动多远游戏才会响应。如果角色或视角会
 #. English: "stick now: %.0f %%"
 msgid "UI_MENU_STICK_DEADZONE_NOW"
 msgstr "当前摇杆：%.0f %%"
+
+#. English: "Trigger threshold"
+msgid "UI_MENU_TRIGGER_THRESHOLD"
+msgstr "扳机触发阈值"
+
+#. English: "How far a gamepad trigger (ZL, ZR) is pulled before the game sees it pressed. 0 reacts to the slightest pull. Raise it if a trigger presses on its own: let go of it, read \"triggers now\" and set the threshold a few percent above it."
+msgid "UI_MENU_TRIGGER_THRESHOLD_DESC"
+msgstr "手柄扳机（ZL、ZR）要按下多深游戏才算按下。0 表示轻轻一按就响应。如果扳机会自己触发，请调高此值：松开扳机，查看“当前扳机”，把阈值设得比它高几个百分点。"
+
+#. English: "triggers now: L %.0f %%, R %.0f %%"
+msgid "UI_MENU_TRIGGER_THRESHOLD_NOW"
+msgstr "当前扳机：L %.0f %%，R %.0f %%"
 
 #. English: "Stick camera speed"
 msgid "UI_MENU_STICK_SENS"

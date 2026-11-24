@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DLC: PC controls. A training added to the hub's training menu that teaches the port's keyboard and mouse controls.
+  It holds no file of the game: the port builds it into the game's archives at start from the player's own files
+  (runtime/dlc.c describes this file; docs/dlc.md how to write a DLC).
+-->
+<dlc>
+  <!-- quest/c0f0/QuestData.xml is the script; the other files of the quest are those of the IRIS training (c00b),
+       whose "training started" and "training finished" notices the script shows. -->
+  <quest id="c0f0" base="c00b"/>
+
+  <!-- The row of the training menu: the value 2 is free in the game's menu (as 7 is). -->
+  <training value="2" text="MENU_TUTO_NAME_DLC_00" quest="c0f0"/>
+  <text file="menu_text" id="MENU_TUTO_NAME_DLC_00">
+    <t>DLC: PC controls</t>
+  </text>
+
+  <!-- The tutorial window af00: its title, and per page (01) a headline and a help text. {ZL} and {ZR} show the
+       inputs bound to those buttons, as the Controls tab of the port's menu labels them. -->
+  <window number="af00"/>
+  <text file="Core_text" id="CORE_TUTO_W_TITLE_af00">
+    <t>PC controls</t>
+    <t lang="EUfr">Commandes PC</t>
+  </text>
+  <text file="Core_text" id="CORE_TUTO_W_NAME_af00_01" live="1">
+    <t>{ZL} + {ZR}</t>
+  </text>
+  <text file="Core_text" id="CORE_TUTO_W_HELP_af00_01" live="1">
+    <t>Press ZL and ZR at the same time. The inputs follow\nthe Controls tab of the settings.</t>
+    <t lang="EUfr">Appuyez en même temps sur ZL et ZR. Les touches\nsuivent l'onglet Controls des réglages.</t>
+  </text>
+</dlc>

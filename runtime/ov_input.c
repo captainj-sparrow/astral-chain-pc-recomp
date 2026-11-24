@@ -46,6 +46,9 @@ static int64_t sample;
 // by input_poll_player (coop_player).
 static uint32_t ids_supported = ~0u;   // bit per id: players 1-8 bits 0-7, other (0x10) bit 8, handheld (0x20) bit 9
 static int coop;                       // lock
+static volatile int64_t pad_buttons;   // the one player's buttons at the game's last read (ov_pad_buttons)
+
+uint64_t ov_pad_buttons(void) { return (uint64_t)__atomic_load_n(&pad_buttons, __ATOMIC_RELAXED); }
 
 static uint32_t id_bit(uint32_t id) { return id < 8 ? 1u << id : id == 0x10 ? 1u << 8 : id == 0x20 ? 1u << 9 : 0; }
 
@@ -199,6 +202,7 @@ static int npad_state(uint32_t want, uint32_t id, NpadState *s) {
     if (live) {
         s->attributes = ATTR_CONNECTED;
         input_poll(&s->buttons, &s->lx, &s->ly, &s->rx, &s->ry);
+        __atomic_store_n(&pad_buttons, (int64_t)s->buttons, __ATOMIC_RELAXED);
     }
     if (player >= 0) live = coop_player(player, want == STYLE_JOY_RIGHT, s);
     return live;
@@ -292,11 +296,12 @@ static void ov_initialize_touch(Cpu *c) {
     ret_x(c, 0);
 }
 
-// int GetTouchScreenState<TouchCount>(TouchScreenState<T> *out): no touches.
+// void GetTouchScreenState<16>(TouchScreenState<16> *out): no touches. The state starts {s64 sampling number, s32
+// count, s32 reserved} and the game reads the count at +8 (main+0x9adb44).
 static void ov_touch_states(Cpu *c) {
     uint32_t *out = arg_p(c, 0);
     if (!out) rt_fatal("nn::hid::GetTouchScreenState: null output");
-    *out = 0;
+    memset(out, 0, 16);
     ret_x(c, 0);
 }
 
@@ -493,8 +498,9 @@ static float light_share(float f) { return f > 160 ? (f < 320 ? log2f(f / 160) :
 // Switch HD rumble -> SDL_RumbleGamepad. Each side's two bands split by frequency between the heavy (low) and the light
 // (high) motor (light_share) and add up as energy per motor (root of the summed squares); the stronger side drives each
 // motor. A side the game has not updated for 250 ms is silent. Each send lasts 250 ms and is renewed every 50 ms while
-// the game streams, so the pad stops by itself when the game stops sending (pause, freeze). Under vib_lock. p: 0 the
-// solo controller or co-op player 1, 1 player 2 (whose gamepad input.c picks, input_rumble_player).
+// the game streams, so the pad stops by itself when the game stops sending (a freeze; a pause stops it at once,
+// input_rumble_stop), as long as SDL_UpdateGamepads goes on being called: only that expires a send. Under vib_lock.
+// p: 0 the solo controller or co-op player 1, 1 player 2 (whose gamepad input.c picks, input_rumble_player).
 static void rumble_update(uint64_t now, int p) {
     float heavy = 0, light = 0;
     rumble_cfg();

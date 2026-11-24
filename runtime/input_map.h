@@ -138,6 +138,9 @@ void input_pad_stick(int32_t x, int32_t y, float dead, int32_t out[2]);
 // The dead zone of gamepad stick 0 (left) or 1 (right) for input_pad_stick, as a fraction of full deflection:
 // AC_LSTICK_DEADZONE or AC_RSTICK_DEADZONE when set, else AC_STICK_DEADZONE (both sticks), percent clamped to 0..50.
 float input_pad_deadzone(int stick);
+// The raw value (0..32767) a gamepad trigger must exceed for ZL or ZR to read held: AC_TRIGGER_THRESHOLD, percent of
+// the trigger's travel clamped to 0..95 (0: any movement off the rest).
+int32_t input_pad_trigger_on(void);
 // How far a stick (x, y in -32768..32767) is from the centre, in percent of full deflection (100 at an axis's end; a
 // square gate's corner reads more).
 double input_stick_percent(int32_t x, int32_t y);

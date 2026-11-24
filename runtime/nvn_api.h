@@ -70,6 +70,9 @@ extern GfxStats gfx_counters;                              // behind gfx_stats()
 int nvn_tex_live_at(const void *mem, tex_t *out);
 // Byte offset of a view's first level and layer inside the texture storage (nvnTextureGetViewOffset); v may be NULL.
 uint64_t nvn_tex_view_offset(const tex_t *t, const view_t *v);
+// The serials of the textures of the window the game initialized last (nvnWindowInitialize), the ones it presents;
+// 0 before it. The photo mode (nvn_api_cmd.c) knows the game's output by them.
+int nvn_window_textures(uint64_t serials[4]);
 
 // ---- nvn_api_cmd.c, nvn_ext.c: command buffers and their replay contract
 // A command handle (what QueueSubmitCommands receives) points at a host copy of one recording: a flat sequence of

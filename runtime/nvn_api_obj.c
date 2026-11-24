@@ -17,6 +17,7 @@
 #include "nvn_hmap.h"
 #include "nvn_tex.h"
 #include "platform/platform.h"
+#include "pause.h"
 
 // ---------- Descriptor pools
 // NVNboolean nvnTexturePoolInitialize(NVNtexturePool *tp, const NVNmemoryPool *p, ptrdiff_t offset, int n)
@@ -571,6 +572,18 @@ NVN_API(nvnWindowBuilderSetDefaults) {
 }
 NVN_API(nvnWindowBuilderSetDevice) { WB(c)->dev = arg_p(c, 1); }
 NVN_API(nvnWindowBuilderSetNativeWindow) { WB(c)->native = arg_p(c, 1); }
+// The serials of the window textures (nvn_api.h nvn_window_textures).
+static PlatMutex win_lock = PLAT_MUTEX_INIT;
+static uint64_t win_serials[4];
+static int win_n;
+
+int nvn_window_textures(uint64_t serials[4]) {
+    plat_mutex_lock(&win_lock);
+    int n = win_n;
+    memcpy(serials, win_serials, sizeof win_serials);
+    plat_mutex_unlock(&win_lock);
+    return n;
+}
 // void nvnWindowBuilderSetTextures(NVNwindowBuilder *b, int n, NVNtexture *const *textures)
 NVN_API(nvnWindowBuilderSetTextures) {
     win_builder_t *b = WB(c);
@@ -617,6 +630,11 @@ NVN_API(nvnWindowInitialize) {
         return;
     }
     memcpy(o->tex, s->tex, sizeof o->tex);
+    plat_mutex_lock(&win_lock);
+    win_n = 0;
+    for (int i = 0; i < o->ntex; i++)
+        if (o->tex[i]) win_serials[win_n++] = ((const tex_t *)o->tex[i])->serial;
+    plat_mutex_unlock(&win_lock);
     const tex_t *t0 = (const tex_t *)o->tex[0];
     NVN_LOG("WindowInitialize %d textures, interval %d, first %ux%u format %#x", o->ntex, o->interval,
             t0 ? t0->d.width : 0, t0 ? t0->d.height : 0, t0 ? t0->d.format : 0);
@@ -722,6 +740,7 @@ NVN_API(nvnQueueAcquireTexture) {
 // time comes from the pacer: the back end's present thread holds the host present until then (back-edge pacing, as the
 // Switch's display flips at vblank), so the present cadence does not follow the replay time; one period later the
 // image is free for the next acquire. Added latency: the slack of the frame (period minus its work), as on the Switch.
+// A pause (pause.c) is taken here, last: the frame is whole and the thread holds no core.
 NVN_API(nvnQueuePresentTexture) {
     win_t *o = arg_p(c, 1);
     int idx = (int)arg_x(c, 2);
@@ -738,4 +757,5 @@ NVN_API(nvnQueuePresentTexture) {
     o->avail[idx] = slot + period;
     frame_step_present(slot, o->interval);   // frame_rate.c: the real-time step follows the display times
     rt_frame_presented(t, o->presents);
+    pause_frame(t);
 }

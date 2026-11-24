@@ -1,6 +1,6 @@
 // Shared by the system overrides: runtime/ov_system.c, ov_input.c, ov_media.c and ov_gfx.c, and their probe.
-// oe_push_message, oe_set_focus and ov_nv_state are in gfx.h (the window posts focus messages, the NVN layer
-// allocates through the recorded callbacks).
+// oe_push_message and ov_nv_state are in gfx.h (the window posts focus messages, the NVN layer allocates through the
+// recorded callbacks).
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
@@ -11,6 +11,9 @@
 // ---- ov_system.c
 int ov_handheld(void);                     // AC_OPERATION_MODE=handheld (default docked); fatal on another value
 const char *ov_language(void);             // the game's language, a Switch language code ("en-US", "zh-Hans", ...)
+
+// ---- ov_input.c
+uint64_t ov_pad_buttons(void);             // the one player's npad buttons at the game's last read (any thread)
 
 // ---- ov_settings.c
 void settings_server_handler(IpcSession *s, const IpcRequest *rq, IpcResponse *rs);   // "set" (settings:u)

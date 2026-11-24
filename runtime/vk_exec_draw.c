@@ -411,6 +411,44 @@ static void dummies_init(void) {
 
 static void twins_release(VkCtx *c);
 
+// Validation layer only: the push set it tracks is dropped before the first push of each graphics layout.
+// The layer (SDK 1.4.363, PipelineLayoutCompatDef::operator==) takes any two INDEPENDENT_SETS layouts as equal, so
+// vkCmdPushDescriptorSetKHR keeps the push set it made for an earlier layout and drops the writes to bindings that
+// layout lacks: a false VUID-vkCmdDrawIndexed-None-08114, then an access violation inside the layer.
+// The same equality keys the layer's dictionary of layout ids, so two of our layouts share one id when their hashes,
+// made from heap addresses, collide. A bind at set 1 disturbs set 0 only when the ids differ, which is why binding set 1
+// first, the workaround until 2026-11-22, let some runs through (the opening movie's skip, the motorway's first cut).
+// A layout without INDEPENDENT_SETS never compares equal to one with it: a set bound at 0 with such a layout makes the
+// push after it get a new set in the layer, whatever the ids are. It disturbs both sets, so the caller records both.
+static struct {
+    VkDescriptorSetLayout sl;
+    VkPipelineLayout layout;
+    VkDescriptorPool pool;
+    VkDescriptorSet set;
+} LR;
+
+static void layer_push_reset(VkCommandBuffer cb) {
+    if (!LR.set) {
+        VkDevice d = vk_ctx()->device;
+        VkDescriptorSetLayoutCreateInfo si = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+        VkPipelineLayoutCreateInfo li = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1,
+                                         .pSetLayouts = &LR.sl};
+        VkDescriptorPoolSize sz = {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1};
+        VkDescriptorPoolCreateInfo pi = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = 1,
+                                         .poolSizeCount = 1, .pPoolSizes = &sz};
+        VkDescriptorSetAllocateInfo ai = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, .descriptorSetCount = 1,
+                                          .pSetLayouts = &LR.sl};
+        if (vkCreateDescriptorSetLayout(d, &si, NULL, &LR.sl) != VK_SUCCESS ||
+            vkCreatePipelineLayout(d, &li, NULL, &LR.layout) != VK_SUCCESS ||
+            vkCreateDescriptorPool(d, &pi, NULL, &LR.pool) != VK_SUCCESS)
+            rt_fatal("vk: the validation layer's push reset set could not be made");
+        ai.descriptorPool = LR.pool;
+        if (vkAllocateDescriptorSets(d, &ai, &LR.set) != VK_SUCCESS)
+            rt_fatal("vk: the validation layer's push reset set could not be allocated");
+    }
+    vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, LR.layout, 0, 1, &LR.set, 0, NULL);
+}
+
 // Releases the stand-ins and the depth twins. The device must be idle; the game path leaves them to process exit like
 // the pipelines.
 void vk_exec_draw_shutdown(void) {
@@ -431,6 +469,12 @@ void vk_exec_draw_shutdown(void) {
     nvn_hm_clear(&rs_lists, free);
     rs_last = NULL, rs_last_l = NULL;
     for (int i = 0; i < nspare_pool; i++) vkDestroyDescriptorPool(c->device, spare_pool[i], NULL);
+    if (LR.sl) {   // layer_push_reset's
+        vkDestroyDescriptorPool(c->device, LR.pool, NULL);
+        vkDestroyPipelineLayout(c->device, LR.layout, NULL);
+        vkDestroyDescriptorSetLayout(c->device, LR.sl, NULL);
+        memset(&LR, 0, sizeof LR);
+    }
     for (int i = 0; i < nspare_chunk; i++) vmaDestroyBuffer(c->vma, spare_chunk[i].buf, spare_chunk[i].alloc);
     nspare_pool = nspare_chunk = 0;
     vk_usnap_shutdown();
@@ -2121,31 +2165,20 @@ static void bind_resources(VkExec *ex, const VkPipeInfo *info) {
     // descriptor is the one past the last: without this, set 0's push size reads as 0 and a set whose update template
     // still expects its descriptors is pushed with nothing (the driver then reads whatever follows the packet).
     if (n_sets == 2 && lo[1] == info->n_bindings) d0[1] = nd;
-    // Under the validation layer, a new graphics layout binds set 1 before set 0 is pushed or bound. The layer (SDK
-    // 1.4.363, PipelineLayoutCompatDef::operator==) takes any two INDEPENDENT_SETS layouts as compatible, so
-    // vkCmdPushDescriptorSetKHR keeps the push set it made for an earlier layout and drops writes to bindings that
-    // layout lacks (false VUID-vkCmdDrawIndexed-None-08114, then an access violation inside the layer). A bind at set 1
-    // disturbs set 0 by its canonical id, which drops the layer's push set: the push after it gets a new one.
-    int set1_first = 0;
     if (gfx && info->layout != B.ds_layout) {   // another layout: sets bound before may be disturbed
         B.ds_layout = info->layout;
         B.ds_bound[0] = B.ds_bound[1] = VK_NULL_HANDLE;
         B.ds_pushed[0] = B.ds_pushed[1] = 0;
-        set1_first = n_sets == 2 && vk_ctx()->validation;
+        if ((info->push || info->push1) && vk_ctx()->validation) {
+            layer_push_reset(ex->cb);
+            RS.cmds++;
+        }
     }
-    for (uint32_t k = 0; k < n_sets; k++) {
-        uint32_t s = set1_first ? 1 - k : k, i0 = lo[s], i1 = hi[s];
+    for (uint32_t s = 0; s < n_sets; s++) {
+        uint32_t i0 = lo[s], i1 = hi[s];
         const VkDescSlot *ds = &d[d0[s]];
         uint32_t dbytes = (uint32_t)(((s + 1 < n_sets ? d0[s + 1] : nd) - d0[s]) * sizeof *d);
-        if (s && i1 == i0) {               // no fragment stage: set 1 is empty and unused
-            if (set1_first) {              // bound only to drop the layer's push set (comment above)
-                VkDescriptorSet set = alloc_set(ex, info->set_layout1);
-                vkCmdBindDescriptorSets(ex->cb, info->bind_point, info->layout, 1, 1, &set, 0, NULL);
-                B.ds_bound[1] = set, B.ds_pushed[1] = 0;
-                RS.cmds++;
-            }
-            continue;
-        }
+        if (s && i1 == i0) continue;       // no fragment stage: set 1 is empty and unused
         if (s ? info->push1 : info->push) {
             uint32_t n = gfx && push_skip_on() ? dbytes : 0;
             if (n && B.ds_pushed[s] && DS.pn[s] == n && !memcmp(DS.psig[s], ds, n)) {
@@ -2772,9 +2805,7 @@ static int mo_desc(VkExec *ex, const VkPipeInfo *info, MoDraw *q) {
         uint32_t i1 = i0, k1 = k0;
         while (i1 < info->n_bindings && (n_sets == 1 || info->bindings[i1].set == s))
             k1 += info->bindings[i1].count ? info->bindings[i1].count : 1, i1++;
-        // an empty fragment set too under the validation layer: mo_emit binds it ahead of set 0's push (see there)
-        int empty1 = s == 1 && i1 == i0 && info->push && vk_ctx()->validation;
-        if ((i1 > i0 || empty1) && !(s ? info->push1 : info->push)) {
+        if (i1 > i0 && !(s ? info->push1 : info->push)) {
             VkDescriptorSetLayout sl = s ? info->set_layout1 : info->set_layout;
             if (MQ.aset[s] && MQ.aset_layout[s] == sl && MQ.aset_n[s] == k1 - k0 &&
                 !memcmp(MQ.aset_d[s], d + k0, (k1 - k0) * sizeof *d)) {
@@ -2854,18 +2885,16 @@ static void mo_emit(VkCommandBuffer cb) {
                 k += info->bindings[i].count ? info->bindings[i].count : 1, i++;
             hi[s] = i, khi[s] = k;
         }
-        // Under the validation layer, a new layout binds set 1 before set 0 is pushed, as the replay's own draws do
-        // (bind_resources): the layer takes any two INDEPENDENT_SETS layouts as compatible and would push into the set
-        // it made for the layout before, which lacks this one's bindings (a crash inside the layer at the first
-        // motion draw). The bind at set 1 drops that push set. mo_desc allocated an empty set 1 for this.
-        int set1_first = validation && n_sets == 2 && info->push && info->layout != last_layout;
-        last_layout = info->layout;
-        for (uint32_t j = 0; j < n_sets && j < 2; j++) {
-            uint32_t s = set1_first ? 1 - j : j, i0 = lo[s], i1 = hi[s], k0 = klo[s], k1 = khi[s];
-            if (s && i1 == i0 && set1_first && q->set[1]) {   // empty: bound only to drop the layer's push set
-                vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, info->layout, 1, 1, &q->set[1], 0, NULL);
-                bound[1] = q->set[1], lay[1] = info->layout, pinfo[1] = info, pdesc[1] = -1;
-            } else if (i1 > i0) {
+        if (info->layout != last_layout) {
+            last_layout = info->layout;
+            if (validation && (info->push || info->push1)) {   // as bind_resources (layer_push_reset)
+                layer_push_reset(cb);
+                lay[0] = lay[1] = VK_NULL_HANDLE, bound[0] = bound[1] = VK_NULL_HANDLE;   // both disturbed
+            }
+        }
+        for (uint32_t s = 0; s < n_sets && s < 2; s++) {
+            uint32_t i0 = lo[s], i1 = hi[s], k0 = klo[s], k1 = khi[s];
+            if (i1 > i0) {
                 if (s ? info->push1 : info->push) {
                     // The whole set, unless it holds what the last push of this layout and pipeline held. Pushing only
                     // the bindings that changed lost the others on an Intel Arc 140T (driver 101.8991): of a

@@ -7,6 +7,7 @@
 
 #include "cfg.h"
 #include "host.h"
+#include "input.h"
 #include "input_map.h"
 
 #define STICK_MAX 32767
@@ -381,6 +382,11 @@ float input_pad_deadzone(int stick) {
     return (float)(v < 0 ? 0 : v > 50 ? 50 : v) / 100.f;
 }
 
+int32_t input_pad_trigger_on(void) {
+    double v = cfg_double("AC_TRIGGER_THRESHOLD");
+    return (int32_t)lrint((v < 0 ? 0 : v > 95 ? 95 : v) * STICK_MAX / 100);
+}
+
 double input_stick_percent(int32_t x, int32_t y) {
     return sqrt((double)x * x + (double)y * y) * 100.0 / STICK_MAX;
 }
@@ -430,4 +436,23 @@ int input_menu_gate(int *held, int menu_open, uint64_t *buttons, int32_t sticks[
         sticks[0] = sticks[1] = sticks[2] = sticks[3] = 0;
     }
     return edge;
+}
+
+// The release gate (input.h). A stick is one input of four bits: held while it is past half its travel in any
+// direction (its direction bits, input.c stick_bits) or while keys tilt it (the walk key tilts it part way, under
+// the direction bits), so it comes back only after it went back, not on its way from one direction to another.
+uint32_t input_release_held(uint64_t buttons, int keys_tilt) {
+    const uint32_t left = 0xfu << B_SL_LEFT, right = 0xfu << B_SR_LEFT;
+    uint32_t h = (uint32_t)buttons & INPUT_RELEASE_ALL;
+    if ((h & left) || (keys_tilt & 1)) h |= left;
+    if ((h & right) || (keys_tilt & 2)) h |= right;
+    return h;
+}
+
+uint32_t input_release_gate(uint32_t wait, uint32_t held, uint64_t *buttons, int32_t sticks[4]) {
+    wait &= held;
+    *buttons &= ~(uint64_t)wait;
+    if (wait & 0xfu << B_SL_LEFT) sticks[0] = sticks[1] = 0;
+    if (wait & 0xfu << B_SR_LEFT) sticks[2] = sticks[3] = 0;
+    return wait;
 }

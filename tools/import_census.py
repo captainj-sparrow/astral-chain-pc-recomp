@@ -1,13 +1,18 @@
 """Import census for the Astral Chain port: which imports of main need host overrides.
 
-Loads the extracted ExeFS modules with recomp/nso.py, parses the HOST_OVERRIDE / HOST_OBSERVER names out of
-runtime/*.c, and reports:
+Loads the extracted ExeFS modules of 1.0.1 (main and sdk, what runtime/loader.c loads) with recomp/nso.py, parses the
+HOST_OVERRIDE / HOST_OBSERVER names out of runtime/*.c (string literals, or macros defined to one), and reports with
+the loader's rules:
 
-- imports of main not exported by sdk and not overridden by the host (a strong one of these stops the loader),
-- imports grouped by namespace, to plan the service implementations,
-- overrides and observers no import of main uses (candidates for pruning).
+- the imports (undefined symbols) of both that neither module defines and the host does not override (a strong one
+  stops the game when it is called),
+- imports of main grouped by namespace, "host" in front of those with an override, to plan the service
+  implementations,
+- overrides that no relocation of either module names, and observers that no JUMP_SLOT names (candidates for
+  pruning). An override that only the sdk's own relocations use is bound, so it is not one.
 
-No game files are copied anywhere; only names are printed.
+The overrides registered at run time (hostfn_add_override: ov_libc.c's six libc functions) are not listed; the sdk
+defines all six. No game files are copied anywhere; only names are printed.
 """
 import re
 import sys
@@ -16,75 +21,95 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'recomp'))
 
-from nso import Nso   # noqa: E402
+from nso import Nso, R_AARCH64_JUMP_SLOT, R_AARCH64_RELATIVE   # noqa: E402
 
+EXEFS = ROOT / 'build' / 'extracted' / 'v101' / 'exefs'
+MODULES = ('main', 'sdk')
 STB_WEAK = 2
-
-
-def syms_of(nso):
-    out = {}
-    for s in nso.syms:
-        name = s[0] if isinstance(s, tuple) else s.name
-        info = s[1] if isinstance(s, tuple) else getattr(s, 'info', 0)
-        out[name] = info
-    return out
+STRING = r'"(?:[^"\\\n]|\\.)*"'
 
 
 def host_names(kind):
+    runtime = ROOT / 'runtime'
+    define = re.compile(r'^#define[ \t]+(\w+)[ \t\\\n]+(%s)' % STRING, re.M)
+    shared = {}
+    for path in runtime.glob('*.h'):
+        shared.update(define.findall(path.read_text(encoding='utf-8', errors='replace')))
+    entry = re.compile(r'^HOST_%s\(\s*((?:%s\s*)+|\w+)\s*,' % (kind, STRING), re.M)
     names = set()
-    pattern = re.compile(r'HOST_%s\(\s*"((?:[^"\\]|\\.)*)"' % kind)
-    for path in sorted((ROOT / 'runtime').glob('*.c')):
+    for path in sorted(runtime.glob('*.c')):
         text = path.read_text(encoding='utf-8', errors='replace')
-        for m in pattern.finditer(text):
-            names.add(m.group(1))
+        macros = {**shared, **dict(define.findall(text))}
+        for arg in entry.findall(text):
+            literal = arg if arg.startswith('"') else macros.get(arg)
+            if literal is None:
+                sys.exit(f'import_census: {path.name}: HOST_{kind}({arg}) is neither a string nor a macro of one')
+            names.add(''.join(part[1:-1] for part in re.findall(STRING, literal)))
     return names
 
 
-def main():
-    exefs = ROOT / 'build' / 'extracted' / 'v0' / 'exefs'
-    main = Nso(exefs / 'main')
-    sdk = Nso(exefs / 'sdk')
+def namespace(name):
+    """nn::<area> for the SDK's C++ names, the outer name for another nested one."""
+    rest = re.match(r'_ZNK?(.*)', name)
+    if not rest:
+        return 'C++' if name.startswith('_Z') else 'C'
+    parts, text = [], rest.group(1)
+    while len(parts) < 2:
+        size = re.match(r'\d+', text)
+        if not size:
+            break
+        start, end = size.end(), size.end() + int(size.group())
+        parts.append(text[start:end])
+        text = text[end:]
+        if parts[0] != 'nn':
+            break
+    return '::'.join(parts) or 'C++'
 
-    imports = syms_of(main)
-    exports = syms_of(sdk)
+
+def main():
+    missing = [m for m in MODULES if not (EXEFS / m).is_file()]
+    if missing:
+        sys.exit(f'import_census: no {", ".join(missing)} in {EXEFS}: run tools/extract.py first')
+    modules = {m: Nso(EXEFS / m) for m in MODULES}
     overrides = host_names('OVERRIDE')
     observers = host_names('OBSERVER')
 
-    critical = []
-    weak = 0
-    for name, info in sorted(imports.items()):
-        if name in exports or name in overrides:
-            continue
-        if (info >> 4) & 0xF == STB_WEAK:
-            weak += 1
-            continue
-        critical.append(name)
+    defined = {s[0] for nso in modules.values() for s in nso.exports()}
+    named, jumps = set(), set()   # what the relocations name
+    unresolved = []
+    for module, nso in modules.items():
+        for _, kind, sym, _ in nso.relocs:
+            if kind != R_AARCH64_RELATIVE:
+                named.add(nso.syms[sym][0])
+                if kind == R_AARCH64_JUMP_SLOT:
+                    jumps.add(nso.syms[sym][0])
+        for name, info, *_ in nso.imports():
+            if name not in defined and name not in overrides and info >> 4 != STB_WEAK:
+                unresolved.append((module, name))
 
-    print(f'main imports: {len(imports)}, sdk exports: {len(exports)}, host overrides: {len(overrides)}, '
-          f'observers: {len(observers)}')
-    print(f'unresolved strong imports (would stop the loader): {len(critical)}')
-    for name in critical:
-        print('  UNRESOLVED', name)
+    imports = sorted({s[0] for s in modules['main'].imports()})
+    print(f'main imports: {len(imports)}, sdk imports: {len(modules["sdk"].imports())}, '
+          f'sdk exports: {len(modules["sdk"].exports())}, host overrides: {len(overrides)}, observers: {len(observers)}')
+    print(f'unresolved strong imports (the game stops when it calls one): {len(unresolved)}')
+    for module, name in sorted(unresolved):
+        print('  UNRESOLVED', module, name)
 
-    # Group by namespace.
     groups = {}
     for name in imports:
-        m = re.match(r'_ZN(\d+)([A-Za-z0-9_]+)', name)
-        ns = m.group(2) if m else ('c' if name.startswith('_Z') or name.startswith('__') else 'plain')
-        groups.setdefault(ns, []).append(name)
-    print('\nimports of main by namespace:')
+        groups.setdefault(namespace(name), []).append(name)
+    print('\nimports of main by namespace (with a host override / all):')
     for ns in sorted(groups, key=lambda k: (-len(groups[k]), k)):
         names = groups[ns]
-        print(f'  {ns}: {len(names)}')
-        for name in sorted(names):
-            print(f'      {name}')
+        print(f'  {ns}: {sum(n in overrides for n in names)} / {len(names)}')
+        for name in names:
+            print(f'    {"host" if name in overrides else "    "}  {name}')
 
-    dead_ovr = sorted(o for o in overrides if o not in imports)
-    dead_obs = sorted(o for o in observers if o not in imports)
-    print(f'\noverrides no import of main uses: {len(dead_ovr)}')
+    dead_ovr = sorted(overrides - named)
+    dead_obs = sorted(observers - jumps)
+    print(f'\noverrides no relocation uses: {len(dead_ovr)}')
     for name in dead_ovr:
         print('  DEAD', name)
-    print(f'observers no import of main uses: {len(dead_obs)}')
+    print(f'observers no JUMP_SLOT uses: {len(dead_obs)}')
     for name in dead_obs:
         print('  DEAD-OBS', name)
 

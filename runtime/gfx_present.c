@@ -48,13 +48,12 @@ static int g_started;
 
 void gfx_window_mark_dirty(void) { plat_xchg32(&g_dirty, 1); }
 
-// The window gained or lost the focus: the game hears it as nn::oe's focus state and a notification message. The line
-// carries the local wall time, the only one in the log: when a GPU hang takes the whole system down, the log ends
+// The window gained or lost the focus: the game gets nn::oe's notification message and pause.c reads the state. The
+// line carries the local wall time, the only one in the log: when a GPU hang takes the whole system down, the log ends
 // without an error, and this time set against the driver's entry in the Windows event log (nvlddmkm 153, Display 4101)
 // tells whether an alt-tab or an overlay came before the hang or followed it.
 void gfx_window_focus_changed(int in) {
     plat_xchg32(&g_focused, in);
-    oe_set_focus(in);                          // pinned to 1 by AC_ASSUME_FOCUS inside
     oe_push_message(OE_MSG_FOCUS_STATE_CHANGED);
     plat_inc32(&g_focus_msgs);
     struct tm t;
@@ -83,7 +82,8 @@ void gfx_window_f12(void) {
 // RomFS and the saves.
 void gfx_window_closed(void) {
     int restart = plat_cas32(&g_restart, 0, 0) != 0;
-    rt_log("gfx: window closed; %s", restart ? "restarting" : "exiting");
+    rt_log("gfx: window closed%s; %s", kern_paused() ? " while the game was paused" : "",
+           restart ? "restarting" : "exiting");
     fs_save_flush();
     vk_pipeline_save();
     prof_write();   // plat_exit runs no atexit handlers
@@ -653,8 +653,10 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
     MenuTarget mt = {c->instance, c->phys, c->device, c->gfx_family, c->gfx_queue,
                      g_sc_hdr ? VK_FORMAT_R8G8B8A8_UNORM : g_sc_fmt, g_sc_ext.width,
                      g_sc_ext.height, cw, ch, g_scaler};
-    int overlay = g_sc_view[idx] &&
-                  menu_overlay_frame(__atomic_load_n(&gfx_counters.frames, __ATOMIC_RELAXED), &mt, &menu_shot);
+    // the menu counts a paused game's repeats as frames too, or its test hooks would wait for the game
+    uint64_t shown = __atomic_load_n(&gfx_counters.frames, __ATOMIC_RELAXED) +
+                     __atomic_load_n(&gfx_counters.repeats, __ATOMIC_RELAXED);
+    int overlay = g_sc_view[idx] && menu_overlay_frame(shown, &mt, &menu_shot);
     if (!menu_shot && g_present_shot[0]) menu_shot = g_present_shot;   // AC_PRESENT_SHOT (vk_present_shot)
     int cap = (g_capture || menu_shot) && ensure_capture_buffer();
     int thumb = g_th_n && ensure_thumbs();

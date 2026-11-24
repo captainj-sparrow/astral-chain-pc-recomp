@@ -135,6 +135,29 @@ def copy_catalogs(ctx):
             replace_file(src, target)
 
 
+def install_dlcs(src, dst):
+    """The release's DLC sources (dlc/, docs/dlc.md) into the install folder's dlc/, where astralchain.exe reads them
+    with the setting dlc = 1. Each DLC folder of the release replaces the folder of its name whole, so a file an
+    update dropped goes away, and a file of dlc/ itself (the guide) is copied; anything else there is the player's own
+    DLC and is left alone. Returns the names it installed."""
+    if not src.is_dir():
+        return []
+    dst.mkdir(exist_ok=True)
+    done = []
+    for item in sorted(src.iterdir()):
+        target = dst / item.name
+        if item.is_dir():
+            tmp = dst / (item.name + '.tmp')
+            remove(tmp)
+            shutil.copytree(item, tmp)
+            remove(target)
+            os.replace(tmp, target)
+            done.append(item.name)
+        else:
+            replace_file(item, target)
+    return done
+
+
 def kill_tree(proc):
     if proc.poll() is not None:
         return
@@ -994,6 +1017,12 @@ class Cleanup(Step):
             raise InstallError('cleanup.ini_failed', detail=str(e)) from None
         ctx.state['lang'] = ctx.lang
         (dest / 'profile').mkdir(exist_ok=True)
+        # The DLCs' XML sources (docs/dlc.md). A failure only warns: the game starts without them, and it reads them
+        # only once the player switches "Load DLC" on.
+        try:
+            install_dlcs(ctx.layout.root / 'dlc', dest / 'dlc')
+        except OSError as e:
+            rep.warning('warn.dlc_failed', detail=str(e))
         rep.progress('cleanup', 'temp', force=True)
         for stale in dest.glob('update-merge-*'):
             remove(stale)

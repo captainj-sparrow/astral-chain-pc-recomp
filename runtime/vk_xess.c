@@ -17,8 +17,15 @@
 // (VK_EXT_mutable_descriptor_type) is chained; vk_xess_device_exts checks this before any extension is added, so a
 // device that lacks something is made exactly as without XeSS.
 //
-// Threads: XeSS is not thread-safe. The context is made, built, initialised and executed on the replay thread (the first
-// time the setting is on there: vk_xess_evaluate), and destroyed at shutdown once the device is idle.
+// Threads: XeSS is not thread-safe, so one thread at a time uses it. The context is made, its kernels built and its size
+// initialised while the game starts, on a thread of its own started before the guest runs (vk_xess_warm_async, from
+// vk_dlaa.c vk_dlaa_warm), which the first evaluation joins; it is executed on the replay thread from then on, and
+// destroyed at shutdown once the device is idle. When the start-up pre-warm is off or failed, the replay thread makes it
+// all at the first evaluation instead (vk_xess_evaluate), as before.
+//
+// Kernels: xessVKBuildPipelines and xessVKInit get the back end's VkPipelineCache (vk_pipeline.c vk_pipeline_cache), so
+// later starts take XeSS's kernels from pipeline-cache.bin; they reach the file with its next save (vk_pipeline_save:
+// every 20 s after the game built pipelines, and at exit).
 #include "vk_xess.h"
 
 #include <math.h>
@@ -102,6 +109,7 @@ static struct {
     int tried, loaded;
     int device_ok;        // vk_xess_device_exts: the device is made with what XeSS needs
     int failed;           // a call failed: off for the rest of the run
+    int warming;          // vk_xess_warm runs: a failure leaves the context to the first evaluation, XeSS stays on
     XessHandle ctx;
     uint32_t ow, oh;      // the output size the context is initialised for, 0: not yet
     int quality;          // and its quality setting (XESS_QUALITY_*)
@@ -291,22 +299,35 @@ static void on_log(const char *message, int level) {
 }
 
 static int fail(const char *what, XessResult r) {
+    if (X.warming) {   // the start-up pre-warm: the first evaluation tries again, and fails the run if it fails too
+        rt_log("xess: pre-warm: %s failed (%d): made at the first frame instead", what, r);
+        return 0;
+    }
     rt_log("xess: %s failed (%d): XeSS off for this run", what, r);
     X.failed = 1;
     return 0;
 }
 
-// The context, made on the replay thread at the first evaluation; its pipelines are built right away for the init flags
-// the run uses (the JIT of XeSS's kernels: a hitch the first time a session turns it on, logged with its length).
+// The context, with its pipelines built right away for the init flags the run uses (the JIT of XeSS's kernels, logged
+// with its length), into the back end's pipeline cache. Made while the game starts (vk_xess_warm), or without the
+// pre-warm on the replay thread at the first evaluation, where it is a hitch in the first frame with a 3D scene.
 static int context(uint32_t flags) {
     if (X.ctx) return 1;
     const VkCtx *c = vk_ctx();
     uint64_t t0 = kern_now_ns();
     XessResult r = X.create(c->instance, c->phys, c->device, &X.ctx);
-    if (!XESS_OK(r) || !X.ctx) return fail("context creation", r);
+    if (!XESS_OK(r) || !X.ctx) return X.ctx = NULL, fail("context creation", r);
     if (X.set_log) X.set_log(X.ctx, XESS_LOG_WARNING, on_log);
-    if (X.build && !XESS_OK(r = X.build(X.ctx, VK_NULL_HANDLE, true, flags)))
+    VkPipelineCache pc = vk_pipeline_cache();
+    if (X.build) {   // no save of the cache meanwhile (vk_pipeline_cache_hold: a save beside this build crashed)
+        vk_pipeline_cache_hold(1);
+        r = X.build(X.ctx, pc, true, flags);
+        vk_pipeline_cache_hold(0);
+    }
+    if (X.build && !XESS_OK(r)) {
+        if (X.warming) X.destroy(X.ctx), X.ctx = NULL;   // made and built again at the first evaluation
         return fail("pipeline build", r);
+    }
     // Signs of the jitter and of the motion vectors (AC_XESS_JITTER_SCALE, AC_XESS_MV_SCALE: test knobs, "1" or "-1").
     // The defaults follow XeSS's documented conventions, which are DLSS's: the jitter is the shift of the picture in
     // pixels, the vectors point from this frame's pixel to its position in the last frame.
@@ -350,11 +371,14 @@ static int init_size(uint32_t w, uint32_t h, uint32_t ow, uint32_t oh, uint32_t 
         return 1;
     }
     uint64_t t0 = kern_now_ns();
-    XessInit ip = {.outputResolution = {ow, oh}, .qualitySetting = q, .initFlags = flags};
+    XessInit ip = {.outputResolution = {ow, oh}, .qualitySetting = q, .initFlags = flags,
+                   .pipelineCache = vk_pipeline_cache()};
+    vk_pipeline_cache_hold(1);   // it may build into the cache too (context)
     vk_queue_lock();
     if (X.ow) vkDeviceWaitIdle(vk_ctx()->device);
     XessResult r = X.init(X.ctx, &ip);
     vk_queue_unlock();
+    vk_pipeline_cache_hold(0);
     if (!XESS_OK(r)) return fail("initialisation", r);
     X.ow = ow, X.oh = oh, X.quality = q, X.flags = flags, X.w = w, X.h = h, X.inits++;
     if (q == XESS_QUALITY_AA)
@@ -404,7 +428,10 @@ static void inputs_layout(VkCommandBuffer cb, const XessFrame *f, int to_read) {
     vkCmdPipelineBarrier2(cb, &di);
 }
 
+static void warm_join(void);
+
 int vk_xess_evaluate(VkCommandBuffer cb, const XessFrame *f) {
+    warm_join();   // the start-up pre-warm's thread, if it still runs: the context is then made
     uint32_t ow = f->ow ? f->ow : f->w, oh = f->oh ? f->oh : f->h;
     // linear scene light with auto exposure, or the tonemapped composite (0..1) as LDR colour
     uint32_t flags = f->ldr ? XESS_FLAG_LDR : XESS_FLAG_AUTOEXPOSURE;
@@ -430,7 +457,54 @@ int vk_xess_evaluate(VkCommandBuffer cb, const XessFrame *f) {
     return 1;
 }
 
+// While the game starts (vk_dlaa.c vk_dlaa_warm: on the pre-warm thread below, or on the main thread before the replay
+// runs with AC_UPSCALER_PREWARM=2 or 3): the context, its kernels and the initialisation for the run's sizes and colour
+// kind, which the first evaluation then finds made; with cb, also a throw-away evaluation of f recorded into it. A
+// failure is logged and leaves all of it to the first evaluation.
+int vk_xess_warm(uint32_t w, uint32_t h, uint32_t ow, uint32_t oh, int ldr, VkCommandBuffer cb, const XessFrame *f) {
+    if (!vk_xess_available() || !w || !h) return 0;
+    uint32_t flags = ldr ? XESS_FLAG_LDR : XESS_FLAG_AUTOEXPOSURE;
+    uint64_t t0 = kern_now_ns();
+    X.warming = 1;
+    int ok = context(flags) && init_size(w, h, ow ? ow : w, oh ? oh : h, flags) && (!cb || vk_xess_evaluate(cb, f));
+    X.warming = 0;
+    if (ok)
+        rt_log("xess: warmed at start for %ux%u to %ux%u%s in %.0f ms", w, h, ow ? ow : w, oh ? oh : h,
+               cb ? " with a throw-away evaluation" : "", (double)(kern_now_ns() - t0) / 1e6);
+    return ok;
+}
+
+// vk_xess_warm without the evaluation on a thread of its own, started while the game starts and joined by the first
+// evaluation (or at release). On the Arc 140T the build is 8-13 ms with warm caches and 5.6-7.6 s with a cold driver
+// cache and no kernels in pipeline-cache.bin (a first start), which then runs under the title screen instead of
+// lengthening the start. Nothing else touches X meanwhile: the replay only reads the flags of vk_xess_available, which
+// the pre-warm never writes, and plat_thread_join orders the thread's writes before the first evaluation's reads.
+static PlatThread *warm_thread;
+static struct { uint32_t w, h, ow, oh; int ldr; } warm_args;
+
+static void warm_main(void *arg) {
+    (void)arg;
+    vk_xess_warm(warm_args.w, warm_args.h, warm_args.ow, warm_args.oh, warm_args.ldr, NULL, NULL);
+}
+
+static void warm_join(void) {
+    if (!warm_thread) return;
+    uint64_t t0 = kern_now_ns();
+    plat_thread_join(warm_thread);
+    warm_thread = NULL;
+    double ms = (double)(kern_now_ns() - t0) / 1e6;
+    if (ms >= 1.0) rt_log("xess: the first evaluation waited %.0f ms for the pre-warm thread", ms);
+}
+
+void vk_xess_warm_async(uint32_t w, uint32_t h, uint32_t ow, uint32_t oh, int ldr) {
+    if (!vk_xess_available() || !w || !h || warm_thread) return;
+    warm_args.w = w, warm_args.h = h, warm_args.ow = ow, warm_args.oh = oh, warm_args.ldr = ldr;
+    warm_thread = plat_thread_new(warm_main, NULL, "xess-warm");
+    if (!warm_thread) vk_xess_warm(w, h, ow, oh, ldr, NULL, NULL);   // no thread: here, as the synchronous pre-warm
+}
+
 void vk_xess_release(void) {
+    warm_join();
     if (X.ctx) X.destroy(X.ctx);   // the device is idle (vk_device.c destroy_all)
     X.ctx = NULL, X.w = X.h = X.ow = X.oh = 0;
 }

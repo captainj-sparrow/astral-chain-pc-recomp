@@ -53,17 +53,6 @@ void nvn_guest_written(uint64_t addr, uint64_t size) {
     if (size) gfx_backend()->guest_written(addr, size);
 }
 
-// memcpy of pool storage the GPU rendered into must copy what the GPU wrote: Astral Chain moves its generated grass maps
-// between pools with memcpy. Copies below 1 KiB skip the check; the copy itself is memmove, as overlapping
-// arguments are undefined for memcpy anyway.
-static void ov_memcpy(Cpu *c) {
-    uint64_t dst = arg_x(c, 0), src = arg_x(c, 1), n = arg_x(c, 2);
-    if (n >= 1024) gfx_backend()->guest_read(src, n);
-    memmove((void *)(uintptr_t)dst, (const void *)(uintptr_t)src, n);
-    ret_x(c, dst);
-}
-HOST_OVERRIDE("memcpy", ov_memcpy);
-
 __attribute__((weak)) void nvn_submit_prepare(const uint64_t *handles, int n) { (void)handles, (void)n; }
 __attribute__((weak)) void nvn_submit_prepare_async(const uint64_t *handles, uint64_t *out, int n) {
     memcpy(out, handles, sizeof *out * (size_t)n);

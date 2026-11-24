@@ -8,6 +8,8 @@
 // Cpu. The SDK's nn::os runs as lifted code; only the kernel under it is the host. Every wait hangs on one global lock
 // G with one condition variable per thread; wake order is the kernel's: lower priority value first, then first come.
 // Semantics follow the public Horizon kernel (KConditionVariable, KAddressArbiter, KSynchronization).
+// The pause (kern_pause, for pause.c) is built on the virtual cores: none is granted while it lasts, and the guest's
+// clock, which the timed waits count on, stands still.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -120,6 +122,21 @@ static void lock(void) { plat_mutex_lock(&G); }
 static void unlock(void) { plat_mutex_unlock(&G); }
 
 uint64_t kern_now_ns(void) { return plat_now_ns(); }
+
+// ---- the guest's clock: the host's monotonic clock less the time spent paused (kern_pause). Written holding G, and
+// only while no thread holds a virtual core, so guest code never sees it change under it. kern_clock_* is the same in
+// plat_counter units, for rt_ticks (main.c).
+static int g_halt;                           // holding G: no core is granted (kern_pause .. kern_resume)
+static uint64_t g_stop_ns, g_lost_ns;        // the guest's time it stands at, 0 while it runs; the time lost to pauses
+uint64_t kern_clock_stop, kern_clock_lost;
+
+int kern_paused(void) { return __atomic_load_n(&g_stop_ns, __ATOMIC_ACQUIRE) != 0; }
+uint64_t kern_paused_ns(void) { return __atomic_load_n(&g_lost_ns, __ATOMIC_RELAXED); }
+
+uint64_t kern_guest_ns(void) {
+    uint64_t stop = __atomic_load_n(&g_stop_ns, __ATOMIC_ACQUIRE);
+    return stop ? stop : plat_now_ns() - __atomic_load_n(&g_lost_ns, __ATOMIC_RELAXED);
+}
 
 // ---- AC_CRIT=<first>-<last frame> with AC_TRACE=sched: every state change and wake of the guest threads and
 // every present over those frames, written to AC_CRIT_OUT (default crit.bin) at the last one, for
@@ -248,7 +265,8 @@ static void wake_sync_waiters(void) {
 }
 
 // SleepConditionVariableSRW counts milliseconds: round up (late is legal, early is not) and re-check the deadline
-// against the performance counter, because the wait may also end early.
+// against the performance counter, because the wait may also end early. The deadline is in the guest's time: while
+// that stands still the wait has no end, and kern_resume wakes it to count again.
 static uint32_t block_inner(RtThread *t, int kind, int64_t ns) {
     t->wkind = kind;
     t->woke = 0;
@@ -260,15 +278,15 @@ static uint32_t block_inner(RtThread *t, int kind, int64_t ns) {
         t->wkind = W_NONE;
         return R_TIMEOUT;
     }
-    uint64_t now = kern_now_ns();
+    uint64_t now = kern_guest_ns();
     int forever = ns < 0 || (uint64_t)ns > UINT64_MAX - now;
     uint64_t deadline = forever ? 0 : now + (uint64_t)ns;
     while (!t->woke) {
-        if (forever) {
+        if (forever || g_stop_ns) {
             plat_cond_wait(&t->cv, &G);
             continue;
         }
-        now = kern_now_ns();
+        now = kern_guest_ns();
         if (now >= deadline) {
             wait_unlink(t);
             t->wkind = W_NONE;
@@ -588,10 +606,9 @@ __asm__(".text\n"
 
 enum { AP_NONE, AP_RETRY, AP_SENT };
 
-// The waiter w interrupts its target owner if that runs top-level game code (holding G; the owner is stopped only
-// between plat_intr_stop and plat_intr_resume, during which nothing here takes a lock).
-static int ap_try(RtThread *w) {
-    RtThread *o = w->target;
+// Interrupts the owner o if it runs top-level game code, for the waiter w or for a pause (w NULL). Holding G; the
+// owner is stopped only between plat_intr_stop and plat_intr_resume, during which nothing here takes a lock.
+static int ap_try(RtThread *o, const RtThread *w) {
     if (!o || o->cur_core < 0 || !o->preempt) return AP_NONE;
     if (!o->hthr || o->ap_pending) return AP_RETRY;
     volatile uint16_t *tl = ap_tlr(o);
@@ -633,7 +650,7 @@ static int ap_try(RtThread *w) {
         g_ap_sent++;
         r = AP_SENT;
     }
-    if (r == AP_SENT && g_ap_log < AP_LOG_N) {
+    if (r == AP_SENT && w && g_ap_log < AP_LOG_N) {
         g_ap_log++;
         rt_log("kernel: interrupt %#x p%d at exe+%#llx rsp %#llx for %#x p%d", o->handle, o->prio,
                (unsigned long long)(o->ap_rip - plat_exe_base()), (unsigned long long)rsp, w->handle, w->prio);
@@ -850,6 +867,7 @@ static void core_count(void) {
 static struct DgRel g_dg_rel;   // AC_CORE_DIAG: the owner core_put is releasing, for core_grant
 
 static void core_grant(int c) {
+    if (g_halt) return;   // paused: kern_resume grants
     RtThread *b = NULL, **bp = NULL;
     int bpri = 0;
     for (RtThread **p = &g_core_wait; *p; p = &(*p)->cnext) {
@@ -903,6 +921,9 @@ static int core_better_waiter(const RtThread *t, int c) {
     return 0;
 }
 
+// Whether t has to give core c up at a preemption point: a better thread waits for it, or the game is being paused.
+static int core_must_yield(const RtThread *t, int c) { return g_halt || core_better_waiter(t, c); }
+
 // Asks holders to give their cores up, one holder per waiter: waiters best first, each claims the worst holder worse
 // than itself on a core it may run on that no better waiter claimed (a request already pending is reused). Asking
 // every worse holder made several drop their cores for one waiter; the spare cores went to worse waiters, which asked
@@ -954,9 +975,12 @@ static void core_take(RtThread *t) {
     }
     if (!(t->mask & ((1u << NCORE) - 1)))
         rt_fatal("kernel: thread %#x core mask %#llx has no application core", t->handle, (unsigned long long)t->mask);
-    int c = t->core >= 0 && t->core < NCORE && core_allowed(t, t->core) && !g_core_owner[t->core] ? t->core : -1;
-    for (int i = 0; c < 0 && i < NCORE; i++)
-        if (core_allowed(t, i) && !g_core_owner[i]) c = i;
+    int c = -1;
+    if (!g_halt) {   // paused: a free core is not for the taking
+        if (t->core >= 0 && t->core < NCORE && core_allowed(t, t->core) && !g_core_owner[t->core]) c = t->core;
+        for (int i = 0; c < 0 && i < NCORE; i++)
+            if (core_allowed(t, i) && !g_core_owner[i]) c = i;
+    }
     if (c >= 0) {
         t->cur_core = c;
         g_core_owner[c] = t;
@@ -973,7 +997,7 @@ static void core_take(RtThread *t) {
         t->dg_since = kern_now_ns();
         memset(&t->dg_rel, 0, sizeof t->dg_rel);
     }
-    core_kick();
+    if (!g_halt) core_kick();
     if (g_diag > 0) t->dg_cls = dg_class0(t);
     if (g_ap_int && t->target && t->cur_core < 0) {   // most waits end within microseconds: spin before interrupting
         uint64_t end = kern_now_ns() + AP_FIRST_NS;
@@ -985,7 +1009,8 @@ static void core_take(RtThread *t) {
     int sampled = 0;
     while (t->cur_core < 0) {
         uint32_t ms = 0;   // 0: until signalled
-        if (g_ap_int && ap_try(t) != AP_NONE) ms = 1;   // the owner keeps its core: again in a millisecond
+        // the owner keeps its core: again in a millisecond
+        if (g_ap_int && !g_halt && ap_try(t->target, t) != AP_NONE) ms = 1;
         int sample = g_diag > 0 && !sampled && (t->dg_cls == DG_GAME || t->dg_cls == DG_HOST);
         if (sample && !ms) ms = 2;
         if (ms) plat_cond_wait_ms(&t->cv, &G, ms);
@@ -1037,6 +1062,66 @@ void kern_core_back(int *away) {
     core_take(t);
     unlock();
     *away = 0;
+}
+
+// ---- pause (pause.c)
+// Every holder is asked as a better waiter would ask it, so it stops only where preemption may stop it: at an SVC or
+// an indirect call, at the end of a host call that gave the core up, or interrupted in top-level game code (ap_try),
+// and never inside an SDK spin lock. The clock stops after the last of them, never under running guest code.
+#define PAUSE_DRAIN_NS 500000000ull   // a holder that has not stopped by then: no pause
+#define PAUSE_POLL_NS 250000ull
+
+int kern_pause(void) {
+    if (!cores_enabled() || (tcur && tcur->cur_core >= 0)) return 0;
+    lock();
+    if (g_halt) {
+        unlock();
+        return 0;
+    }
+    g_halt = 1;
+    uint64_t end = kern_now_ns() + PAUSE_DRAIN_NS;
+    for (;;) {
+        const RtThread *held = NULL;
+        for (int c = 0; c < NCORE; c++) {
+            RtThread *o = g_core_owner[c];
+            if (!o) continue;
+            held = o;
+            __atomic_store_n(&o->preempt, 1, __ATOMIC_RELEASE);
+            if (g_ap_int) ap_try(o, NULL);
+        }
+        if (!held) break;
+        if (kern_now_ns() >= end) {
+            rt_log("pause: thread %#x did not give its core up in %d ms; the game runs on", held->handle,
+                   (int)(PAUSE_DRAIN_NS / 1000000));
+            unlock();
+            kern_resume();
+            return 0;
+        }
+        unlock();
+        plat_wait_ns(PAUSE_POLL_NS);
+        lock();
+    }
+    __atomic_store_n(&kern_clock_stop, plat_counter() - kern_clock_lost, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_stop_ns, plat_now_ns() - g_lost_ns, __ATOMIC_RELEASE);
+    unlock();
+    return 1;
+}
+
+void kern_resume(void) {
+    lock();
+    if (g_stop_ns) {   // the clock first: it runs before any thread does
+        __atomic_store_n(&g_lost_ns, plat_now_ns() - g_stop_ns, __ATOMIC_RELAXED);
+        __atomic_store_n(&g_stop_ns, 0, __ATOMIC_RELEASE);
+        __atomic_store_n(&kern_clock_lost, plat_counter() - kern_clock_stop, __ATOMIC_RELAXED);
+        __atomic_store_n(&kern_clock_stop, 0, __ATOMIC_RELEASE);
+    }
+    g_halt = 0;
+    for (int c = 0; c < NCORE; c++)
+        if (!g_core_owner[c]) core_grant(c);
+    for (RtThread *w = g_core_wait; w; w = w->cnext) w->target = NULL;   // from before the pause
+    core_kick();
+    for (RtThread *t = g_all; t; t = t->all) plat_cond_signal(&t->cv);   // timed waits count again, waiters interrupt
+    unlock();
 }
 
 // ---- spin waits (recomp/patches.py `spin` lines, found by tools/spin_waits.py)
@@ -1103,6 +1188,7 @@ void rt_spin_gate(Cpu *c, uint64_t head) {
 
 // A pending preempt request, at an SVC or an indirect call. The core goes over only if a better thread still waits
 // for it, so core_put grants it to a waiter better than t; a stale request (that waiter got another core) is dropped.
+// A pause under way (kern_pause) takes it whoever waits.
 void kern_checkpoint(void) {
     RtThread *t = tcur;
     if (!t || !__atomic_load_n(&t->preempt, __ATOMIC_RELAXED)) return;
@@ -1111,7 +1197,7 @@ void kern_checkpoint(void) {
         t->dg_pc = t->cur->pc;
         t->dg_lr = t->cur->x[30];
     }
-    int better = t->cur_core >= 0 && core_better_waiter(t, t->cur_core);
+    int better = t->cur_core >= 0 && core_must_yield(t, t->cur_core);
     if (better && ap_disabled(t)) {   // preemption disabled: the switch comes at SVC 0x36
         ap_tlr(t)[1] = 1;
         t->preempt = 0;
@@ -1136,7 +1222,7 @@ void kern_ap_yield(void) {
     RtThread *t = tcur;
     lock();
     t->ap_pending = 0;
-    if (t->preempt && t->cur_core >= 0 && !ap_disabled(t) && core_better_waiter(t, t->cur_core)) {
+    if (t->preempt && t->cur_core >= 0 && !ap_disabled(t) && core_must_yield(t, t->cur_core)) {
         if (g_diag > 0) {
             t->dg_pc = t->cur->pc;
             t->dg_lr = t->cur->x[30];
@@ -1151,7 +1237,7 @@ void kern_ap_yield(void) {
 // SVC 0x36 SynchronizePreemptionState: a preemption deferred by disable_count happens here.
 static void ap_sync(RtThread *t) {
     lock();
-    if (g_ap > 0 && t->cur_core >= 0 && core_better_waiter(t, t->cur_core)) {
+    if (g_ap > 0 && t->cur_core >= 0 && core_must_yield(t, t->cur_core)) {
         core_put(t);
         core_take(t);
     }
@@ -1579,6 +1665,20 @@ static void sleep_ns(RtThread *t, int64_t ns) {
     plat_wait_ns((uint64_t)ns);
 }
 
+// After a SleepThread's timer, holding G: a pause in the sleep does not count in it, so the thread sleeps on for what
+// is left in the guest's time. lost: kern_paused_ns when the sleep began.
+static void sleep_rest(RtThread *t, uint64_t until, uint64_t lost) {
+    while (g_stop_ns || g_lost_ns != lost) {
+        while (g_stop_ns) plat_cond_wait(&t->cv, &G);
+        lost = g_lost_ns;
+        uint64_t now = kern_guest_ns();
+        if (now >= until) return;
+        unlock();
+        sleep_ns(t, (int64_t)(until - now));
+        lock();
+    }
+}
+
 // ---- synchronization objects
 static int sig_obj(uint32_t h, int *bad) {   // 1 = signaled (holding G)
     unsigned i = h - 0x1000;
@@ -1707,11 +1807,13 @@ int kern_svc(Cpu *c, uint32_t imm) {
             acct(t, S_SLEEP);
             t->wobj = (uint64_t)ns;
             t->nblk++;
+            uint64_t t0 = kern_now_ns(), lost = g_lost_ns;
+            uint64_t until = (g_stop_ns ? g_stop_ns : t0 - lost) + (uint64_t)ns;
             unlock();
-            uint64_t t0 = kern_now_ns();
             sleep_ns(t, ns);
             uint64_t took = kern_now_ns() - t0;
             lock();
+            sleep_rest(t, until, lost);
             t->sl_n++;
             t->sl_req += (uint64_t)ns;
             t->sl_act += took;
@@ -1972,7 +2074,7 @@ int kern_svc(Cpu *c, uint32_t imm) {
             x[0] = R_BAD_STATE;
             return 1;
         }
-        uint64_t start = kern_now_ns();
+        uint64_t start = kern_guest_ns();
         uint32_t r;
         int idx = -1;
         lock();
@@ -1996,7 +2098,7 @@ int kern_svc(Cpu *c, uint32_t imm) {
             }
             int64_t left = ns;
             if (ns > 0) {
-                uint64_t spent = kern_now_ns() - start;
+                uint64_t spent = kern_guest_ns() - start;
                 if (spent >= (uint64_t)ns) {
                     r = R_TIMEOUT;
                     break;

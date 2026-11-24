@@ -17,6 +17,10 @@
 // The core's parameter object is a C++ class whose virtual functions are called through the MSVC vtable: the Set
 // overloads in slots 0-7 and the Get overloads in 8-15, each group in reverse declaration order. vtable_ok checks that
 // layout with a set-then-get round trip before anything relies on it.
+//
+// XeSS's context, kernels and initialisation, its work images and FSR 4's context are made for the run's sizes while
+// the game starts, not in the first frame with a 3D scene; DLSS's feature only with a test knob, until that has run on
+// NVIDIA hardware. See "the pre-warm" below (vk_dlaa_warm), with its measurements and AC_UPSCALER_PREWARM.
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -394,25 +398,14 @@ int vk_dlaa_upscaler_ok(void) {
     return bk != BK_NONE && can(bk);
 }
 
-// boot.c, the sizes settled (res_settle) and before the game runs: what the chosen upscaler would otherwise set up at
-// the first frame with a 3D scene. FSR 4's context for the game's sizes (vk_fsr4_warm): the scene at its own size is
-// the linear light target, a reduced one is upscaled from the composite (resolve).
-void vk_dlaa_warm(void) {
-    if (chosen() != BK_FSR4 || !can(BK_FSR4)) return;
-    unsigned out[2], scene[2];
-    res_game_size(out);
-    res_scene_size(scene);
-    int up = scene[0] != out[0] || scene[1] != out[1];
-    vk_fsr4_warm(scene[0], scene[1], out[0], out[1], !up || vk_hdr_wanted());
-}
-
 static void dl_fail(const char *what, NgxResult r) {
     rt_log("dlaa: %s failed (%08x): DLSS off for this run", what, (unsigned)r);
     D.failed = 1;
 }
 
-static int image2d(uint32_t w, uint32_t h, VkFormat f, VkImageUsageFlags usage, VkImage *img, VmaAllocation *mem,
-                   VkImageView *view) {
+// A 2D image of one level and its view of aspect a.
+static int image2d_aspect(uint32_t w, uint32_t h, VkFormat f, VkImageUsageFlags usage, VkImageAspectFlags a,
+                          VkImage *img, VmaAllocation *mem, VkImageView *view) {
     const VkCtx *c = vk_ctx();
     VkImageCreateInfo ii = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D, .format = f,
                             .extent = {w, h, 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -421,9 +414,13 @@ static int image2d(uint32_t w, uint32_t h, VkFormat f, VkImageUsageFlags usage, 
     VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
     if (vmaCreateImage(c->vma, &ii, &ai, img, mem, NULL) != VK_SUCCESS) return *img = VK_NULL_HANDLE, 0;
     VkImageViewCreateInfo vi = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = *img,
-                                .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = f,
-                                .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+                                .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = f, .subresourceRange = {a, 0, 1, 0, 1}};
     return vkCreateImageView(c->device, &vi, NULL, view) == VK_SUCCESS;
+}
+
+static int image2d(uint32_t w, uint32_t h, VkFormat f, VkImageUsageFlags usage, VkImage *img, VmaAllocation *mem,
+                   VkImageView *view) {
+    return image2d_aspect(w, h, f, usage, VK_IMAGE_ASPECT_COLOR_BIT, img, mem, view);
 }
 
 // New images into GENERAL, the layout every image of the back end is kept in.
@@ -848,6 +845,72 @@ static int perf_quality(uint32_t w, uint32_t ow) {
     return k >= 0.625 ? 2 : k >= 0.54 ? 1 : k >= 0.42 ? 0 : 3;
 }
 
+// DLSS's feature for entry e's scene and output sizes, recorded into cb with D.params (allocated by the caller): the
+// quality value and model of the mode, and the colour kind, hdr for linear scene light (the light target, or the
+// composite with HDR output). The one place for the creation parameters, so the start-up pre-warm (vk_dlaa_warm) and
+// play (resolve) make the same feature. 0: failed, NGX's result in *res. Logged with the time NGX took and where.
+static int dl_create(VkCommandBuffer cb, struct Size *e, int hdr, const char *where, NgxResult *res) {
+    NgxParam *p = D.params;
+    uint32_t w = e->w, h = e->h, ow = e->ow, oh = e->oh;
+    int q = perf_quality(w, ow);
+    p_setu(p, "CreationNodeMask", 1);
+    p_setu(p, "VisibilityNodeMask", 1);
+    p_setu(p, "Width", w);
+    p_setu(p, "Height", h);
+    p_setu(p, "OutWidth", ow);
+    p_setu(p, "OutHeight", oh);
+    p_seti(p, "PerfQualityValue", q);
+    // MVLowRes: motion vectors at the render size. Linear scene light: IsHDR | AutoExposure, no exposure texture; the
+    // tonemapped composite (0..1) neither.
+    p_seti(p, "DLSS.Feature.Create.Flags", (1 << 1) | (hdr ? (1 << 0) | (1 << 6) : 0));
+    p_seti(p, "DLSS.Enable.Output.Subrects", 0);
+    // The model per mode (NVSDK_NGX_DLSS_Hint_Render_Preset: 11 K, 12 L, 13 M), as NVIDIA recommends for DLSS 4.5
+    // (310.x): K (the transformer) for DLAA, Quality and Balanced, M for Performance, L for Ultra Performance. An older
+    // nvngx_dlss.dll without a model takes its own default.
+    p_setu(p, "DLSS.Hint.Render.Preset.DLAA", 11);
+    p_setu(p, "DLSS.Hint.Render.Preset.UltraQuality", 11);
+    p_setu(p, "DLSS.Hint.Render.Preset.Quality", 11);
+    p_setu(p, "DLSS.Hint.Render.Preset.Balanced", 11);
+    p_setu(p, "DLSS.Hint.Render.Preset.Performance", 13);
+    p_setu(p, "DLSS.Hint.Render.Preset.UltraPerformance", 12);
+    uint64_t t0 = plat_now_ns();
+    NgxResult r = N.create(cb, NGX_FEATURE_SUPERSAMPLING, p, &e->feat);
+    double ms = (double)(plat_now_ns() - t0) / 1e6;
+    *res = r;
+    if (!NGX_OK(r) || !e->feat) return e->feat = NULL, 0;
+    rt_log("dlaa: DLSS feature created at %ux%u to %ux%u, quality value %d, preset %c, %s colour, in %.1f ms (%s)", w, h,
+           ow, oh, q, q == 0 ? 'M' : q == 3 ? 'L' : 'K', hdr ? "linear" : "LDR", ms, where);
+    return 1;
+}
+
+// One DLSS evaluation of entry e's feature into its output image, recorded into cb: colour c and depth z at the scene
+// size, e's motion vectors, the jitter the scene was drawn with (render pixels), and reset for a new history.
+static NgxResult dl_evaluate(VkCommandBuffer cb, const struct Size *e, VkImage c, VkImageView cv, VkFormat cf, VkImage z,
+                             VkImageView zv, VkFormat zf, float jx, float jy, int reset, float dt_ms) {
+    NgxParam *p = D.params;
+    uint32_t w = e->w, h = e->h;
+    NgxResourceVK rc = res_image(cv, c, cf, w, h, VK_IMAGE_ASPECT_COLOR_BIT, 0);
+    NgxResourceVK ro = res_image(e->out_view, e->out, VK_FORMAT_R16G16B16A16_SFLOAT, e->ow, e->oh, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+    NgxResourceVK rz = res_image(zv, z, zf, w, h, VK_IMAGE_ASPECT_DEPTH_BIT, 0);
+    NgxResourceVK rm = res_image(e->mv_view, e->mv, VK_FORMAT_R16G16_SFLOAT, w, h, VK_IMAGE_ASPECT_COLOR_BIT, 0);
+    p_setp(p, "Color", &rc);
+    p_setp(p, "Output", &ro);
+    p_setp(p, "Depth", &rz);
+    p_setp(p, "MotionVectors", &rm);
+    p_setf(p, "Jitter.Offset.X", jx);
+    p_setf(p, "Jitter.Offset.Y", jy);
+    p_setf(p, "Sharpness", 0.0f);
+    p_seti(p, "Reset", reset);
+    p_setf(p, "MV.Scale.X", 1.0f);
+    p_setf(p, "MV.Scale.Y", 1.0f);
+    p_setu(p, "DLSS.Render.Subrect.Dimensions.Width", w);
+    p_setu(p, "DLSS.Render.Subrect.Dimensions.Height", h);
+    p_setf(p, "DLSS.Pre.Exposure", 1.0f);
+    p_setf(p, "DLSS.Exposure.Scale", 1.0f);
+    p_setf(p, "FrameTimeDeltaInMsec", dt_ms);
+    return N.evaluate(cb, e->feat, p, NULL);
+}
+
 // ---------------------------------------------------------------- sharpening before the HUD
 // One RCAS (vk_fsr.c vk_fsr_rcas, at sharpness) on the upscaler's picture, after the game's tonemap and grading, the
 // range RCAS is made for, and before the game draws its HUD, so the HUD stays as the game drew it. Only where the
@@ -960,56 +1023,14 @@ static int resolve(VkExec *ex, const VkExecTarget *src) {
         if (!ok) return 0;        // off for the rest of the run (vk_fsr4.c)
     } else if (D.backend == BK_DLSS) {
         if (!D.params && !NGX_OK(N.alloc_params(&D.params))) return dl_fail("parameter allocation", 0), 0;
-        NgxParam *p = D.params;
-        if (!e->feat) {
-            int q = perf_quality(w, ow);
-            p_setu(p, "CreationNodeMask", 1);
-            p_setu(p, "VisibilityNodeMask", 1);
-            p_setu(p, "Width", w);
-            p_setu(p, "Height", h);
-            p_setu(p, "OutWidth", ow);
-            p_setu(p, "OutHeight", oh);
-            p_seti(p, "PerfQualityValue", q);
-            // MVLowRes: motion vectors at the render size. Linear scene light: IsHDR | AutoExposure, no exposure
-            // texture; the tonemapped composite (0..1) neither.
-            p_seti(p, "DLSS.Feature.Create.Flags", (1 << 1) | (hdr ? (1 << 0) | (1 << 6) : 0));
-            p_seti(p, "DLSS.Enable.Output.Subrects", 0);
-            // The model per mode (NVSDK_NGX_DLSS_Hint_Render_Preset: 11 K, 12 L, 13 M), as NVIDIA recommends for DLSS
-            // 4.5 (310.x): K (the transformer) for DLAA, Quality and Balanced, M for Performance, L for Ultra
-            // Performance. An older nvngx_dlss.dll without a model takes its own default.
-            p_setu(p, "DLSS.Hint.Render.Preset.DLAA", 11);
-            p_setu(p, "DLSS.Hint.Render.Preset.UltraQuality", 11);
-            p_setu(p, "DLSS.Hint.Render.Preset.Quality", 11);
-            p_setu(p, "DLSS.Hint.Render.Preset.Balanced", 11);
-            p_setu(p, "DLSS.Hint.Render.Preset.Performance", 13);
-            p_setu(p, "DLSS.Hint.Render.Preset.UltraPerformance", 12);
-            NgxResult r = N.create(cb, NGX_FEATURE_SUPERSAMPLING, p, &e->feat);
-            if (!NGX_OK(r) || !e->feat) return dl_fail("DLSS feature creation", r), 0;
+        if (!e->feat) {   // the first frame of this pair, unless the pre-warm's test modes made it (vk_dlaa_warm)
+            char where[96];
+            snprintf(where, sizeof where, "in play; scene format %d, depth format %d", (int)t->format, (int)z->format);
+            NgxResult r = 0;
+            if (!dl_create(cb, e, hdr, where, &r)) return dl_fail("DLSS feature creation", r), 0;
             D.reset = 1;
-            rt_log("dlaa: DLSS feature created at %ux%u to %ux%u, quality value %d, preset %c, %s colour (scene format %d, "
-                   "depth format %d)", w, h, ow, oh, q, q == 0 ? 'M' : q == 3 ? 'L' : 'K', hdr ? "linear" : "LDR",
-                   (int)t->format, (int)z->format);
         }
-        NgxResourceVK rc = res_image(cv, t->image, t->format, w, h, VK_IMAGE_ASPECT_COLOR_BIT, 0);
-        NgxResourceVK ro = res_image(e->out_view, e->out, VK_FORMAT_R16G16B16A16_SFLOAT, ow, oh, VK_IMAGE_ASPECT_COLOR_BIT, 1);
-        NgxResourceVK rz = res_image(zv, z->image, z->format, w, h, VK_IMAGE_ASPECT_DEPTH_BIT, 0);
-        NgxResourceVK rm = res_image(e->mv_view, e->mv, VK_FORMAT_R16G16_SFLOAT, w, h, VK_IMAGE_ASPECT_COLOR_BIT, 0);
-        p_setp(p, "Color", &rc);
-        p_setp(p, "Output", &ro);
-        p_setp(p, "Depth", &rz);
-        p_setp(p, "MotionVectors", &rm);
-        p_setf(p, "Jitter.Offset.X", jx);
-        p_setf(p, "Jitter.Offset.Y", jy);
-        p_setf(p, "Sharpness", 0.0f);
-        p_seti(p, "Reset", D.reset);
-        p_setf(p, "MV.Scale.X", 1.0f);
-        p_setf(p, "MV.Scale.Y", 1.0f);
-        p_setu(p, "DLSS.Render.Subrect.Dimensions.Width", w);
-        p_setu(p, "DLSS.Render.Subrect.Dimensions.Height", h);
-        p_setf(p, "DLSS.Pre.Exposure", 1.0f);
-        p_setf(p, "DLSS.Exposure.Scale", 1.0f);
-        p_setf(p, "FrameTimeDeltaInMsec", dt_ms);
-        NgxResult r = N.evaluate(cb, e->feat, p, NULL);
+        NgxResult r = dl_evaluate(cb, e, t->image, cv, t->format, z->image, zv, z->format, jx, jy, D.reset, dt_ms);
         if (!NGX_OK(r)) return dl_fail("DLSS evaluation", r), 0;
     } else {
         XessFrame f = {.color = {t->image, cv, t->format, t->level, t->base_layer},
@@ -1069,6 +1090,136 @@ static void unresolved(VkExec *ex) {
     vk_mvprev_forget(1);
     vk_exec_draw_new_cb();   // the motion pass or the backend may have bound pipelines and sets before it failed
     ex->dirty = VK_EXEC_DIRTY_ALL;
+}
+
+// ---------------------------------------------------------------- the pre-warm, while the game starts
+// boot.c settle_resolution, the sizes settled (res_settle) and before the game runs: on the main thread, where nothing
+// else uses NGX, XeSS or this file's state yet (the guest has not started, the replay has nothing to record); from then
+// on only the replay thread does, as before (and XeSS's pre-warm thread, until the first evaluation joins it). What
+// the chosen upscaler would otherwise set up in the first frame it resolves is made here, for the pair of sizes resolve
+// gets first: the scene at its own size (in place on the light target, linear light) or the reduced scene to the game
+// resolution (the composite, linear only with HDR output). The sizes, the mode and HDR output are RESTART settings, so
+// the pair holds for the run.
+// - FSR 4 (chosen and able to run): its context (vk_fsr4_warm), with or without AC_UPSCALER_PREWARM.
+// - XeSS: the pair's work images (size_for), and the context, kernels and initialisation on a thread of their own
+//   (vk_xess_warm_async), which the first evaluation joins: a cold kernel build takes seconds (below).
+// - DLSS, only with AC_UPSCALER_PREWARM=2 or 3: the work images and the feature (dl_create), recorded into an upload
+//   batch. Off by default: it was written from NGX's contract as resolve uses it and has never run, and a submission
+//   that fails or loses the device here ends the game before it starts (vk_upload_flush), where no fallback can help.
+// resolve then finds the entry made, and the first frame still starts a new history (D.last is left alone).
+// AC_UPSCALER_PREWARM (test knob): 1 (default) as above; 0 leaves XeSS to the first frame as before; 2 makes all of it
+// on this thread, DLSS's too; 3 adds one throw-away evaluation on cleared images of the scene's size, whose output the
+// first real evaluation overwrites with a reset history. A failed call is logged ("dlaa: pre-warm: ...", "xess:
+// pre-warm: ...") and leaves the creation to the first frame: neither D.failed nor XeSS's failed flag is set here.
+//
+// Measured on the Arc 140T (driver 101.9033), docked 1920x1080, XeSS native, on the motorway, with a measurement build
+// that held the AA point off until 90 s so that the first evaluation fell in 3D play (2 runs per arm, alternated). Cold
+// driver cache and no XeSS kernels in pipeline-cache.bin: the first resolved frame took 5602 and 6261 ms without the
+// pre-warm, 16.2 and 18.0 ms with it, the start unchanged (the thread's build took 7.5-7.6 s under the title). Warm
+// caches: frames 1-5 at 14-21 ms with, without and with the throw-away evaluation, which is therefore off. Upscaled
+// with a cold cache, other GPUs and DLSS: not measured.
+
+void vk_dlaa_warm(void) {
+    unsigned out[2], scene[2];
+    res_game_size(out);
+    res_scene_size(scene);
+    int up = scene[0] != out[0] || scene[1] != out[1];
+    int hdr = !up || vk_hdr_wanted();
+    if (chosen() == BK_FSR4 && can(BK_FSR4)) {
+        vk_fsr4_warm(scene[0], scene[1], out[0], out[1], hdr);
+        return;
+    }
+    int bk = pick();
+    if (bk != BK_DLSS && bk != BK_XESS) return;
+    const char *k = cfg_get("AC_UPSCALER_PREWARM");
+    int mode = k && *k ? atoi(k) : 1;
+    if (mode <= 0) {
+        rt_log("dlaa: no pre-warm (AC_UPSCALER_PREWARM=0): %s is made at the first frame with a 3D scene",
+               backend_name(bk, up));
+        return;
+    }
+    if (bk == BK_DLSS && mode == 1) return;   // never run on NVIDIA hardware: the test modes only
+    int eval = mode == 3;
+    uint32_t w = scene[0], h = scene[1], ow = up ? out[0] : w, oh = up ? out[1] : h;
+    if (bk == BK_DLSS && !D.params && !NGX_OK(N.alloc_params(&D.params))) {
+        D.params = NULL;
+        rt_log("dlaa: pre-warm: NGX parameter allocation failed: made at the first frame instead");
+        return;
+    }
+    uint64_t t0 = plat_now_ns();
+    // XeSS needs no command buffer for its context, kernels and initialisation: made before the upload batch opens,
+    // which holds the batch's lock
+    int async = bk == BK_XESS && mode == 1;
+    if (async) vk_xess_warm_async(w, h, ow, oh, !hdr);
+    int made = bk == BK_XESS && !async ? vk_xess_warm(w, h, ow, oh, !hdr, NULL, NULL) : 1;
+    VkCommandBuffer cb = vk_upload_begin();
+    struct Size *e = size_for(cb, w, h, ow, oh);
+    if (!e) {
+        made = 0;
+        rt_log("dlaa: pre-warm: work image creation failed (%ux%u to %ux%u): made at the first frame instead", w, h, ow,
+               oh);
+    } else if (bk == BK_DLSS) {
+        NgxResult r = 0;
+        made = e->feat || dl_create(cb, e, hdr, "at start", &r);
+        if (!made) rt_log("dlaa: pre-warm: DLSS feature creation failed (%08x): made at the first frame instead", (unsigned)r);
+    }
+    // the throw-away evaluation's inputs: the light target's and the scene depth's formats at the scene's size
+    VkImage im[2] = {0};
+    VmaAllocation mem[2] = {0};
+    VkImageView vw[2] = {0};
+    const VkFormat fmt[2] = {VK_FORMAT_B10G11R11_UFLOAT_PACK32, VK_FORMAT_D32_SFLOAT_S8_UINT};
+    const VkImageUsageFlags base = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    int evaluated = 0;
+    if (made && eval &&
+        image2d_aspect(w, h, fmt[0], base | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_ASPECT_COLOR_BIT, &im[0],
+                       &mem[0], &vw[0]) &&
+        image2d_aspect(w, h, fmt[1], base | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT,
+                       &im[1], &mem[1], &vw[1])) {
+        VkImageMemoryBarrier2 ib[2];
+        for (int i = 0; i < 2; i++)
+            ib[i] = (VkImageMemoryBarrier2){.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                                            .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                                            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                                            .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
+                                            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED, .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+                                            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .image = im[i],
+                                            .subresourceRange = {i ? VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT
+                                                                   : VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+        VkDependencyInfo di = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 2,
+                               .pImageMemoryBarriers = ib};
+        vkCmdPipelineBarrier2(cb, &di);
+        VkClearColorValue grey = {{0.5f, 0.5f, 0.5f, 1.0f}}, zero = {{0, 0, 0, 0}};
+        VkClearDepthStencilValue far_z = {1.0f, 0};   // (far is a macro of windows.h)
+        VkImageSubresourceRange cr = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        VkImageSubresourceRange dr = {VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 0, 1, 0, 1};
+        vkCmdClearColorImage(cb, im[0], VK_IMAGE_LAYOUT_GENERAL, &grey, 1, &cr);
+        vkCmdClearDepthStencilImage(cb, im[1], VK_IMAGE_LAYOUT_GENERAL, &far_z, 1, &dr);
+        vkCmdClearColorImage(cb, e->mv, VK_IMAGE_LAYOUT_GENERAL, &zero, 1, &cr);
+        full_barrier(cb);
+        if (bk == BK_DLSS) {
+            NgxResult r = dl_evaluate(cb, e, im[0], vw[0], fmt[0], im[1], vw[1], fmt[1], 0.0f, 0.0f, 1, 16.67f);
+            evaluated = NGX_OK(r);
+            if (!evaluated) rt_log("dlaa: pre-warm: DLSS evaluation failed (%08x): DLSS stays on", (unsigned)r);
+        } else {
+            XessFrame f = {.color = {im[0], vw[0], fmt[0], 0, 0}, .depth = {im[1], vw[1], fmt[1], 0, 0},
+                           .mv = {e->mv, e->mv_view, VK_FORMAT_R16G16_SFLOAT, 0, 0},
+                           .out = {e->out, e->out_view, VK_FORMAT_R16G16B16A16_SFLOAT, 0, 0},
+                           .w = w, .h = h, .ow = ow, .oh = oh, .reset = 1, .ldr = !hdr};
+            evaluated = vk_xess_warm(w, h, ow, oh, !hdr, cb, &f);
+        }
+        full_barrier(cb);
+    }
+    vk_upload_end();
+    vk_upload_flush(im[0] || im[1]);   // waited for when the throw-away images are freed below
+    for (int i = 0; i < 2; i++) {
+        if (vw[i]) vkDestroyImageView(vk_ctx()->device, vw[i], NULL);
+        if (im[i]) vmaDestroyImage(vk_ctx()->vma, im[i], mem[i]);
+    }
+    if (made)
+        rt_log("dlaa: %s pre-warmed at start for %ux%u to %ux%u (%s colour)%s in %.0f ms%s", backend_name(bk, up), w, h,
+               ow, oh, hdr ? "linear" : "LDR", evaluated ? " with a throw-away evaluation" : "",
+               (double)(plat_now_ns() - t0) / 1e6, async ? "; XeSS's context, kernels and initialisation on a thread" : "");
 }
 
 static int scene_color(VkFormat f) {

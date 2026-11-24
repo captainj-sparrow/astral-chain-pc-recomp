@@ -7,21 +7,51 @@
 // Sticks are -32767..32767, up is +y. AC_INPUT=none reports no input. Callable from any thread.
 void input_poll(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry);
 // The same for host UI (the text entry): never blocked. input_block(1) while a text entry is open: input_poll then
-// reports nothing; input_block(0) when it closes: nothing until all buttons and stick directions are released.
+// reports nothing; input_block(0) when it closes: what is held then stays hidden until it is released (the release
+// gate below).
 void input_poll_ui(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry);
+// 1 while the key or mouse button (input_map.h KEY_*) was down at the last keyboard read, whatever it is bound to: the
+// game's window in front, a mouse button only with the cursor captured, and never while the menu or a text entry is
+// open. Any thread.
+int input_key_held(int key);
 void input_block(int on);
+// The release gate (input_map.c, pure). The press that closes the menu or a text entry is still down when the game
+// reads its pad again, and the game must not take it for a press of its own. So every input held at that moment
+// stays hidden from the game until that input is released, and every other input reaches the game at once: wait
+// starts as INPUT_RELEASE_ALL when the menu or the text entry closes, each poll keeps in it the inputs still held
+// (input_release_held of what the sources read) and input_release_gate takes those out of what the game gets,
+// returning the new wait. An input is a button bit or a whole stick (its four direction bits; a stick in wait reads
+// centred).
+// Up to 1.21.2 the game read nothing at all until one poll found every button up and all four stick axes at exactly
+// 0. Analog values do not come back to 0 on every pad: a stick resting just past its dead zone, or a trigger resting
+// past trigger_threshold, kept the game deaf for good after the menu closed, until the pad was unplugged (no pad
+// reads 0). A test gamepad resting at 3500 of 32767 on one axis (10.7 %, 955 after the default 8 % dead zone) left
+// the title screen without input after the menu closed, and one resting at 2000 did not. The menu's chord closed it
+// inside the game's own poll, where the open menu had already emptied the sample, so that way out hid the fault until
+// the pause moved the chord's poll to the presenting thread. Now a stick's rest is no input at all (only a stick
+// past half its travel or tilted by keys is held), and an input that never reads released hides nothing but itself.
+#define INPUT_RELEASE_ALL 0xffffffu   // buttons 0-15 and the stick directions 16-23
+uint32_t input_release_held(uint64_t buttons, int keys_tilt);   // keys_tilt: bit 0 keys tilt the left stick, bit 1 the right
+uint32_t input_release_gate(uint32_t wait, uint32_t held, uint64_t *buttons, int32_t sticks[4]);
 // Co-op (ov_input.c): input_players(2) while the game plays with two players, (1) when it goes back to one. With two,
 // a second gamepad is opened and each player reads its own sources: the gamepads take the players in the order they
 // were opened, the keyboard and the mouse the first player without a gamepad (player 1 when both have one). Under
 // AC_INPUT=none the script feeds the players (its "P2" lines player 2). input_players_connected: bit p for each player
 // with a source now. input_poll_player: player 0 or 1, the same bits and sticks as input_poll (also blocked by the text
-// entry and the menu); 0 and nothing pressed for a player without a source. Any thread.
+// entry and the menu, each player with a release gate of their own); 0 and nothing pressed for a player without a
+// source. Any thread.
 void input_players(int n);
 unsigned input_players_connected(void);
 int input_poll_player(int player, uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry);
 // The in-game menu (ui/menu.h): input_menu(1) when it opens (input_poll reports nothing, the cursor is released), (0) when
-// it closes (nothing until every button and stick direction is released). Independent of input_block.
+// it closes (what is held then stays hidden until it is released, the release gate above). Independent of input_block.
 void input_menu(int open);
+// While the game is paused (pause.c) nothing else polls: one poll of every source the game reads, for the menu's and
+// the overlay's chords. away (out of focus): the pads are only updated, their chords are not looked at. It reports
+// nothing.
+void input_poll_paused(int away);
+// The start of a pause: every motor of both players' gamepads stops now.
+void input_rumble_stop(void);
 // The gamepad alone, for the menu: Switch button bits and the left stick (up +y). 0 without a connected gamepad.
 // Minus+Plus combo and the neutral pad while the menu is open (input_map.c, window-system free): *held is the caller's memory
 // of the combo, sticks are lx, ly, rx, ry. Returns 1 in the poll where the combo goes down (toggle the menu once).
@@ -50,6 +80,9 @@ int input_forced_layout(void);
 // deflection, before the dead zone: the menu shows it on the dead zone rows, so a drifting stick's resting value can be
 // read off. 0 (and both 0) without a connected gamepad. Any thread.
 int input_pad_stick_percent(double pct[2]);
+// How far the open gamepad's left (pct[0]) and right (pct[1]) triggers are pulled now, in percent of their travel: the
+// menu shows it on the trigger threshold row. 0 (and both 0) without a connected gamepad. Any thread.
+int input_pad_trigger_percent(double pct[2]);
 // The label on a face button of the open gamepad (input_map.h PAD_SOUTH..PAD_NORTH, as SDL reports it); PAD_LABEL_NONE for another
 // button, an unknown label or no gamepad. Any thread.
 enum { PAD_LABEL_NONE, PAD_LABEL_A, PAD_LABEL_B, PAD_LABEL_X, PAD_LABEL_Y, PAD_LABEL_CROSS, PAD_LABEL_CIRCLE,

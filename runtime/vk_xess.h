@@ -34,4 +34,11 @@ typedef struct {
     int ldr;           // color is 0..1 (tonemapped), not linear scene light
 } XessFrame;
 int vk_xess_evaluate(VkCommandBuffer cb, const XessFrame *f);
+// vk_dlaa.c vk_dlaa_warm, while the game starts (one thread, before the first evaluation): the context, its kernels and
+// xessVKInit for input w x h, output ow x oh (0: w x h) and the colour kind, so the first evaluation finds them made;
+// with cb (an open upload batch, submitted by the caller) also a throw-away evaluation of f. 1: done; 0: XeSS not
+// available, or a step failed, which is logged and left to the first evaluation (XeSS stays on).
+int vk_xess_warm(uint32_t w, uint32_t h, uint32_t ow, uint32_t oh, int ldr, VkCommandBuffer cb, const XessFrame *f);
+// The same without the evaluation, on a thread of its own that the first vk_xess_evaluate (or vk_xess_release) joins.
+void vk_xess_warm_async(uint32_t w, uint32_t h, uint32_t ow, uint32_t oh, int ldr);
 void vk_xess_release(void);   // vk_device.c destroy_all, the device idle: the context goes before the device

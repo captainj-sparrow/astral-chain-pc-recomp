@@ -9,12 +9,17 @@
 // IAudioClient::IsFormatSupported answers S_OK for 6 and 8 channels, and an Initialize at 6 channels (mask 0x60f)
 // succeeds without AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM. SDL, asked for 6 channels on the same endpoint, opened 2.
 //
+// audio_output = auto: the first endpoint tried chooses what the game mixes, from what device_probe finds there
+// (audio_out_auto_channels): 5.1 on a 5.1 or 7.1 mix format or with a spatial sound format on, stereo otherwise and
+// without an endpoint. audio_out_start and the thread settle it with one compare-and-swap, so a start that stops
+// waiting for a slow endpoint and the thread that answers later agree on one count.
+//
 // Opening, per device: a 5.1 game asks for 6 float channels at 48 kHz, mask 0x60f (FL FR FC LFE SL SR, Wwise's order)
 // as the endpoint takes it; refused while the mix format has 6 channels or more (a receiver at 44.1 kHz), again with
 // the engine's sample-rate conversion; otherwise the stream is stereo and the fill folds the mix down. A stereo game asks
 // for stereo, then with the engine's conversion (a mono or 44.1 kHz endpoint). Each open also records what the menu
 // shows (audio_out_info): the mix format's channels, whether a 6 channel stream is taken, whether a spatial sound format
-// is on (ISpatialAudioClient::IsSpatialAudioStreamAvailable), the endpoint's name.
+// is on (the spatial client offers dynamic objects: device_probe), the endpoint's name.
 //
 // The default endpoint is followed: a change of default (IMMNotificationClient), a change of the endpoint's format
 // (PKEY_AudioEngine_DeviceFormat, which a spatial sound format switched on or off may change) and
@@ -60,7 +65,7 @@ static const PROPERTYKEY ac_pkey_device_format = {
 
 static struct {
     AudioOutFill fill;
-    int channels;                  // what the game mixes
+    volatile int32_t channels;     // what the game mixes, 2 or 6; 0 under auto until the first endpoint was tried
     PlatMutex info_lock;
     AudioOutInfo info;
     volatile int32_t reopen;       // set by the notification client and by a failed stream call
@@ -195,20 +200,45 @@ static void device_probe(IMMDevice *d, AudioOutInfo *info, int *mix_rate) {
         info->surround_ok = hr == S_OK || info->device_channels >= 6;
         IAudioClient_Release(c);
     }
+    // A spatial sound format is on when the spatial client offers dynamic objects. IsSpatialAudioStreamAvailable alone
+    // does not tell: Windows keeps a fallback renderer of static objects on every endpoint, so it answered S_OK on
+    // Realtek speakers with spatial sound off in the Windows sound settings (2026-11-23), with 0 dynamic objects. Up to
+    // 1.21.2 that read as spatial sound on, in the menu's line and the log.
     ISpatialAudioClient *s = NULL;
     info->spatial = 0;
     if (SUCCEEDED(IMMDevice_Activate(d, &ac_iid_spatial_client, CLSCTX_ALL, NULL, (void **)&s))) {
-        info->spatial = ISpatialAudioClient_IsSpatialAudioStreamAvailable(s, &ac_iid_spatial_stream, NULL) == S_OK;
+        UINT32 objects = 0;
+        info->spatial = ISpatialAudioClient_IsSpatialAudioStreamAvailable(s, &ac_iid_spatial_stream, NULL) == S_OK &&
+                        SUCCEEDED(ISpatialAudioClient_GetMaxDynamicObjectCount(s, &objects)) && objects > 0;
         ISpatialAudioClient_Release(s);
     }
 }
 
+// Under auto, the first call settles what the game mixes: from info, or stereo without an endpoint (info NULL).
+static void channels_settle(const AudioOutInfo *info) {
+    if (w.channels) return;
+    int ch = info ? audio_out_auto_channels(info) : 2;
+    if (plat_cas32(&w.channels, ch, 0) != 0) return;   // audio_out_start stopped waiting and settled it first
+    w.stream_channels = ch;
+    if (!info)
+        rt_log("audout: audio_output = auto: no audio output to look at, the game mixes stereo");
+    else
+        rt_log("audout: audio_output = auto: '%s' %s, the game mixes %s", info->name,
+               info->device_channels >= 6 ? "runs 6 channels or more"
+               : ch == 6                  ? "has spatial sound on"
+               : info->surround_ok        ? "runs 2 channels without spatial sound (Windows would fold a 5.1 mix down)"
+                                          : "takes no 5.1",
+               ch == 6 ? "5.1" : "stereo");
+}
+
 // Opens the default endpoint; 0 leaves the null output running.
 static int device_open(int log_failure) {
-    AudioOutInfo info = {.started = 1, .spatial = -1, .stream_channels = w.channels};
+    AudioOutInfo info = {.started = 1, .spatial = -1};
     IMMDevice *d = NULL;
     HRESULT hr = w.enumerator ? IMMDeviceEnumerator_GetDefaultAudioEndpoint(w.enumerator, eRender, eConsole, &d) : E_FAIL;
     if (FAILED(hr)) {
+        channels_settle(NULL);
+        info.stream_channels = w.channels;
         if (log_failure) rt_log("audout: no default audio output (%#lx): the null output keeps time", (unsigned long)hr);
         w.device_id[0] = 0;
         set_info(&info);
@@ -222,6 +252,8 @@ static int device_open(int log_failure) {
     }
     int mix_rate = 0;
     device_probe(d, &info, &mix_rate);
+    channels_settle(&info);
+    info.stream_channels = w.channels;
 
     IAudioClient *c = NULL;
     const char *how = "";
@@ -289,7 +321,7 @@ static int stream_step(void) {
     UINT32 n = w.buffer - pad;
     BYTE *dst = NULL;
     if (FAILED(IAudioRenderClient_GetBuffer(w.render, n, &dst))) return 0;
-    w.fill((float *)dst, (int)n, w.stream_channels);
+    w.fill((float *)dst, (int)n, w.channels, w.stream_channels);
     return SUCCEEDED(IAudioRenderClient_ReleaseBuffer(w.render, n, 0));
 }
 
@@ -338,7 +370,7 @@ static void out_thread(void *arg) {
         while (null_done < due) {
             uint64_t n = due - null_done;
             if (n > OUT_NULL_CHUNK) n = OUT_NULL_CHUNK;
-            w.fill(w.null_buf, (int)n, w.stream_channels);
+            w.fill(w.null_buf, (int)n, w.channels, w.stream_channels);
             null_done += n;
         }
         if (now - last_try >= OUT_RETRY_MS * 1000000ull) {
@@ -350,8 +382,8 @@ static void out_thread(void *arg) {
 
 int audio_out_start(int channels, AudioOutFill fill) {
     w.fill = fill;
-    w.channels = channels == 6 ? 6 : 2;
-    w.stream_channels = w.channels;
+    w.channels = channels == AUDIO_OUT_AUTO ? 0 : channels == 6 ? 6 : 2;
+    w.stream_channels = w.channels ? w.channels : 2;
     w.event = CreateEventW(NULL, FALSE, FALSE, NULL);
     w.wake = CreateEventW(NULL, FALSE, FALSE, NULL);
     w.ready = CreateEventW(NULL, TRUE, FALSE, NULL);
@@ -363,8 +395,11 @@ int audio_out_start(int channels, AudioOutFill fill) {
         rt_log("audout: cannot start the audio output thread");
         return 0;
     }
-    if (WaitForSingleObject(w.ready, 5000) != WAIT_OBJECT_0) rt_log("audout: the audio output is slow to open; going on");
-    return 1;
+    if (WaitForSingleObject(w.ready, 5000) != WAIT_OBJECT_0) {
+        rt_log("audout: the audio output is slow to open; going on%s", w.channels ? "" : " with the game mixing stereo");
+        plat_cas32(&w.channels, 2, 0);
+    }
+    return w.channels;
 }
 
 void audio_out_info(AudioOutInfo *out) {

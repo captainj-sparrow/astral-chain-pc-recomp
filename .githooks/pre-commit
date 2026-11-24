@@ -1,3 +1,11 @@
 #!/bin/sh
 # Enable once per clone: git config core.hooksPath .githooks
+# Runs with the repository's .venv when there is one (Windows or POSIX layout), so the check does not depend on a
+# python on PATH (a shell without one stopped every commit); else python3, then python.
+for py in .venv/Scripts/python.exe .venv/bin/python; do
+    [ -x "$py" ] && exec "$py" tools/check_content.py --staged
+done
+if command -v python3 >/dev/null 2>&1 && python3 -c "" >/dev/null 2>&1; then
+    exec python3 tools/check_content.py --staged
+fi
 exec python tools/check_content.py --staged

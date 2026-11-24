@@ -39,6 +39,7 @@ extern "C" {
 #include "audio_out.h"
 #include "cheats.h"
 #include "cfg.h"
+#include "dlc.h"
 #include "fs.h"
 #include "input.h"
 #include "input_map.h"
@@ -959,6 +960,18 @@ static const char *audio_output_line(bool *warn) {
     return line;
 }
 
+// What the output row asks the game to mix at the next start: 6 for 5.1, 2 for stereo, and under auto what the output
+// in use takes now (audio_out.h audio_out_auto_channels), so the restart is offered once it would change the mix (a
+// 5.1 receiver or a headset with spatial sound switched on during the run). 0: not known yet (no output tried).
+static int audio_output_wanted(void) {
+    const char *set = cfg_value("AC_AUDIO_OUTPUT");
+    if (!strcmp(set, "5.1")) return 6;
+    if (!strcmp(set, "stereo")) return 2;
+    AudioOutInfo info;
+    audio_out_info(&info);
+    return info.open ? audio_out_auto_channels(&info) : 0;
+}
+
 // The room from above with the listener in the middle: each speaker of the mix lights up with its sound (the output's
 // peaks since the last frame on a 48 dB scale, falling 24 dB a second) and is outlined while the speaker test plays on
 // it, so a player sees that every speaker gets sound and which one is which. Not a row: the cursor passes it by.
@@ -1057,18 +1070,18 @@ static void tab_sound(float scale) {
     opt_slider("AC_VOLUME", UI_MENU_VOLUME, 0, 100, UI_MENU_VOLUME_DESC, 5, "%.0f %%");
 
     opt_group(UI_MENU_AUDIO_GROUP_OUTPUT);
-    static const UiTextId output[] = {UI_MENU_AUDIO_STEREO, UI_MENU_AUDIO_51};   // cfg.c's values for AUDIO_OUTPUT
+    static const UiTextId output[] = {UI_MENU_AUDIO_AUTO, UI_MENU_AUDIO_STEREO, UI_MENU_AUDIO_51};   // cfg.c's values
 #ifdef _WIN32
     const UiTextId output_desc = UI_MENU_AUDIO_OUTPUT_DESC_WIN;   // names Windows Sonic and the other spatial formats
 #else
     const UiTextId output_desc = UI_MENU_AUDIO_OUTPUT_DESC;
 #endif
-    opt_choice("AC_AUDIO_OUTPUT", UI_MENU_AUDIO_OUTPUT, output, 2, output_desc);
+    opt_choice("AC_AUDIO_OUTPUT", UI_MENU_AUDIO_OUTPUT, output, 3, output_desc);
     bool warn;
     if (const char *line = audio_output_line(&warn)) opt_text_str(line, warn);
     // The output is fixed when the game opens it: while the one asked for differs, offer the restart right here.
-    const int nmix = audout_mix_channels(), want = !strcmp(cfg_value("AC_AUDIO_OUTPUT"), "5.1") ? 6 : 2;
-    bool ask = nmix && want != nmix && opt_button("##restart", UI_MENU_RESTART, UI_MENU_AUDIO_RESTART_DESC);
+    const int nmix = audout_mix_channels(), want = audio_output_wanted();
+    bool ask = nmix && want && want != nmix && opt_button("##restart", UI_MENU_RESTART, UI_MENU_AUDIO_RESTART_DESC);
 
     if (nmix) {
         opt_group(UI_MENU_AUDIO_GROUP_MIX);
@@ -1103,7 +1116,15 @@ static void tab_controls(float scale) {
     opt_slider("AC_RUMBLE_STRENGTH", UI_MENU_RUMBLE_STRENGTH, 0, 300, UI_MENU_RUMBLE_STRENGTH_DESC, 10, "%.0f %%");
     opt_slider("AC_RUMBLE_CURVE", UI_MENU_RUMBLE_CURVE, 0.2f, 1.5f, UI_MENU_RUMBLE_CURVE_DESC, 0.05f, "%.2f");
     opt_toggle("AC_RUMBLE_TRIGGERS", UI_MENU_RUMBLE_TRIGGERS, UI_MENU_RUMBLE_TRIGGERS_DESC);
-    // One row per stick, falling back to TOTK_STICK_DEADZONE (both sticks) while unset. With a gamepad connected each
+    // With a gamepad connected the trigger row shows how far each trigger is pulled now, to set the threshold above a
+    // worn trigger's resting value.
+    double trig[2];
+    char trig_note[64];
+    bool trig_pad = input_pad_trigger_percent(trig) != 0;
+    snprintf(trig_note, sizeof trig_note, menu_text(UI_MENU_TRIGGER_THRESHOLD_NOW), trig[0], trig[1]);
+    opt_slider("AC_TRIGGER_THRESHOLD", UI_MENU_TRIGGER_THRESHOLD, 0, 95, UI_MENU_TRIGGER_THRESHOLD_DESC, 1, "%.0f %%",
+               trig_pad ? trig_note : nullptr);
+    // One row per stick, falling back to AC_STICK_DEADZONE (both sticks) while unset. With a gamepad connected each
     // row shows its stick's deflection now, before the dead zone: a drifting stick's resting value, to set it above.
     double now[2];
     bool pad = input_pad_stick_percent(now) != 0;
@@ -1211,6 +1232,29 @@ static void tab_mods(float scale) {
         bool ok = mods_dir()[0] != 0;
         if (ok) plat_file_mkdir_p(mods_dir());
         if (!ok || !plat_open_folder(mods_dir())) open_failed = plat_now_ns() + 3000000000ull;
+    }
+    // DLCs (dlc.c): read at start only with the setting on; the row changes it for the next start
+    opt_group(UI_MENU_DLC_GROUP);
+    opt_toggle("AC_DLC", UI_MENU_DLC, UI_MENU_DLC_DESC);
+    if (dlc_started_on() && cfg_bool("AC_DLC")) {   // what this start loaded, while the setting still says so
+        char names[512] = "", line[640];
+        size_t k = 0;
+        for (int i = 0; dlc_name(i) && k < sizeof names; i++)
+            k += (size_t)snprintf(names + k, sizeof names - k, "%s%s", i ? ", " : "", dlc_name(i));
+        if (*names) {
+            snprintf(line, sizeof line, menu_text(UI_MENU_DLC_LOADED), names);
+            opt_text_str(line);
+        } else {
+            opt_text(UI_MENU_DLC_NONE);
+        }
+    }
+    static uint64_t dlc_open_failed;
+    if (opt_button("##dlc_open", UI_MENU_DLC_OPEN, UI_MENU_DLC_OPEN_DESC,
+                   plat_now_ns() < dlc_open_failed ? menu_text(UI_MENU_ACTION_FAILED) : "")) {
+        char dir[2100];
+        bool ok = dlc_dir(dir, sizeof dir) != 0;
+        if (ok) plat_file_mkdir_p(dir);
+        if (!ok || !plat_open_folder(dir)) dlc_open_failed = plat_now_ns() + 3000000000ull;
     }
     opt_end();
     if (rebuild) {

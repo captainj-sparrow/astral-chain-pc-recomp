@@ -1,8 +1,10 @@
-// The game's zstd decoder on the host's libzstd. Most RomFS files of Astral Chain 1.4.3 are zstd frames, many with a
-// dictionary from Pack/ZsDic.pack.zs; the decoder is BSD zstd linked into main. The patch set "zstd"
-// (recomp/patches-v143.txt) sends every call of ZSTD_decompressMultiFrame (main+0x3a1f0) and of ZSTD_decompress_usingDDict
-// (main+0x3a1e0) to the two host functions below, on the patch page. Lifted, the decoder ran its literal and match
-// copies as chains of small functions with the registers in Cpu; here the same frames decode in native code.
+// The game's zstd decoder on the host's libzstd. Written for TotK Recomp 1.4.3, whose RomFS files were zstd frames, many
+// with a dictionary from Pack/ZsDic.pack.zs: its patch set "zstd" (patches-v143.txt) sent every call of
+// ZSTD_decompressMultiFrame (main+0x3a1f0) and of ZSTD_decompress_usingDDict (main+0x3a1e0) to the two host functions
+// below, on the patch page. Lifted, the decoder ran its literal and match copies as chains of small functions with the
+// registers in Cpu; here the same frames decode in native code.
+// Astral Chain 1.0.1's .pkz archives are zstd too, but recomp/patches-v101.txt has no "zstd" set and the GUEST_*
+// addresses below are still 1.4.3's: nothing reaches this file on 1.0.1 until the set and the addresses are found.
 //
 // - Results match the guest's: libzstd decodes the same format, and every result that is an error goes to the guest
 //   decoder again (it writes its own error code; a frame libzstd rejects may still be one the game's version accepts).

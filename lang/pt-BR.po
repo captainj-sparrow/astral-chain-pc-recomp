@@ -573,9 +573,9 @@ msgstr "Modo portátil"
 msgid "UI_MENU_ASSUME_FOCUS"
 msgstr "Continuar rodando fora de foco"
 
-#. English: "On (the default), the game keeps running while you are in another window, and the keyboard stays quiet until the window is in front again. Off, it pauses when its window loses focus, as on the Switch when Home is pressed; a load interrupted that way can stop for good."
+#. English: "On (the default), the game keeps running while you are in another window, and the keyboard stays quiet until the window is in front again. Off, the whole game, sound included, pauses while its window is out of focus, as on the Switch when Home is pressed."
 msgid "UI_MENU_ASSUME_FOCUS_DESC"
-msgstr "Ligado (o padrão), o jogo continua rodando enquanto você está em outra janela, e o teclado fica sem efeito até a janela voltar para a frente. Desligado, ele pausa quando a janela perde o foco, como no Switch ao apertar Home; um carregamento interrompido assim pode parar de vez."
+msgstr "Ligado (o padrão), o jogo continua rodando enquanto você está em outra janela, e o teclado fica sem efeito até a janela voltar para a frente. Desligado, o jogo inteiro, inclusive o som, fica pausado enquanto a janela está sem foco, como no Switch ao apertar Home."
 
 #. English: "HUD"
 msgid "UI_MENU_HUD"
@@ -600,6 +600,34 @@ msgstr "Abrir pasta de mods"
 #. English: "Shows the folder the game loads mods from. It is created if it is missing."
 msgid "UI_MENU_MODS_OPEN_DESC"
 msgstr "Mostra a pasta de onde o jogo carrega os mods. Ela é criada se não existir."
+
+#. English: "Downloadable content"
+msgid "UI_MENU_DLC_GROUP"
+msgstr "Conteúdo adicional"
+
+#. English: "Load DLC"
+msgid "UI_MENU_DLC"
+msgstr "Carregar DLC"
+
+#. English: "Loads the DLCs of the dlc folder next to astralchain.exe: trainings, texts and tutorial windows written by players as XML. They are built into the game's archives from your own game files at start and kept in your profile. Off: the game runs exactly as it is."
+msgid "UI_MENU_DLC_DESC"
+msgstr "Carrega os DLCs da pasta dlc ao lado do astralchain.exe: treinos, textos e janelas de tutorial escritos por jogadores em XML. Eles são montados nos arquivos do jogo a partir dos seus próprios arquivos do jogo ao iniciar e guardados no seu perfil. Desligado: o jogo funciona exatamente como é."
+
+#. English: "Loaded at this start: %s."
+msgid "UI_MENU_DLC_LOADED"
+msgstr "Carregados neste início: %s."
+
+#. English: "No DLC was found in the dlc folder at this start."
+msgid "UI_MENU_DLC_NONE"
+msgstr "Nenhum DLC foi encontrado na pasta dlc neste início."
+
+#. English: "Open DLC folder"
+msgid "UI_MENU_DLC_OPEN"
+msgstr "Abrir pasta de DLC"
+
+#. English: "Shows the folder the game loads DLCs from, one folder per DLC with its dlc.xml. It is created if it is missing."
+msgid "UI_MENU_DLC_OPEN_DESC"
+msgstr "Mostra a pasta de onde o jogo carrega os DLCs, uma pasta por DLC com o seu dlc.xml. Ela é criada se não existir."
 
 #. English: "Game files it replaces: %u. New files it adds: %u."
 msgid "UI_MENU_MODS_ROW_DESC"
@@ -673,13 +701,17 @@ msgstr "Volume geral do jogo."
 msgid "UI_MENU_AUDIO_OUTPUT"
 msgstr "Saída de áudio"
 
-#. English: "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output. Elsewhere the 5.1 mix is folded down to stereo."
+#. English: "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output. Elsewhere the 5.1 mix is folded down to stereo. Automatic picks 5.1 when the output takes it at start, stereo otherwise."
 msgid "UI_MENU_AUDIO_OUTPUT_DESC"
-msgstr "O que o jogo mixa. Em 5.1 o canal central (as vozes) e os surrounds têm canais próprios; requer uma saída 5.1 ou 7.1. Caso contrário, a mixagem 5.1 é convertida para estéreo."
+msgstr "O que o jogo mixa. Em 5.1 o canal central (as vozes) e os surrounds têm canais próprios; requer uma saída 5.1 ou 7.1. Caso contrário, a mixagem 5.1 é convertida para estéreo. Automático escolhe 5.1 quando a saída o aceita ao iniciar, e estéreo caso contrário."
 
-#. English: "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output, or a headset with spatial sound on: Windows Sonic for Headphones, Dolby Atmos for Headphones or DTS Headphone:X, in the device's properties in the Windows sound settings. Elsewhere the 5.1 mix is folded down to stereo."
+#. English: "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output, or a headset with spatial sound on: Windows Sonic for Headphones, Dolby Atmos for Headphones or DTS Headphone:X, in the device's properties in the Windows sound settings. Elsewhere the 5.1 mix is folded down to stereo. Automatic picks 5.1 when the output takes it at start, stereo otherwise."
 msgid "UI_MENU_AUDIO_OUTPUT_DESC_WIN"
-msgstr "O que o jogo mixa. Em 5.1 o canal central (as vozes) e os surrounds têm canais próprios; requer uma saída 5.1 ou 7.1, ou um headset com som espacial ativado: Windows Sonic for Headphones, Dolby Atmos for Headphones ou DTS Headphone:X, nas propriedades do dispositivo nas configurações de som do Windows. Caso contrário, a mixagem 5.1 é convertida para estéreo."
+msgstr "O que o jogo mixa. Em 5.1 o canal central (as vozes) e os surrounds têm canais próprios; requer uma saída 5.1 ou 7.1, ou um headset com som espacial ativado: Windows Sonic for Headphones, Dolby Atmos for Headphones ou DTS Headphone:X, nas propriedades do dispositivo nas configurações de som do Windows. Caso contrário, a mixagem 5.1 é convertida para estéreo. Automático escolhe 5.1 quando a saída o aceita ao iniciar, e estéreo caso contrário."
+
+#. English: "Automatic"
+msgid "UI_MENU_AUDIO_AUTO"
+msgstr "Automático"
 
 #. English: "Stereo"
 msgid "UI_MENU_AUDIO_STEREO"
@@ -988,6 +1020,18 @@ msgstr "Quanto um analógico do controle precisa se mover antes que o jogo perce
 #. English: "stick now: %.0f %%"
 msgid "UI_MENU_STICK_DEADZONE_NOW"
 msgstr "analógico agora: %.0f %%"
+
+#. English: "Trigger threshold"
+msgid "UI_MENU_TRIGGER_THRESHOLD"
+msgstr "Limiar dos gatilhos"
+
+#. English: "How far a gamepad trigger (ZL, ZR) is pulled before the game sees it pressed. 0 reacts to the slightest pull. Raise it if a trigger presses on its own: let go of it, read \"triggers now\" and set the threshold a few percent above it."
+msgid "UI_MENU_TRIGGER_THRESHOLD_DESC"
+msgstr "Quanto um gatilho do controle (ZL, ZR) precisa ser puxado antes que o jogo o veja pressionado. 0 reage ao menor toque. Aumente se um gatilho pressionar sozinho: solte-o, leia \"gatilhos agora\" e coloque o limiar alguns por cento acima."
+
+#. English: "triggers now: L %.0f %%, R %.0f %%"
+msgid "UI_MENU_TRIGGER_THRESHOLD_NOW"
+msgstr "gatilhos agora: L %.0f %%, R %.0f %%"
 
 #. English: "Stick camera speed"
 msgid "UI_MENU_STICK_SENS"

@@ -805,7 +805,8 @@ static int barrier_to(VkExec *ex, int src, int kind, const VkImage *want, const 
             ib[n++] = layout_barrier(want[i], wasp[i], VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT);
     for (int i = 0; i < nwant; i++) ex->fbl_img[i] = want[i], ex->fbl_aspect[i] = wasp[i];
     ex->nfbl = nwant;
-    if (ex->barrier_at == ex->recorded && !n) {
+    // The end of a submission is never left out: a full barrier just before it reaches no host stage (below).
+    if (ex->barrier_at == ex->recorded && !n && src != VK_BAR_END) {
         BC.skipped[src]++;
         return ex->bar_narrow ? VK_PASS_NARROW : VK_PASS_FULL;
     }
@@ -825,6 +826,12 @@ static int barrier_to(VkExec *ex, int src, int kind, const VkImage *want, const 
                           VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
         mb.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     }
+    // The game reads what the GPU wrote into its memory once the timeline reaches the submission (shadow storage on
+    // Linux, imported pools on integrated GPUs). A fence or semaphore wait makes device writes visible to the device
+    // only, and ALL_COMMANDS holds no host stage, so the submission's last barrier also carries the writes into host
+    // reads. The VRAM mirror's write-back copies have their own (vk_mem_mirror_end). Most drivers flush at the end of
+    // a submission anyway; the specification asks for the dependency (Longshot 905e36a9 made the same change).
+    if (src == VK_BAR_END) mb.dstStageMask |= VK_PIPELINE_STAGE_2_HOST_BIT, mb.dstAccessMask |= VK_ACCESS_2_HOST_READ_BIT;
     VkDependencyInfo di = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .memoryBarrierCount = 1, .pMemoryBarriers = &mb,
                            .imageMemoryBarrierCount = n, .pImageMemoryBarriers = ib};
     vkCmdPipelineBarrier2(ex->cb, &di);
@@ -1339,6 +1346,8 @@ static void walk(VkExec *ex, const op_hdr *h, int depth) {
                  h->op == OP_CLEAR_TEX || h->op == OP_CLEAR_BUF) && !ex->in_pass && vk_gpuprof_on())
                 vk_gpuprof_mark(ex, 4, h->op);
             break;
+        case OP_PHOTO: vk_photo_copy(ex, a); break;
+        case OP_PHOTO_FILL: vk_photo_fill(ex, a); break;
         default: rt_fatal("vk: op %s has no replay handler", nvn_op_name(h->op));
         }
         if (split_draws >= split_n) maybe_split(ex);

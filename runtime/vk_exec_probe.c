@@ -2,7 +2,7 @@
 // submissions get consecutive fence values; fence_wait and fence_done agree; completion callbacks run in submit order on
 // the completion thread; a guest-memory word a callback writes is visible once fence_wait returns; finish drains every
 // submission; a present of a cleared vk_texture.c image (layout GENERAL) reads back exactly through the swapchain
-// capture. Clear part: a hand-built op stream (SET_RT to an RGBA8 and a D32 texture, whole-target clears,
+// capture; the game stays one present ahead of the replay after texture releases. Clear part: a hand-built op stream (SET_RT to an RGBA8 and a D32 texture, whole-target clears,
 // then scissored clears) through submit reads back exactly with read_texels.
 #include <stdio.h>
 #include <stdlib.h>
@@ -102,6 +102,29 @@ static int test_sync(const GfxBackend *b, uint8_t *guest, uint64_t *first, uint6
 
 static uint8_t to_byte(float f) { return (uint8_t)(f * 255.0f + 0.5f); }
 
+// The frame bound of the asynchronous replay (vk_backend.c): a present returns once the one before it was handled, also
+// after texture releases went through the queue. The present thread holds the first picture until `at`, so the replay
+// stops at the third present and a bound with any slack lets the later ones return too early.
+#define BOUND_RELEASES 4
+#define BOUND_PRESENTS 6
+static int test_frame_bound(const GfxBackend *b, const tex_t *t, const int crop[4]) {
+    tex_t gone = *t;
+    gone.mem += t->L.size;   // never used: its release only goes through the queue
+    for (int i = 0; i < BOUND_RELEASES; i++) b->texture_release(&gone);
+    b->finish();
+    uint64_t base = gfx_stats().frames, at = kern_now_ns() + 200000000ull, seen = 0;
+    int early = -1;
+    for (int i = 0; i < BOUND_PRESENTS; i++) {
+        b->present(t, crop, at);
+        uint64_t n = gfx_stats().frames - base;
+        if (early < 0 && n < (uint64_t)i) early = i, seen = n;
+    }
+    b->finish();
+    CHECK(early < 0, "present %d returned with %llu replayed after %d texture releases: more than one frame ahead",
+          early + 1, (unsigned long long)seen, BOUND_RELEASES);
+    return 0;
+}
+
 static int test_present(const GfxBackend *b, uint8_t *guest, int *w_out, int *h_out) {
     pool_t pool = {.magic = NVN_POOL_MAGIC, .flags = 0x22, .mem = guest + 0x100000, .size = 0x100000,
                    .game_mem = guest + 0x100000};
@@ -153,6 +176,7 @@ static int test_present(const GfxBackend *b, uint8_t *guest, int *w_out, int *h_
         CHECK(p[k] == e, "presented pixel %ld (%d, %d) is %08x, expected %08x", k, x, y, p[k], e);
     }
     vk_present_capture(0);
+    if (test_frame_bound(b, &t, crop)) return 1;
     b->texture_release(&t);
     b->pool_fini(&pool);
     *w_out = w, *h_out = h;

@@ -32,7 +32,8 @@ Report problems as issues, following [CONTRIBUTING.md](CONTRIBUTING.md).
 - Anisotropic texture filtering up to 16x, for sharp ground into the distance
 - Low latency mode: NVIDIA Reflex or AMD Anti-Lag 2 where the driver offers them, the port's own frame timing on any
   other GPU (Intel, Steam Deck); about a third less time from the controller to the screen at 60 fps, half at 30
-- In-game settings menu (F1), performance overlay (F10)
+- In-game settings menu (F1) that pauses the game while it is open, performance overlay (F10)
+- Optional pause while the game's window is out of focus (the menu's Game tab, "Keep running out of focus")
 - No-HUD mode for screenshots and videos: F12 (or the menu's Game tab) hides the gauges, map, prompts and markers
   during play and shows them again; the menus stay
 - In-game menu, overlay and setup installer in English, Italian, Russian, Brazilian Portuguese and Simplified Chinese
@@ -41,6 +42,7 @@ Report problems as issues, following [CONTRIBUTING.md](CONTRIBUTING.md).
 - Shaders prepared at install instead of during play
 - Ultrawide - From 16:10 to 48:9
 - Ambient Occlusion, and at its top level bounced light: lit surfaces brighten and tint what faces them
+- 5.1 surround sound
 
 ## Installing
 

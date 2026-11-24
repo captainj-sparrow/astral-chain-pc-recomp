@@ -109,6 +109,28 @@ static int shown_layout(void) {
     return forced >= 0 ? forced : input_pad_layout_pick(cfg_value("AC_PAD_LAYOUT"), 0, PAD_KIND_NONE);
 }
 
+// ui_text.h: an action's inputs with the labels of these rows, for the game texts the port fills in (quest.c).
+extern "C" size_t ui_bind_label(int action, char *out, size_t n) {
+    if (!n) return 0;
+    out[0] = 0;
+    if (action < 0 || action >= ACTION_COUNT) return 0;
+    InputMap m;
+    input_map_snapshot(&m);
+    uint8_t keys[2], pad;
+    int nk = input_map_keys_of(&m, action, keys, 2);
+    size_t len = 0;
+    for (int i = 0; i < nk && len < n - 1; i++) {
+        char buf[32];
+        int w = snprintf(out + len, n - len, "%s%s", i ? " / " : "", key_label(keys[i], buf, sizeof buf));
+        len += w > 0 ? (size_t)w : 0;
+    }
+    if (!nk && input_map_pads_of(&m, action, shown_layout(), &pad, 1)) {
+        int w = snprintf(out, n, "%s", pad_label(pad));
+        len = w > 0 ? (size_t)w : 0;
+    }
+    return len < n ? len : n - 1;
+}
+
 // Writes the bind_ line of every action whose line for m differs from the one set; a line at the defaults goes away.
 static void write_lines(const InputMap *m) {
     for (int a = 0; a < ACTION_COUNT; a++) {

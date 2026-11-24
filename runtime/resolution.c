@@ -943,6 +943,11 @@ float res_wide_tick(void) {
     return shown;
 }
 
+// The shape the frame the game is building will be shown in, 0 while the wide set is off (the picture's own). Read
+// where the game records that frame's commands (photo.c): its lenses took W.now, and the present that moves it on comes
+// after them.
+float res_wide_shape(void) { return __atomic_load_n(&W.on, __ATOMIC_RELAXED) ? bits_f(&W.now) : 0.0f; }
+
 static int lens_16x9(const uint8_t *lens) {
     int32_t w, h;
     memcpy(&w, lens + LENS_VIEW_W, sizeof w);

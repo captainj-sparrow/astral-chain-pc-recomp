@@ -391,6 +391,31 @@ class CleanupTest(unittest.TestCase):
         self.assertEqual(lines[1:], ['-c', steps.REBUILD_BOOT, str(self.ctx.layout.root), '--root',
                                      str(self.ctx.layout.root), '--rebuild', str(self.dest)])
 
+    def test_installs_the_release_dlcs_and_keeps_the_players(self):
+        rel = self.ctx.layout.root / 'dlc'
+        (rel / 'pc-controls' / 'quest' / 'c0f0').mkdir(parents=True)
+        (rel / 'pc-controls' / 'dlc.xml').write_text('<dlc/>')
+        (rel / 'pc-controls' / 'quest' / 'c0f0' / 'QuestData.xml').write_text('<QuestRoot/>')
+        (rel / 'README.md').write_text('guide')
+        dlc = self.dest / 'dlc'
+        (dlc / 'mine').mkdir(parents=True)
+        (dlc / 'mine' / 'dlc.xml').write_text('<dlc><window number="af10"/></dlc>')
+        (dlc / 'pc-controls').mkdir()
+        (dlc / 'pc-controls' / 'old.xml').write_text('a file an update dropped')
+        self.assertEqual(self.run_cleanup(), 'ok')
+        self.assertEqual((dlc / 'pc-controls' / 'dlc.xml').read_text(), '<dlc/>')
+        self.assertEqual((dlc / 'pc-controls' / 'quest' / 'c0f0' / 'QuestData.xml').read_text(), '<QuestRoot/>')
+        self.assertFalse((dlc / 'pc-controls' / 'old.xml').exists())
+        self.assertEqual((dlc / 'README.md').read_text(), 'guide')
+        self.assertEqual((dlc / 'mine' / 'dlc.xml').read_text(), '<dlc><window number="af10"/></dlc>')
+        self.assertEqual(sorted(p.name for p in dlc.iterdir()), ['README.md', 'mine', 'pc-controls'])
+        self.assertEqual(self.run_cleanup(), 'ok')   # a second run over what the first one left
+        self.assertEqual(sorted(p.name for p in dlc.iterdir()), ['README.md', 'mine', 'pc-controls'])
+
+    def test_a_release_without_dlcs_adds_no_folder(self):
+        self.assertEqual(self.run_cleanup(), 'ok')
+        self.assertFalse((self.dest / 'dlc').exists())
+
     def test_keeps_the_build_cache(self):
         for name in ('gen', 'build'):
             (self.ctx.cache / name).mkdir(parents=True)

@@ -92,7 +92,8 @@ static void probe_device_and_pools(void) {
     int abi[2] = {0, 0};
     CALL(nvnDeviceGetInteger, U(&dev), 0, U(&abi[0]));
     CALL(nvnDeviceGetInteger, U(&dev), 1, U(&abi[1]));
-    CHECK(abi[0] == 55 && abi[1] >= 15, "device ABI %d.%d", abi[0], abi[1]);
+    // main+0x9f2834..0x9f2860 gives up unless major == 53 and minor >= 310 (cmp #0x35, cmp #0x136)
+    CHECK(abi[0] == 53 && abi[1] >= 310, "device ABI %d.%d", abi[0], abi[1]);
 
     pmem = mem_kernel_alloc(PROBE_POOL_SIZE, 0x1000);
     gmem = mem_kernel_alloc(PROBE_GPOOL_SIZE, 0x1000);
@@ -408,6 +409,29 @@ static uint64_t record_all(void) {
     REC(OP_RESET_COUNTER, CALL(nvnCommandBufferResetCounter, U(c), NVN_COUNTER_TYPE_SAMPLES_PASSED));
     REC(OP_COPY_B2B, CALL(nvnCommandBufferCopyBufferToBuffer, U(c), 0x1000, 0x2000, 0x40, 0));
     REC(OP_UPDATE_UB, CALL(nvnCommandBufferUpdateUniformBuffer, U(c), 0x3000, 0x100, 0x10, 8, U(ub_data)));
+    // the photo mode (photo.c): tex1 is a window texture, so the SetRenderTargets after the game's photo function
+    // asked for a photo records the capture of tex1, the last output set, before itself
+    OBJ(NVNwindowBuilder, wb);
+    OBJ(NVNwindow, win);
+    const NVNtexture *wtex[2] = {&tex1, &tex2};
+    CALL(nvnWindowBuilderSetDefaults, U(&wb));
+    CALL(nvnWindowBuilderSetDevice, U(&wb), U(&dev));
+    CALL(nvnWindowBuilderSetTextures, U(&wb), 2, U(wtex));
+    CHECK((uint8_t)CALL(nvnWindowInitialize, U(&win), U(&wb)) == 1, "WindowInitialize");
+    REC(OP_SET_RT, CALL(nvnCommandBufferSetRenderTargets, U(c), 1, U(colors), 0, U(&tex2), 0));
+    set_tex(NVN_FORMAT_RGBA8, 4, 4, 1, 0x20000);   // tex3 again (finalized above): the album texture
+    CHECK((uint8_t)CALL(nvnTextureInitialize, U(&tex3), U(&texb)) == 1, "album texture");
+    uint64_t photo[2] = {0, U(&tex3) - 0x48};
+    cpu.x[20] = U(photo);
+    rt_photo_arm(&cpu);
+    expect[nexpect++] = OP_PHOTO;
+    REC(OP_SET_RT, CALL(nvnCommandBufferSetRenderTargets, U(c), 1, U(colors), 0, U(&tex2), 0));
+    // the photo's passes draw into the album texture, tex3 (RGBA8; the photo at x20 names its agl object at +8, whose
+    // NVNtexture is at +0x48); once the function is done, the next SetRenderTargets records the album picture into it
+    const NVNtexture *album[1] = {&tex3};
+    REC(OP_SET_RT, CALL(nvnCommandBufferSetRenderTargets, U(c), 1, U(album), 0, 0, 0));
+    rt_photo_end(&cpu);
+    expect[nexpect++] = OP_PHOTO_FILL;
     REC(OP_SET_RT, CALL(nvnCommandBufferSetRenderTargets, U(c), 1, U(colors), 0, U(&tex2), 0));
     REC(OP_CLEAR_COLOR, CALL(nvnCommandBufferClearColor, U(c), 2, U(rgba), 0xf));
     fv(0, 0.25f);
@@ -514,6 +538,10 @@ static void parse_all(uint64_t h) {
         }
         case OP_SET_RT: {
             const p_set_rt *p = a;
+            if (p->n == 1 && p->color[0] && p->color[0]->serial == ((const tex_t *)(const void *)&tex3)->serial) {
+                CHECK(!p->depth, "SET_RT payload of the photo's album pass");
+                break;
+            }
             CHECK(p->n == 1 && p->color[0] && p->color[0] != t1 && p->color[0]->serial == t1->serial && p->depth &&
                       p->depth != t2 && p->depth->serial == t2->serial && !p->has_cview[0] && !p->has_dview,
                   "SET_RT payload: textures are pinned host copies");
@@ -679,6 +707,18 @@ static void parse_all(uint64_t h) {
             const p_clear_buf *p = a;
             CHECK((p->addr == 0xc200 && p->size == 0x40 && p->value == 0xdeadbeef) ||
                       (p->addr == 0xc300 && p->size == 4 && p->value == 0x1234), "CLEAR_BUF payload (ClearBuffer, ReportValue)");
+            break;
+        }
+        case OP_PHOTO: {
+            const p_photo *p = a;
+            CHECK(p->tex && p->tex != t1 && p->tex->serial == t1->serial && p->seq >= 1 && p->shape == 0,
+                  "PHOTO payload: the window texture last set, pinned, photo %u, shape %g", p->seq, (double)p->shape);
+            break;
+        }
+        case OP_PHOTO_FILL: {
+            const p_photo_fill *p = a;
+            CHECK(p->dst && p->dst->serial == ((const tex_t *)(const void *)&tex3)->serial && p->seq >= 1,
+                  "PHOTO_FILL payload: the album texture the photo's passes drew into, pinned, photo %u", p->seq);
             break;
         }
         default: CHECK(0, "unexpected op %s", nvn_op_name(o->op)); break;

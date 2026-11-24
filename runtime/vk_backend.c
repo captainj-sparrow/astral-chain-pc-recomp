@@ -14,9 +14,10 @@
 // Asynchronous replay (AC_REPLAY_ASYNC, default on; 0 turns it off): nvnQueueSubmitCommands
 // and nvnQueuePresentTexture only queue. Each item gets its timeline value at enqueue (vk_sync_reserve), in queue
 // order; the replay thread runs the synchronous submit and present bodies in that order, so every value is signalled
-// by the submission it was handed out for. The game runs at most one frame ahead: queueing present N waits until the
-// replay thread handled present N-1. Calls that read or free GPU state that queued work may use drain the queue first
-// (replay_drain), each cause counted.
+// by the submission it was handed out for. A paused game's repeats (vk_be_repeat, pause.c) go through the same queue
+// for that order. The game runs at most one frame ahead: queueing present N waits until the
+// replay thread handled present N-1; releases and repeats are no presents and do not count (--probe-vkexec checks it).
+// Calls that read or free GPU state that queued work may use drain the queue first (replay_drain), each cause counted.
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,6 +48,7 @@ typedef struct {
 static PlatMutex pl = PLAT_MUTEX_INIT;
 static PlatCond pcv = PLAT_COND_INIT;   // job queued, job taken, job submitted
 static PresentJob job;
+static PresentJob last_job;   // the last present's, for its repeats (the thread that calls present_image only)
 static int pending, busy, present_thread;
 
 // Sleeps on a high-resolution timer to 1 ms before at, then yields until at: the timer alone wakes up to ~0.5 ms late.
@@ -110,6 +112,44 @@ void vk_present_drain(void) {
     perf_end(PERF_DRAIN, p0);
 }
 
+static void present_queue(const PresentJob *j) {
+    plat_mutex_lock(&pl);
+    if (!present_thread) {
+        if (!plat_thread_spawn(present_main, NULL, "vk present", 0)) rt_fatal("vk: cannot start the present thread");
+        present_thread = 1;
+    }
+    while (pending) plat_cond_wait(&pcv, &pl);   // one present in waiting at most
+    job = *j;
+    pending = 1;
+    plat_cond_broadcast(&pcv);
+    plat_mutex_unlock(&pl);
+}
+
+// A present without a picture: the value queued for it is still signalled, in order.
+static void present_skip(uint64_t value) {
+    if (!value) return;
+    vk_present_drain();
+    uint64_t f = vk_sync_submit(NULL, 0);
+    if (f != value)
+        rt_fatal("vk: skipped present signalled %llu, queued as %llu", (unsigned long long)f, (unsigned long long)value);
+}
+
+// The last present again (vk_be_repeat), with what went with its picture: the HDR scene, the sharpening, the shape.
+// The texture is looked up again: a thread may have released it before it stopped.
+static void present_repeat(const tex_t *t, uint64_t at_ns, uint64_t value) {
+    const VkTexImage *img = vk_texture_get(t);
+    if (!img || !last_job.image || img->image != last_job.image) {
+        present_skip(value);
+        return;
+    }
+    PresentJob j = last_job;
+    j.at = at_ns, j.queued = kern_now_ns(), j.value = value;
+    j.frame = j.lid = 0;   // no frame of the game's: no thumbnail, no latency record
+    vk_upload_flush(0);
+    __atomic_add_fetch(&gfx_counters.repeats, 1, __ATOMIC_RELAXED);
+    present_queue(&j);
+}
+
 // The present after the frame count: resolves the image and hands the blit to the present thread. queued: when the game
 // presented; value: the timeline value queued for this present (asynchronous replay), 0 for the next one (synchronous).
 static void present_image(const tex_t *t, const int crop[4], uint64_t at_ns, uint64_t queued, uint64_t frame,
@@ -125,11 +165,8 @@ static void present_image(const tex_t *t, const int crop[4], uint64_t at_ns, uin
     if (!img || !(img->aspect & VK_IMAGE_ASPECT_COLOR_BIT)) {
         if (plat_inc32(&n_skipped) <= 8)
             rt_log("vk: present of texture %p (format %#x) skipped: no colour image", (const void *)t, t ? t->d.format : 0);
-        if (value) {   // the queued value is still signalled, in order
-            vk_present_drain();
-            uint64_t f = vk_sync_submit(NULL, 0);
-            if (f != value) rt_fatal("vk: skipped present signalled %llu, queued as %llu", (unsigned long long)f, (unsigned long long)value);
-        }
+        last_job.image = VK_NULL_HANDLE;
+        present_skip(value);
         return;
     }
     static int logged_present;
@@ -146,21 +183,13 @@ static void present_image(const tex_t *t, const int crop[4], uint64_t at_ns, uin
         for (int i = 0; i < 4; i++) j.crop[i] = (int)lroundf((float)crop[i] * img->scale);
     }
     vk_upload_flush(0);   // an upload vk_texture_get just recorded goes before the blit
-    plat_mutex_lock(&pl);
-    if (!present_thread) {
-        if (!plat_thread_spawn(present_main, NULL, "vk present", 0)) rt_fatal("vk: cannot start the present thread");
-        present_thread = 1;
-    }
-    while (pending) plat_cond_wait(&pcv, &pl);   // one present in waiting at most
-    job = j;
-    pending = 1;
-    plat_cond_broadcast(&pcv);
-    plat_mutex_unlock(&pl);
+    last_job = j;
+    present_queue(&j);
     if (rdoc_active()) { vk_present_drain(); rdoc_after_present(frame); }
 }
 
 // ---- Asynchronous replay
-enum { RI_SUBMIT, RI_PRESENT, RI_RELEASE };
+enum { RI_SUBMIT, RI_PRESENT, RI_RELEASE, RI_REPEAT };
 typedef struct {
     int kind, n, has_crop, crop[4];
     float shape;        // RI_PRESENT: the frame's shape, taken when the game presented (PresentJob)
@@ -181,6 +210,7 @@ static PlatCond rcv = PLAT_COND_INIT;   // item queued, item taken, item done
 static ReplayItem rq[RQ_CAP];
 static int rq_head, rq_n, r_busy, r_started;
 static uint64_t r_presents_queued, r_presents_done, r_submit_done, game_frames;
+static int r_repeat;   // rl: a repeat is queued or being replayed
 // Under rl: calls, calls that waited and the time waited per cause, since the last replay_log line and over the run.
 static uint64_t dr_calls[DR_N], dr_waits[DR_N], dr_ns[DR_N], dr_tcalls[DR_N], dr_twaits[DR_N], dr_tns[DR_N];
 // AC_REPLAY_CHECK: ReadTexels compared with a read after a full drain (under rl): checked, differing, differing
@@ -241,13 +271,16 @@ static void replay_main(void *arg) {
             vk_present_drain();
             vk_texture_release(it.tex);
             free((void *)it.tex);
+        } else if (it.kind == RI_REPEAT) {
+            present_repeat(it.tex, it.at, it.value);
         } else {
             uint64_t frame = __atomic_add_fetch(&gfx_counters.frames, 1, __ATOMIC_RELAXED);
             present_image(it.tex, it.has_crop ? it.crop : NULL, it.at, it.queued, frame, it.value, it.shape, it.lid);
         }
         plat_mutex_lock(&rl);
         if (it.kind == RI_SUBMIT) r_submit_done = it.submit_no;
-        else r_presents_done++;
+        else if (it.kind == RI_REPEAT) r_repeat = 0;
+        else if (it.kind == RI_PRESENT) r_presents_done++;
         r_busy = 0;
         plat_cond_broadcast(&rcv);
     }
@@ -374,6 +407,21 @@ static void vk_be_present(const tex_t *t, const int crop[4], uint64_t at_ns) {
         it.has_crop = 1;
         for (int i = 0; i < 4; i++) it.crop[i] = crop[i];
     }
+    replay_enqueue(&it);
+}
+
+// One repeat in the queue at most: on a display slower than 60 Hz the menu would otherwise fall behind its input.
+static void vk_be_repeat(const tex_t *t, uint64_t at_ns) {
+    if (!gfx_replay_async()) {
+        present_repeat(t, at_ns, 0);
+        return;
+    }
+    plat_mutex_lock(&rl);
+    int queued = r_repeat;
+    r_repeat = 1;
+    plat_mutex_unlock(&rl);
+    if (queued) return;
+    ReplayItem it = {.kind = RI_REPEAT, .tex = t, .at = at_ns};
     replay_enqueue(&it);
 }
 
@@ -548,6 +596,7 @@ const GfxBackend gfx_vulkan_backend = {
     .fence_wait = vk_sync_fence_wait,
     .fence_done = vk_sync_fence_done,
     .present = vk_be_present,
+    .repeat = vk_be_repeat,
     .finish = vk_be_finish,
     .read_texels = vk_be_read_texels,
     .write_texels = vk_be_write_texels,

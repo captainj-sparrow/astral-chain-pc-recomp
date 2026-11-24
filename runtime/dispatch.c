@@ -238,6 +238,10 @@ __attribute__((noinline)) static void dispatch_miss(Cpu *c) {
     }
     GuestFn f = off ? (GuestFn)(D.anchor + off) : g_ready ? host_lookup(pc) : NULL;
     if (__builtin_expect(!f, 0)) dispatch_fail(c);
+    if (!off) {   // a host function: where its calls need nothing of hostfn_entry, the cache holds the function itself
+        GuestFn direct = hostfn_direct(pc);
+        if (direct) f = direct;
+    }
     if (g_ready && !dc_off) {   // before the seal a host function may still be registered at an address that has none
         uint64_t key = dc_key(pc);
         DcEntry *e = dc_entry(key);

@@ -1,6 +1,6 @@
 """Run a build of the game headless on a copy of the user's profile with a backed-up save and scripted input.
 
-The user's profile (build/profile-<exe dir name>, build_game.py's default, else build/profile) is never written: each
+The user's profile (--profile, else build/profile-<exe dir name>, build_game.py's default, else build/profile) is never written: each
 run copies it to <exe dir>/prof-<tag>, swaps in the save backup, and deletes the copy afterwards. The log records how
 many other astralchain.exe and ninja.exe processes ran, because timings taken next to them are not comparable.
 
@@ -136,8 +136,13 @@ def release_gpu_lock(f):
     f.close()
 
 
-def profile_of(exe_dir):
-    """The profile the build plays with: build_game.py makes build/profile-<version> the default of its exe."""
+def profile_of(exe_dir, given=None):
+    """The profile the build plays with: build_game.py makes build/profile-<version> the default of its exe. --profile
+    names another one, which is copied the same way and never written."""
+    if given:
+        if given.is_dir():
+            return given.resolve()
+        sys.exit(f'run_game: no profile at {given}')
     for p in (ROOT / 'build' / f'profile-{exe_dir.name}', ROOT / 'build' / 'profile'):
         if p.is_dir():
             return p
@@ -159,6 +164,7 @@ def profile_copy(src, dest, save):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('exe_dir', type=Path, help='build directory holding astralchain.exe')
+    ap.add_argument('--profile', type=Path, help='profile to copy; default: build/profile-<exe dir name>, else build/profile')
     ap.add_argument('--save', help='directory name under build/save-backup; default: the profile as it is')
     ap.add_argument('--script', type=Path, default=ROOT / 'tools' / 'input' / 'load_save.txt', help='AC_INPUT_SCRIPT')
     ap.add_argument('--seconds', type=float, required=True,
@@ -182,7 +188,7 @@ def main():
             while busy():
                 time.sleep(10)
         prof = exe_dir / f'prof-{a.tag}'
-        profile_copy(profile_of(exe_dir), prof, a.save)
+        profile_copy(profile_of(exe_dir, a.profile), prof, a.save)
 
         env = dict(os.environ, AC_ASSUME_FOCUS='1', AC_INPUT='none', AC_INPUT_SCRIPT=str(a.script.resolve()))
         if not a.show:

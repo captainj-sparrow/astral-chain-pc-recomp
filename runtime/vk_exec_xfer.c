@@ -93,7 +93,7 @@ static void event_cb(void *arg) {
 
 // NVNcounterData = {counter, timestamp}; timestamps are Tegra 19.2 MHz ticks (the base of GetSystemTick).
 static void write_counter(uint64_t addr, uint64_t counter) {
-    uint64_t rec[2] = {counter, (uint64_t)((unsigned __int128)kern_now_ns() * 12 / 625)};
+    uint64_t rec[2] = {counter, (uint64_t)((unsigned __int128)kern_guest_ns() * 12 / 625)};
     memcpy((void *)(uintptr_t)addr, rec, sizeof rec);
 }
 
@@ -561,7 +561,9 @@ static int int_format(VkFormat f) {
 }
 
 // Whole levels only (vkCmdClear*Image has no rectangle); partial regions, channel masks and a view that reinterprets
-// the format are skipped (MacNativeGames does not replay them either, nvn_mtl.m).
+// the format are skipped (MacNativeGames does not replay them either, nvn_mtl.m). So is a clear of an image kept in
+// a block format (BC, or ASTC where the device samples it natively): vkCmdClearColorImage takes no compressed format
+// (VUID-vkCmdClearColorImage-image-00007), and a driver may write anything there; the image keeps its texels.
 static void clear_tex(VkExec *ex, const p_clear_tex *p) {
     const tex_t *t = p->tex;
     if (!t) return;
@@ -581,6 +583,10 @@ static void clear_tex(VkExec *ex, const p_clear_tex *p) {
     if (img->aspect & VK_IMAGE_ASPECT_COLOR_BIT) {
         rng.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         VkClearColorValue cv;
+        if (vk_format_compressed(img->format)) {
+            warn_once(W_CLEAR, "texture clear of an image in block format %d: skipped", (int)img->format);
+            return;
+        }
         if (int_format(img->format) != (p->is_uint != 0)) {
             warn_once(W_CLEAR, "texture clear value kind (uint %d) does not match format %d: skipped", p->is_uint, (int)img->format);
             return;

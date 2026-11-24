@@ -92,6 +92,7 @@
  "warn.version_accepted": "O código do jogo difere do dump de referência ({modules}); continuando porque você pediu. O jogo pode não rodar.",
  "warn.update_accepted": "O código da atualização difere do dump de referência {version} ({modules}); continuando porque você pediu. O jogo pode não rodar.",
  "warn.xbox_prompts_failed": "Não foi possível preparar os ícones de botão do Xbox (código de saída {code}); o jogo mantém os ícones do Switch. Detalhes: {log}",
+ "warn.dlc_failed": "Não foi possível copiar a pasta de DLC: {detail}. O jogo funciona sem ela; execute a instalação de novo para adicioná-la.",
  "warn.shaders_skipped": "O driver gráfico travou ao compilar alguns shaders, então {count} ficaram fora da preparação. O jogo os compila quando precisar deles pela primeira vez, e o driver pode travar ali também; uma atualização do driver pode resolver. Detalhes: {log}",
  "warn.kernel_old": "O Linux {version} não tem o rastreamento de escrita de que o jogo depende (6.7 ou mais novo); o jogo pode rodar muito devagar. Atualizar o sistema resolve.",
 

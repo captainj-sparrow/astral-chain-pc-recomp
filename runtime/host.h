@@ -118,6 +118,14 @@ GuestFn hostfn_observer(const char *name);                 // NULL if none
 void hostfn_add_override(const char *name, GuestFn fn);    // an override outside the linker table (probes); before
                                                            // ldr_load
 const char *hostfn_name(uint64_t addr);                    // name registered at a synthetic address, NULL if none
+// The sdk's libc on host code (ov_libc.c). libc_init: before ldr_load, binds memset, memmove, memcmp, strlen, strcmp
+// and strncmp when host_libc is on (memcpy is a linked override either way); libc_bind_all binds them whatever the
+// setting (--probe-libc); libc_host_fn: the host function of one of those names or memcpy, NULL for another;
+// libc_ab_frame: perf_present, every present, for AC_HOST_LIBC_AB's in-launch A/B.
+void libc_init(void);
+void libc_bind_all(void);
+GuestFn libc_host_fn(const char *name);
+void libc_ab_frame(void);
 void hostfn_seal(void);                                    // build the dispatch table (rt_dispatch_init over every
                                                            // linked module); idempotent; registration ends here
 uint64_t hostfn_calls(void);                               // host-function calls so far, all threads (0 in play
@@ -126,6 +134,11 @@ void hostfn_report(void);                                  // call count per hos
 void hostfn_count_calls(int on);                           // count per function (on at start) or nothing (play)
 void hostfn_track_calls(void);                             // AC_CORE_DIAG: every host call in the thread's host depth
                                                            // (and counted in the total); before guest threads start
+GuestFn hostfn_direct(uint64_t addr);                      // dispatch_miss: the function a thread's target cache may
+                                                           // hold in place of hostfn_entry (AC_HOSTFN_DIRECT), NULL
+                                                           // for nn::fs, AC_TRACE=host, AC_CORE_DIAG and any address
+                                                           // without a slot. Once it gave one, counting or tracking
+                                                           // calls (the two functions above) is fatal
 int hostfn_table_size(int observers);                      // linked HOST_OVERRIDE (0) / HOST_OBSERVER (1) entries
 const char *hostfn_table_name(int observers, int i);       // symbol of linked entry i, NULL past the end
 uint64_t rt_original(Cpu *c);                              // inside an observer: call the guest definition with the
@@ -202,6 +215,8 @@ int ldr_count(void);
 const RtLoaded *ldr_module(int i);                         // order: main, subsdk0, sdk
 uint64_t ldr_symbol(const char *name);                     // exported definition, 0 if none
 uint64_t ldr_plt_stub(const char *module, const char *name); // PLT stub whose GOT slot holds name, 0 if none
+int ldr_jump_slots(const char *name, uint64_t *out, int max); // the GOT slots of every module's JUMP_SLOT relocations
+                                                           // of name (at most max), their count
 const char *ldr_describe(uint64_t a, char *buf, int n);    // "main+0x1234 (symbol+0x10)", "host <name>", or the address
 uint8_t *ldr_read_verified(const char *dir, const char *file, size_t *len);   // whole file, SHA-256 checked against
                                                            // modules.c (fatal on mismatch); free() it
@@ -254,6 +269,14 @@ void kern_bind_system_event(Cpu *c, uint64_t ev, int autoclear);   // guest thre
 void kern_signal_system_event(uint64_t ev);                // any thread
 int kern_svc(Cpu *c, uint32_t imm);                        // thread/sync SVCs; 1 if handled
 uint64_t kern_now_ns(void);
+// The pause (pause.c). kern_pause, on a thread without a virtual core: every guest thread stops and then the guest's
+// clock; 0, and the game runs on, when one did not stop. kern_resume undoes it.
+int kern_pause(void);
+void kern_resume(void);
+int kern_paused(void);                                     // the guest's clock stands still now; any thread
+uint64_t kern_paused_ns(void);                             // the time the pauses so far took, the current one excepted
+uint64_t kern_guest_ns(void);                              // kern_now_ns less the pauses: the guest's monotonic time
+extern uint64_t kern_clock_stop, kern_clock_lost;          // the same clock in plat_counter units, for rt_ticks
 extern uint64_t rt_guest_start_ns;   // kern_now_ns when the guest started (boot.c), 0 before
 typedef struct { uint64_t svcs, threads, host_calls; } RtStats;
 RtStats rt_stats(void);                                    // host_calls: hostfn_calls()
@@ -283,6 +306,7 @@ int res_heapdef_build(const void *in, size_t n, void **out, size_t *out_n);   //
                                                            // the grown heaps, malloc'd; 0 = cannot (logged)
 void res_heapdef_served(void);                             // romfs.c serves the grown table
 void res_init(void);                                       // after rt_patches_init: the patch page and the sets
+void quest_init(void);                                     // after rt_patches_init: the training menu's added rows (quest.c)
 // Upscaling on 1.0.1 (the scene set): the scene the game renders (the game resolution unless an upscaling mode reduced
 // it at start), whether it is reduced, and the scene a mode ("native", "quality" ... "ultra_performance") gives at the
 // game resolution (the menu's mode row).
@@ -311,6 +335,7 @@ void res_drawdist_live(void);                              // AC_DRAW_DISTANCE t
 // window's size with each new swapchain.
 float res_wide_tick(void);
 void res_wide_window(unsigned w, unsigned h);
+float res_wide_shape(void);                                // the shape of the frame being built, 0 for the picture's own
 // The gameplay HUD (the hud setting, set nohud): the game's present switches the set when the setting changed.
 void res_hud_tick(void);
 // ---- code patches (patches.c) and the frame step (frame_rate.c)
@@ -360,7 +385,9 @@ void rt_boot(void);                                        // boot.c
 int probe_cfg(void);                                       // cfg_probe.c
 int probe_dpi(void);                                       // dpi_probe_win.c (Windows only)
 int probe_mods(void);                                      // mods_probe.c
+int probe_dlc(void);                                       // dlc_probe.c
 int probe_loader(void), probe_kernel(void), probe_ipc(void), probe_services(void), probe_fs(void);
+int probe_libc(void);                                      // libc_probe.c
 int probe_gfx_abi(void);                                   // gfx_abi_probe.c
 int probe_vkdevice(void);                                 // vk_device.c
 int probe_xess(void);                                     // vk_xess.c

@@ -1,6 +1,7 @@
 // --probe-services: every override of ov_system.c, ov_input.c, ov_media.c, swkbd.c and
 // ov_gfx.c called the way guest code calls it: by its synthetic address through rt_call / rt_dispatch, with AAPCS64
-// arguments, on the guest main thread. Checks that each one matches a relocation of the loaded modules, then the
+// arguments, on the guest main thread. Checks that each one matches a relocation of the loaded modules, except those
+// Astral Chain 1.0.1 does not import (not_imported below), which must match none, then the
 // values: language, operation mode, notification messages, account, time round trips, controllers, codec state,
 // graphics records, the system events behind nfp and vi, the software keyboard with arguments built by the guest SDK
 // (answers from AC_SWKBD_ANSWER, then the window pressed by AC_SWKBD_TEST) and shared font 0, decoded from the file
@@ -84,10 +85,13 @@ static Ov ovs[] = {
     // account
     {"account.Initialize", "_ZN2nn7account10InitializeEv"},
     {"account.TryOpenPreselectedUser", "_ZN2nn7account22TryOpenPreselectedUserEPNS0_10UserHandleE"},
+    {"account.OpenPreselectedUser", "_ZN2nn7account19OpenPreselectedUserEPNS0_10UserHandleE"},
     {"account.CloseUser", "_ZN2nn7account9CloseUserERKNS0_10UserHandleE"},
+    {"account.OpenUser", "_ZN2nn7account8OpenUserEPNS0_10UserHandleERKNS0_3UidE"},
     {"account.GetUserId", "_ZN2nn7account9GetUserIdEPNS0_3UidERKNS0_10UserHandleE"},
     {"account.GetUserExistence", "_ZN2nn7account16GetUserExistenceEPbRKNS0_3UidE"},
     {"account.GetNickname", "_ZN2nn7account11GetNicknameEPNS0_8NicknameERKNS0_3UidE"},
+    {"friends.UserPresence.Initialize", "_ZN2nn7friends12UserPresence10InitializeERKNS_7account3UidE"},
     // time
     {"time.Initialize", "_ZN2nn4time10InitializeEv"},
     {"time.Finalize", "_ZN2nn4time8FinalizeEv"},
@@ -106,6 +110,7 @@ static Ov ovs[] = {
      "_ZN2nn4time48CalculateStandardUserSystemClockDifferenceByUserERKNS0_13ClockSnapshotES3_"},
     // pl
     {"pl.GetSharedFontLoadState", "_ZN2nn2pl22GetSharedFontLoadStateENS0_14SharedFontTypeE"},
+    {"pl.GetSharedFont", "_ZN2nn2pl13GetSharedFontEPiPNS0_14SharedFontDataEiNS_8settings12LanguageCodeE"},
     {"pl.GetSharedFontAddress", "_ZN2nn2pl20GetSharedFontAddressENS0_14SharedFontTypeE", 1},
     {"pl.GetSharedFontSize", "_ZN2nn2pl17GetSharedFontSizeENS0_14SharedFontTypeE", 1},
     // ov_input.c
@@ -120,6 +125,8 @@ static Ov ovs[] = {
     {"hid.GetNpadStates.JoyRight", "_ZN2nn3hid13GetNpadStatesEPNS0_17NpadJoyRightStateEiRKj"},
     {"hid.GetNpadStates.Handheld", "_ZN2nn3hid13GetNpadStatesEPNS0_17NpadHandheldStateEiRKj"},
     {"hid.GetNpadState.FullKey", "_ZN2nn3hid12GetNpadStateEPNS0_16NpadFullKeyStateERKj"},
+    {"hid.GetNpadState.JoyDual", "_ZN2nn3hid12GetNpadStateEPNS0_16NpadJoyDualStateERKj"},
+    {"hid.GetNpadState.Handheld", "_ZN2nn3hid12GetNpadStateEPNS0_17NpadHandheldStateERKj"},
     {"hid.GetNpadState.JoyLeft", "_ZN2nn3hid12GetNpadStateEPNS0_16NpadJoyLeftStateERKj"},
     {"hid.GetNpadState.JoyRight", "_ZN2nn3hid12GetNpadStateEPNS0_17NpadJoyRightStateERKj"},
     {"hid.SetNpadJoyHoldType", "_ZN2nn3hid18SetNpadJoyHoldTypeENS0_15NpadJoyHoldTypeE"},
@@ -129,8 +136,11 @@ static Ov ovs[] = {
     {"hid.ShowControllerSupport.NoResult", "_ZN2nn3hid21ShowControllerSupportERKNS0_20ControllerSupportArgE"},
     {"hid.InitializeMouse", "_ZN2nn3hid15InitializeMouseEv"},
     {"hid.InitializeKeyboard", "_ZN2nn3hid18InitializeKeyboardEv"},
+    {"hid.InitializeTouchScreen", "_ZN2nn3hid21InitializeTouchScreenEv"},
     {"hid.GetMouseStates", "_ZN2nn3hid14GetMouseStatesEPNS0_10MouseStateEi"},
+    {"hid.GetMouseState", "_ZN2nn3hid13GetMouseStateEPNS0_10MouseStateE"},
     {"hid.GetKeyboardState", "_ZN2nn3hid16GetKeyboardStateEPNS0_13KeyboardStateE"},
+    {"hid.GetTouchScreenState", "_ZN2nn3hid19GetTouchScreenStateILm16EEEvPNS0_16TouchScreenStateIXT_EEE"},
     {"hid.GetVibrationDeviceHandles",
      "_ZN2nn3hid25GetVibrationDeviceHandlesEPNS0_21VibrationDeviceHandleEiRKjNS_4util10BitFlagSetILi32ENS0_"
      "12NpadStyleTagEEE"},
@@ -164,6 +174,8 @@ static Ov ovs[] = {
     {"codec.Reset", "_ZN2nn5codec24ResetHardwareOpusDecoderEPNS0_23HardwareOpusDecoderTypeE"},
     {"codec.Decode", "_ZN2nn5codec33DecodeOpusInterleavedWithHardwareEPNS0_23HardwareOpusDecoderTypeEPmPiPsmPKvm", 1},
     {"swkbd.ShowKeyboard", "_ZN2nn5swkbd12ShowKeyboardEPNS0_6StringERKNS0_15ShowKeyboardArgE", 1},
+    // ov_nifm.c
+    {"nifm.Initialize", "_ZN2nn4nifm10InitializeEv"},
     // ov_gfx.c
     {"nv.SetGraphicsAllocator", "_ZN2nv20SetGraphicsAllocatorEPFPvmmS0_EPFvS0_S0_EPFS0_S0_mS0_ES0_"},
     {"nv.InitializeGraphics", "_ZN2nv18InitializeGraphicsEPvm"},
@@ -172,10 +184,32 @@ static Ov ovs[] = {
     {"vi.OpenDefaultDisplay", "_ZN2nn2vi18OpenDefaultDisplayEPPNS0_7DisplayE"},
     {"vi.CreateLayer", "_ZN2nn2vi11CreateLayerEPPNS0_5LayerEPNS0_7DisplayE"},
     {"vi.GetNativeWindow", "_ZN2nn2vi15GetNativeWindowEPPvPNS0_5LayerE"},
+    {"vi.SetLayerScalingMode", "_ZN2nn2vi19SetLayerScalingModeEPNS0_5LayerENS0_11ScalingModeE"},
     {"vi.GetDisplayVsyncEvent", "_ZN2nn2vi20GetDisplayVsyncEventEPNS_2os15SystemEventTypeEPNS0_7DisplayE"},
     {"nvnBootstrapLoader", "nvnBootstrapLoader", 1},
 };
 #define NOV ((int)(sizeof ovs / sizeof *ovs))
+
+// Linked and tested, but matching no relocation of 1.0.1's main and sdk: main imports another overload or name, which
+// has an override of its own above (GetNpadState for GetNpadStates, OpenPreselectedUser for TryOpenPreselectedUser,
+// GetMouseState for GetMouseStates), or nothing of the kind (nfp, the hardware Opus decoder's queries). Any other
+// override that matches none is misnamed, and one of these that comes to match one leaves the list.
+static const char *const not_imported[] = {
+    "oe.SetCpuBoostMode", "oe.TryPopLaunchParameter", "oe.GetExpectedVolumeBalance", "oe.SetExpectedVolumeBalance",
+    "oe.GetProgramTotalActiveTime", "oe.SetUserInactivityDetectionTimeExtendedUnsafe", "oe.FinishStartupLogo",
+    "oe.PopNotificationMessage", "prepo.Save", "prepo.RequestImmediateTransmission",
+    "prepo.AddInternetConnectionStatus", "nfp.Initialize", "nfp.Finalize", "nfp.GetState", "nfp.ListDevices",
+    "nfp.AttachAvailabilityChangeEvent", "nfp.GetDeviceState", "nfp.GetNpadId", "nfp.AttachActivateEvent",
+    "nfp.AttachDeactivateEvent", "nfp.StartDetection", "nfp.StopDetection", "nfp.GetTagInfo", "nfp.GetModelInfo",
+    "err.InitializeContextWriterApi", "account.TryOpenPreselectedUser", "account.GetNickname", "time.IsInitialized",
+    "time.SteadyClock.now", "time.ClockSnapshot.Create", "pl.GetSharedFontLoadState", "hid.GetNpadStates.FullKey",
+    "hid.GetNpadStates.JoyDual", "hid.GetNpadStates.JoyLeft", "hid.GetNpadStates.JoyRight",
+    "hid.GetNpadStates.Handheld", "hid.DisconnectNpad", "hid.ShowControllerSupport", "hid.GetMouseStates",
+    "hid.IsVibrationDeviceMounted", "codec.GetWorkBufferSize", "codec.Finalize", "codec.GetSampleRate",
+    "codec.GetChannelCount", "codec.Reset", "vi.GetDisplayVsyncEvent",
+    "aoc.ListAddOnContent",
+};
+#define NABSENT ((int)(sizeof not_imported / sizeof *not_imported))
 
 static const char *const observers[] = {"_ZN2nn2os21AllocateAddressRegionEPmm", "_ZN2nn2os19AllocateMemoryPagesEmm",
                                         "nnosInitialize", "nninitInitializeSdkModule", "nninitStartup", "nnMain"};
@@ -430,6 +464,18 @@ static void probe_account(void) {
     CHECK(CALL("account.GetNickname", U(nick), U(uid)) == 0 && !strcmp(nick, "Local"), "GetNickname");
     CALL("account.CloseUser", U(h));
     CHECK(CALL("account.GetUserId", U(uid), U(h)) != 0, "GetUserId on a closed handle");
+    static const char *const opens[] = {"account.OpenPreselectedUser", "account.OpenUser"};
+    for (int i = 0; i < 2; i++) {
+        uint64_t h2[3] = {0}, got[2] = {0};
+        CHECK(CALL(opens[i], 0, U(direct)) != 0, "%s without an output", opens[i]);
+        CHECK(CALL(opens[i], U(h2), U(direct)) == 0 && CALL("account.GetUserId", U(got), U(h2)) == 0 &&
+              got[0] == direct[0] && got[1] == direct[1], "%s does not open the local user", opens[i]);
+        CALL("account.CloseUser", U(h2));
+    }
+    // both accept the call without their service (no friends, no network); x0 goes in nonzero
+    uint64_t any = U(guest_alloc(0x100));
+    CHECK(CALL("friends.UserPresence.Initialize", any, U(direct)) == 0, "friends::UserPresence::Initialize");
+    CHECK(CALL("nifm.Initialize", any) == 0, "nifm::Initialize");
     probe_uid[0] = direct[0];
     probe_uid[1] = direct[1];
 }
@@ -658,6 +704,16 @@ static void probe_input(void) {
         if (attr & 1) CHECK(i == (ov_handheld() ? 1 : 0), "%s reports a connected controller", kinds[i]);
     }
     CHECK(all_one && connected == 1 && no_buttons, "controller states: %d connected", connected);
+    static const char *const singles[] = {"hid.GetNpadState.FullKey", "hid.GetNpadState.Handheld",
+                                          "hid.GetNpadState.JoyDual", "hid.GetNpadState.JoyLeft",
+                                          "hid.GetNpadState.JoyRight"};
+    for (int i = 0; i < 5; i++) {   // the singular form the game imports: the same buttons and attributes
+        uint8_t one[40];
+        memset(one, 0x55, sizeof one);
+        CALL(singles[i], U(one), U(&pid));
+        CHECK(!memcmp(one + 8, st[i] + 8, 8) && !memcmp(one + 32, st[i] + 32, 4), "%s differs from %s", singles[i],
+              kinds[i]);
+    }
     CHECK((int32_t)CALL("hid.GetNpadStates.FullKey", U(st[0]), 0, U(&pid)) == 0, "zero states requested");
     CALL("hid.SetNpadJoyHoldType", 1);
     uint8_t res[8] = {0}, arg[0x80] = {0};
@@ -667,6 +723,20 @@ static void probe_input(void) {
     uint8_t mouse[40], kb[48];
     CHECK((int32_t)CALL("hid.GetMouseStates", U(mouse), 1) == 1, "mouse states");
     CALL("hid.GetKeyboardState", U(kb));
+    static const uint8_t zero[32];
+    uint64_t sampling[2];
+    for (int i = 0; i < 2; i++) {
+        memset(mouse, 0x55, sizeof mouse);
+        CALL("hid.GetMouseState", U(mouse));
+        memcpy(&sampling[i], mouse, 8);
+        CHECK(!memcmp(mouse + 8, zero, 32), "the mouse state is not empty");
+    }
+    CHECK(sampling[1] > sampling[0], "the mouse's sampling number stands still");
+    uint8_t touch[16 + 16 * 40];
+    memset(touch, 0x55, sizeof touch);
+    CHECK(CALL("hid.InitializeTouchScreen", 0) == 0, "InitializeTouchScreen");
+    CALL("hid.GetTouchScreenState", U(touch));
+    CHECK(!memcmp(touch, zero, 16) && touch[16] == 0x55, "touch state: the count at +8 is not 0");
     probe_feedback(pid, style);
     probe_coop(pid, style);
     CALL("hid.DisconnectNpad", U(&pid));
@@ -701,6 +771,8 @@ static void probe_media_gfx(void) {
     CHECK(CALL("vi.CreateLayer", U(&layer), U(display)) == 0 && layer, "CreateLayer");
     CHECK(CALL("vi.CreateLayer", U(&layer), U(&layer)) != 0, "CreateLayer on an unknown display");
     CHECK(CALL("vi.GetNativeWindow", U(&window), U(layer)) == 0 && window, "GetNativeWindow");
+    CHECK(CALL("vi.SetLayerScalingMode", U(layer), 2) == 0, "SetLayerScalingMode");
+    CHECK(CALL("vi.SetLayerScalingMode", U(display), 2) != 0, "SetLayerScalingMode on an unknown layer");
     uint64_t ev = U(guest_alloc(0x100));
     CHECK(CALL("vi.GetDisplayVsyncEvent", ev, U(display)) == 0, "GetDisplayVsyncEvent");
     int vsync = event_works(ev, 1);
@@ -878,6 +950,14 @@ static void probe_fonts(void) {
     CHECK(sfnt == 0x00010000u || sfnt == 0x4f54544fu || sfnt == 0x74727565u,
           "shared font 0: the address holds no plain TrueType or OpenType font (%#x)", sfnt);
     CHECK(CALL("pl.GetSharedFontAddress", 0) == addr, "shared font 0: the address changed");
+    struct { uint32_t type, pad; uint64_t addr, size; } list[8];
+    int32_t count = -1;
+    memset(list, 0x55, sizeof list);
+    CHECK((uint8_t)CALL("pl.GetSharedFont", U(&count), U(list), 8) == 1 && count >= 1 && count <= 8 && !list[0].type &&
+          list[0].addr == addr && list[0].size == size, "GetSharedFont: %d fonts, the first is not font 0", count);
+    memset(list, 0x55, sizeof list);
+    CHECK((uint8_t)CALL("pl.GetSharedFont", U(&count), U(list), 0) == 1 && !count && list[0].type == 0x55555555u,
+          "GetSharedFont wrote into an array of none");
     printf("pl: shared font 0 (Standard) at %#llx, %llu bytes, plain font after a key-0 header (%s)\n",
            (unsigned long long)addr, (unsigned long long)size, len < 0 ? "substitute" : path);
 }
@@ -1052,14 +1132,17 @@ int probe_services(void) {
         for (int k = 0; k < NOBS; k++)
             if (!strcmp(observers[k], n)) obs_bound++;
     }
-    for (int k = 0; k < NOV; k++)   // 1.2.1 lists no add-on content
-        CHECK(ovs[k].bound || (!RT_V143 && !strcmp(ovs[k].key, "aoc.ListAddOnContent")), "override %s matches no relocation",
-              ovs[k].name);
+    for (int k = 0; k < NOV; k++) {
+        int absent = 0;
+        for (int j = 0; j < NABSENT; j++) absent |= !strcmp(ovs[k].key, not_imported[j]);
+        if (absent) CHECK(!ovs[k].bound, "override %s matches a relocation but is listed as not imported", ovs[k].name);
+        else CHECK(ovs[k].bound, "override %s matches no relocation", ovs[k].name);
+    }
     for (int k = 0; k < NOBS; k++) CHECK(hostfn_observer(observers[k]), "observer %s is not linked", observers[k]);
     CHECK(obs_bound == NOBS, "%d of %d observers match a JUMP_SLOT", obs_bound, NOBS);
 
     // Every linked override is either probed here or belongs to another probe or owner (nn::fs: fs probe, fibers: kernel probe,
-    // memcpy: the graphics write-back in nvn_api_core.c).
+    // memcpy: ov_libc.c, checked by --probe-libc).
     int linked = hostfn_table_size(0), others = 0;
     for (int i = 0; i < linked; i++) {
         const char *n = hostfn_table_name(0, i);
@@ -1072,8 +1155,8 @@ int probe_services(void) {
         others += theirs;
         CHECK(mine || theirs, "override %s is linked but not probed", n);
     }
-    printf("bound: %d of %d overrides and %d of %d observers match relocations of the loaded modules\n", bound, NOV,
-           obs_bound, NOBS);
+    printf("bound: %d of %d overrides and %d of %d observers match relocations of the loaded modules; %d overrides are "
+           "for imports 1.0.1 does not have\n", bound, NOV, obs_bound, NOBS, NABSENT);
 
     bind_addresses();
     hostfn_seal();

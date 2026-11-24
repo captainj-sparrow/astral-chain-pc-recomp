@@ -319,15 +319,18 @@ static void cpu_placement(void) {
 }
 
 void perf_present(uint64_t frame) {
-    static uint64_t last, sum, max, n, win_start, ab_b;
+    static uint64_t last, last_paused, sum, max, n, win_start, ab_b;
     static int64_t win_prev[PERF_CNT_N];
     prof_render_tid = plat_thread_id();
     if (rt_trace & RT_TRACE_SCHED) kern_sched_report(frame);
-    uint64_t now = kern_now_ns(), d = last ? now - last : 0;
+    uint64_t now = kern_now_ns(), paused = kern_paused_ns();
+    uint64_t d = last ? now - last - (paused - last_paused) : 0;   // a pause is no slow frame, nor a flight spike
+    last_paused = paused;
     prof_sampler_frame(frame, now, last ? d : 0);
     uint64_t rep = ft_frame(frame, now, d);   // d is 0 on the first present: it only starts the period
     ab_b += rt_ab();
     cpu_placement();
+    libc_ab_frame();
     if (__atomic_load_n(&overlay, __ATOMIC_RELAXED))   // the overlay's only cost while it is off: this branch
         perfmon_frame(now, d, frame_ns, rep, __atomic_load_n(&counts[PERF_CNT_TEX_UP], __ATOMIC_RELAXED));
     if (frame % 60 == 0) {   // what plat_cpu_boost arranged, when it changes (the power profile answers after start)

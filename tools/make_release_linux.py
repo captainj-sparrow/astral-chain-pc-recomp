@@ -25,13 +25,14 @@ The folder holds:
                amd_fidelityfx_upscaler_vk.dll (tools/fsr4_sdk.py's pins, the Windows release's files) and
                libffx_vk_linux.so, which runs them (runtime/third_party/ffx-vk-linux; OpenSSL's libcrypto and
                SPIRV-Tools inside it)
-    recomp/, tools/, data/, installer/, lang/, licenses/, THIRD_PARTY_NOTICES.md, astralchain.ini.example, VERSION
+    recomp/, tools/, data/, installer/, lang/, dlc/, licenses/, THIRD_PARTY_NOTICES.md, astralchain.ini.example, VERSION
     AppRun, astralchain-setup.desktop, astralchain-setup.png   the AppImage entry: python/bin/python3 -m installer.gui
     recomplauncher.json   at the AppDir root, where RecompLauncher reads it from the AppImage without mounting it
 
 --appimage packs the folder with appimagetool and the static type-2 runtime (no libfuse2 on the host). --prove compiles
 the generated C and links build/release-linux-check/astralchain with the folder's tools only, then runs the probes
 beside it. Like tools/make_release.py, both need one game version extracted and lifted first (generated/v101).
+Building the release needs CMake 3.22.1 or newer for SPIRV-Tools.
 
 The folder contains nothing derived from the game but tools/data/pgo/<version>.profdata, the profile the installer
 compiles with (names of lifted functions, f_<guest address>, and their branch counts; tools/pgo_profile.py):
@@ -39,6 +40,7 @@ check_content runs over it before the script finishes, then the
 folder's own python runs a check-only installer pass and the window's --selftest.
 """
 import argparse
+import hashlib
 import os
 import re
 import shutil
@@ -72,6 +74,8 @@ LLVM_VERSION = '23.1.5'
 LLVM_MAJOR = LLVM_VERSION.split('.')[0]
 SNIPER = '3.0.20261021.266025'
 OPENSSL_VERSION = '3.5.9'   # an LTS series; only libcrypto, inside libffx_vk_linux.so (build_openssl)
+SPIRV_TOOLS_TAG = 'vulkan-sdk-1.4.363.0'
+SPIRV_HEADERS_REV = '496543121ce6419f23d6fa5d7194ba66c36212d2'   # SPIRV-Tools' DEPS
 VULKAN_HEADERS = 'Vulkan-Headers-1.4.363'
 SNIPER_URL = 'https://repo.steampowered.com/steamrt-images-sniper/snapshots'
 PINS = {
@@ -99,6 +103,10 @@ PINS = {
     'openssl-src': (f'https://github.com/openssl/openssl/releases/download/openssl-{OPENSSL_VERSION}/'
                     f'openssl-{OPENSSL_VERSION}.tar.gz',
                     '603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a'),
+    'spirv-tools-src': (f'https://codeload.github.com/KhronosGroup/SPIRV-Tools/tar.gz/refs/tags/{SPIRV_TOOLS_TAG}',
+                        'e6c83a215538fbfd265ccf398d3877985055df1273dbed73912bd05307664688'),
+    'spirv-headers-src': (f'https://codeload.github.com/KhronosGroup/SPIRV-Headers/tar.gz/{SPIRV_HEADERS_REV}',
+                          'a9bb9c48713245eacf97cc539b6f1d45405a92d8813f8b82e635f0a085ee9898'),
     # appimagetool and the type-2 runtime from release tags, not "continuous", whose uploads change under the same
     # URL and would stop the build at the hash check
     'appimagetool': ('https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage',
@@ -116,7 +124,7 @@ SNIPER_MEMBERS = ['usr/include', 'usr/share/pkgconfig', 'usr/lib/x86_64-linux-gn
                   'lib/x86_64-linux-gnu', 'lib64', 'usr/share/doc/libsdl3-0', 'usr/share/doc/libopus0',
                   'usr/share/doc/libvpx6', 'usr/share/doc/libc6', 'usr/share/doc/gcc-10-base',
                   'usr/share/doc/libvulkan1',
-                  'usr/share/doc/libxft2', 'usr/share/doc/libxrender1', 'usr/share/doc/spirv-tools']
+                  'usr/share/doc/libxft2', 'usr/share/doc/libxrender1']
 # glibc's link libraries and their scripts (lib<name>.so, .a, _nonshared.a), and the GCC runtime pieces clang links.
 GLIBC_LIBS = ['c', 'm', 'mvec', 'dl', 'pthread', 'rt', 'util']
 GCC_LIBS = {'libgcc.a', 'libgcc_eh.a', 'libgcc_s.so', 'libstdc++.a', 'libsupc++.a'}
@@ -257,10 +265,10 @@ def full_sysroot():
     """The sniper SDK's x86_64 compile and link files in toolchain/release-work/sniper, absolute symlinks made relative
     (the SDK points some at /lib and /usr/lib, which outside its container are the host's)."""
     root = WORK / 'sniper'
-    if (root / '.relinked').is_file() and (root / 'usr/share/doc/spirv-tools/copyright').is_file():
+    if (root / '.relinked').is_file() and (root / 'usr/share/doc/libxrender1/copyright').is_file():
         return root
     # Older cached SDK extractions omitted the font libraries' architecture-independent pkg-config files and the
-    # libXft, libXrender and SPIRV-Tools copyright files.
+    # libXft and libXrender copyright files.
     (root / '.unpacked').unlink(missing_ok=True)
     tar_extract('sniper-sdk', root, SNIPER_MEMBERS)
     for p in root.rglob('*'):
@@ -304,21 +312,49 @@ def build_openssl(llvm, sysroot):
     return src
 
 
+def build_spirv_tools(llvm, sysroot):
+    """Build the FSR 4 shader parser with the same compiler and sysroot as the bridge."""
+    src = tar_extract('spirv-tools-src', WORK / 'spirv-tools', [f'SPIRV-Tools-{SPIRV_TOOLS_TAG}'], strip=1)
+    headers = tar_extract('spirv-headers-src', WORK / 'spirv-headers',
+                          [f'SPIRV-Headers-{SPIRV_HEADERS_REV}'], strip=1)
+    configure = ['cmake', '-S', src, '-DCMAKE_BUILD_TYPE=Release',
+                 f'-DCMAKE_C_COMPILER={llvm / "bin" / "clang"}', f'-DCMAKE_CXX_COMPILER={llvm / "bin" / "clang++"}',
+                 f'-DCMAKE_SYSROOT={sysroot}', '-DCMAKE_C_COMPILER_TARGET=x86_64-linux-gnu',
+                 '-DCMAKE_CXX_COMPILER_TARGET=x86_64-linux-gnu', '-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld',
+                 f'-DPython3_EXECUTABLE={sys.executable}', f'-DSPIRV-Headers_SOURCE_DIR={headers}',
+                 '-DBUILD_SHARED_LIBS=OFF', '-DSPIRV_SKIP_TESTS=ON']
+    # One build directory per configuration: CMake drops every -D option when a cached directory's compiler path
+    # changes (another --out), and does not recompile when a new toolchain or sysroot lands at the same path.
+    key = [*map(str, configure), LLVM_VERSION, SNIPER, SPIRV_TOOLS_TAG, SPIRV_HEADERS_REV]
+    build = WORK / f'spirv-tools-build-{hashlib.sha256(chr(0).join(key).encode()).hexdigest()[:16]}'
+    run([*configure, '-B', build])
+    run(['cmake', '--build', build, '--parallel', str(os.cpu_count() or 4), '--target', 'spirv-as', 'spirv-dis'])
+    # The 1.21.0 AppImage's parser rejected this capability during the first FSR 4 dispatch.
+    shader = ('OpCapability Shader\nOpCapability Float8CooperativeMatrixEXT\n'
+              'OpExtension "SPV_EXT_float8"\nOpMemoryModel Logical GLSL450\n')
+    probe = build / 'fsr4-fp8.spv'
+    run([build / 'tools' / 'spirv-as', '--target-env', 'spv1.6', '-', '-o', probe], input=shader, text=True)
+    run([build / 'tools' / 'spirv-dis', probe, '-o', os.devnull])
+    return src, headers, build / 'source' / 'libSPIRV-Tools.a'
+
+
 def build_fsr4(b, llvm, sysroot):
     """AMD FSR 4 on Linux (runtime/vk_fsr4.c) into bin/: AMD's two signed DLLs of the pinned FSR SDK, the files the
     Windows release ships, and libffx_vk_linux.so, which runs them in the Linux game (runtime/third_party/ffx-vk-linux,
     built by tools/ffx_vk_linux.py). The library is built like the game: the folder's clang, the sniper sysroot (glibc
     2.31; its libstdc++, libdrm and libdrm_amdgpu stay shared, every Mesa system has them), with what no target is sure
-    to have inside it: OpenSSL's libcrypto (build_openssl) and the sysroot's static SPIRV-Tools, their symbols not
+    to have inside it: OpenSSL's libcrypto and a pinned static SPIRV-Tools with FP8 support, their symbols not
     exported (--exclude-libs) so they meet no other copy in the game's process. -include limits.h: glibc 2.31 declares
     PTHREAD_STACK_MIN there only, and win32_runtime.cpp, which is not changed here, includes pthread.h alone."""
     ssl = build_openssl(llvm, sysroot)
+    spirv, spirv_headers, spirv_lib = build_spirv_tools(llvm, sysroot)
     registry = tar_extract('vulkan-headers-src', WORK / 'vulkan-registry', [f'{VULKAN_HEADERS}/registry/vk.xml'],
                            strip=1) / 'registry' / 'vk.xml'
     flags = ['--target=x86_64-linux-gnu', f'--sysroot={sysroot}', '-fuse-ld=lld', '-Wno-unused-command-line-argument',
              '-include', 'limits.h',
-             f'-I{ssl / "include"}', f'-I{vulkan_headers() / "include"}', '-I=/usr/include/libdrm']
-    link = ['-ldl', '-lpthread', ssl / 'libcrypto.a', '-l:libSPIRV-Tools.a', '-ldrm_amdgpu', '-ldrm',
+             f'-I{ssl / "include"}', f'-I{vulkan_headers() / "include"}',
+             f'-I{spirv / "include"}', f'-I{spirv_headers / "include"}', '-I=/usr/include/libdrm']
+    link = ['-ldl', '-lpthread', ssl / 'libcrypto.a', spirv_lib, '-ldrm_amdgpu', '-ldrm',
             '-Wl,--exclude-libs,ALL']
     lib = ffx_vk_linux.build(WORK / 'ffx-vk-linux', llvm / 'bin' / 'clang++', flags, link, registry, quiet=True)
     if not lib:
@@ -586,7 +622,8 @@ def collect_licenses(out, sysroot):
         (mr.fsr4_dir() / 'LICENSE.txt', 'FidelityFX-SDK-2-LICENSE.txt'),
         (ROOT / 'runtime' / 'third_party' / 'ffx-vk-linux' / 'LICENSE', 'ffx-vk-linux-LICENSE.txt'),
         (WORK / 'openssl' / 'LICENSE.txt', 'openssl-LICENSE.txt'),
-        (doc / 'spirv-tools' / 'copyright', 'spirv-tools-copyright.txt'),
+        (WORK / 'spirv-tools' / 'LICENSE', 'spirv-tools-LICENSE.txt'),
+        (WORK / 'spirv-headers' / 'LICENSE', 'spirv-headers-LICENSE.txt'),
         (WORK / 'hactool-linux' / 'LICENSE', 'hactool-LICENSE.txt'),
         (MAIN_ROOT / 'refs' / 'MacNativeGames' / 'LICENSE', 'MacNativeGames-LICENSE.txt'),
     ]
@@ -758,7 +795,10 @@ def prove(out, cpu='v3'):
     print(f'prove: newest glibc symbol version {glibc[-1] if glibc else "none"}')
     failed = []
     for probe in ['--selftest', *mr.PROBES]:
-        r = subprocess.run([str(chk / 'astralchain'), probe], cwd=chk, capture_output=True, text=True, timeout=900)
+        # a probe may log bytes that are not UTF-8 (--probe-dlc reads damaged files on purpose): as the Windows
+        # release does, decode them with replacements instead of stopping the prove
+        r = subprocess.run([str(chk / 'astralchain'), probe], cwd=chk, capture_output=True, encoding='utf-8',
+                           errors='replace', timeout=900)
         tail = (r.stdout.strip().splitlines() or [''])[-1]
         print(f'{probe}: exit {r.returncode}: {tail}')
         if r.returncode:

@@ -242,7 +242,7 @@ static VkImageAspectFlags aspect_of(const TexVkFormat *f) {
 // texture of the game's heap; each depth write then scrambled it (garbage band at the top, pink glow, blocks in the
 // grass, a blue checkered scene in the menu). Colour images keep their place: the RX 9070 also sizes some of them
 // above their storage, and nothing there showed that the GPU writes the excess.
-static int format_compressed(VkFormat f) {   // vkCmdClearColorImage takes no block-compressed format
+int vk_format_compressed(VkFormat f) {   // vkCmdClearColorImage takes no block-compressed format
     return (f >= VK_FORMAT_BC1_RGB_UNORM_BLOCK && f <= VK_FORMAT_ASTC_12x12_SRGB_BLOCK) ||
            (f >= VK_FORMAT_ASTC_4x4_SFLOAT_BLOCK && f <= VK_FORMAT_ASTC_12x12_SFLOAT_BLOCK);
 }
@@ -363,7 +363,7 @@ static void init_image(Tex *e, VkCommandBuffer cb) {
         VkImageSubresourceRange rg = {e->pub.aspect, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS};
         vkCmdClearDepthStencilImage(cb, e->pub.image, VK_IMAGE_LAYOUT_GENERAL, &zero, 1, &rg);
         barrier(cb, VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, ALL_RW);
-    } else if (vk_fix_zero() && !e->bound_to && !e->pub.mirrored && !format_compressed(e->f.vk)) {
+    } else if (vk_fix_zero() && !e->bound_to && !e->pub.mirrored && !vk_format_compressed(e->f.vk)) {
         // GPU-only storage that got memory of its own starts at zero, as the pool it stands for (vk_memory.c
         // alloc_physical). Images aliasing pool memory are not cleared: that would erase what other textures rendered
         // there; mirrored images are uploaded from their storage on first use.

@@ -3,8 +3,11 @@
 //   astralchain.exe [--exefs DIR] [--romfs DIR] [--profile DIR] <mode>
 //     --selftest        layout, dispatch table and host-function registry; needs no game files
 //     --probe-mods      the mods folder scan, order and switches (mods.c); needs no game files
+//     --probe-dlc       the DLC builder on archives and DLC folders of its own (dlc.c); needs no game files
 //     --probe-loader    load and relocate the modules, check them against the measured 1.2.1 values
 //     --probe-kernel, --probe-ipc, --probe-services, --probe-fs    host probes
+//     --probe-libc      the host memcpy, memset, memmove, memcmp, strlen, strcmp, strncmp (ov_libc.c) against the
+//                       sdk's lifted ones, with timings
 //     --probe-dpi       the process DPI awareness (per-monitor v2) and the primary monitor's size; no game files
 //     --probe-gfx-abi   NVN object layouts against nvn.h's reserved sizes; needs no game files
 //     --probe-nvn, --probe-nvn-tex, --probe-window, --probe-shader, --probe-vkmem, --probe-vkexec    graphics probes
@@ -180,11 +183,16 @@ void rt_udf(Cpu *c, uint64_t pc) {
 }
 
 // CNTPCT_EL0: the Switch counter runs at 19.2 MHz. The scale is set before main, so no thread reads it half written.
+// It counts the guest's time: it stands still while the game is paused (kernel.c kern_pause).
 static PlatScale tick_scale;
 
 __attribute__((constructor)) static void tick_scale_init(void) { tick_scale = plat_scale(19200000u, plat_counter_hz()); }
 
-uint64_t rt_ticks(void) { return plat_scaled(tick_scale, plat_counter()); }
+uint64_t rt_ticks(void) {
+    uint64_t t = __atomic_load_n(&kern_clock_stop, __ATOMIC_ACQUIRE);
+    if (__builtin_expect(!t, 1)) t = plat_counter() - __atomic_load_n(&kern_clock_lost, __ATOMIC_RELAXED);
+    return plat_scaled(tick_scale, t);
+}
 
 // ---- crash reporter
 typedef struct { uintptr_t host; uint64_t guest; } FnRev;
@@ -464,7 +472,7 @@ static int selftest(void) {
 
 static int usage(const char *argv0) {
     fprintf(stderr, "usage: %s [--exefs DIR] [--romfs DIR] [--profile DIR] [--selftest | --probe-loader | "
-                    "--probe-cfg | --probe-dpi | --probe-mods | --probe-kernel | --probe-ipc | --probe-services | --probe-fs | --probe-gfx-abi | "
+                    "--probe-cfg | --probe-dpi | --probe-mods | --probe-dlc | --probe-kernel | --probe-ipc | --probe-services | --probe-libc | --probe-fs | --probe-gfx-abi | "
                     "--probe-nvn | --probe-nvn-tex | --probe-window | --probe-shader | --probe-vkmem | "
                     "--probe-vkexec | --probe-astc | --probe-latency | --prepare-shaders | --warm-shaders | --boot |--seconds S [--shot PNG]]\n", argv0);
     return 2;
@@ -574,9 +582,11 @@ int main(int argc, char **argv) {
     if (!strcmp(mode, "--probe-dpi")) return probe_dpi();   // the Win32 DPI awareness of totk.manifest
 #endif
     if (!strcmp(mode, "--probe-mods")) return probe_mods();
+    if (!strcmp(mode, "--probe-dlc")) return probe_dlc();
     if (!strcmp(mode, "--probe-kernel")) return probe_kernel();
     if (!strcmp(mode, "--probe-ipc")) return probe_ipc();
     if (!strcmp(mode, "--probe-services")) return probe_services();
+    if (!strcmp(mode, "--probe-libc")) return probe_libc();
     if (!strcmp(mode, "--probe-fs")) return probe_fs();
     if (!strcmp(mode, "--probe-gfx-abi")) return probe_gfx_abi();
     if (!strcmp(mode, "--probe-nvn")) return probe_nvn();

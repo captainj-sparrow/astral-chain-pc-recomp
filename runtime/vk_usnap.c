@@ -84,11 +84,20 @@ static Arena *arena_get(uint64_t need) {
                              // transfer source: DLAA copies the camera block out (vk_dlaa.c mv_pass)
                              .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT};
     // Device-local through the BAR when the device has it (the GPU reads constants on every draw), else host memory.
+    // First within the heaps' budgets: without resizable BAR the device-local host-visible heap is a 256 MiB window
+    // with a budget of its own, and on AMD APUs under Windows (Z1 Extreme, 780M: Longshot issue 1879) the driver
+    // refused every submit with VK_ERROR_OUT_OF_DEVICE_MEMORY once allocations there passed that budget, while VRAM as
+    // a whole had room. Asked to stay within budget, VMA takes the next memory type (host memory, the same RAM on an
+    // APU) when that heap is full. Where no heap has room, the arena is made as before.
     VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
                                   .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                                           VMA_ALLOCATION_CREATE_MAPPED_BIT};
+                                           VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT};
     VmaAllocationInfo info;
     VkResult res = vmaCreateBuffer(vk_ctx()->vma, &bi, &ai, &a->buf, &a->alloc, &info);
+    if (res != VK_SUCCESS) {
+        ai.flags &= ~(VmaAllocationCreateFlags)VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT;
+        res = vmaCreateBuffer(vk_ctx()->vma, &bi, &ai, &a->buf, &a->alloc, &info);
+    }
     if (res != VK_SUCCESS) {
         rt_log("vk_usnap: arena of %llu bytes failed (%d): this submission binds live memory",
                (unsigned long long)a->size, (int)res);

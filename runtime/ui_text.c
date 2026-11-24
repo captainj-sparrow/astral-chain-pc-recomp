@@ -174,15 +174,22 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_HUD_DESC] = "Off, the game's HUD is not drawn during play; the menus stay. F12 toggles it.",
     [UI_MENU_ASSUME_FOCUS] = "Keep running out of focus",
     [UI_MENU_ASSUME_FOCUS_DESC] = "On (the default), the game keeps running while you are in another window, and the "
-                                  "keyboard stays quiet until the window is in front again. Off, it pauses when its "
-                                  "window loses focus, as on the Switch when Home is pressed; a load interrupted that "
-                                  "way can stop for good.",
+                                  "keyboard stays quiet until the window is in front again. Off, the whole game, "
+                                  "sound included, pauses while its window is out of focus, as on the Switch when Home "
+                                  "is pressed.",
 
     [UI_MENU_MODS_INSTALLED] = "Installed mods",
     [UI_MENU_MODS_NONE] = "No mods yet. Unpack a mod into the mods folder, one folder per mod with its romfs folder "
                           "inside, and restart the game. TKMM can export its merged mods into a folder there too.",
     [UI_MENU_MODS_OPEN] = "Open mods folder",
     [UI_MENU_MODS_OPEN_DESC] = "Shows the folder the game loads mods from. It is created if it is missing.",
+    [UI_MENU_DLC_GROUP] = "Downloadable content",
+    [UI_MENU_DLC] = "Load DLC",
+    [UI_MENU_DLC_DESC] = "Loads the DLCs of the dlc folder next to astralchain.exe: trainings, texts and tutorial windows written by players as XML. They are built into the game's archives from your own game files at start and kept in your profile. Off: the game runs exactly as it is.",
+    [UI_MENU_DLC_LOADED] = "Loaded at this start: %s.",
+    [UI_MENU_DLC_NONE] = "No DLC was found in the dlc folder at this start.",
+    [UI_MENU_DLC_OPEN] = "Open DLC folder",
+    [UI_MENU_DLC_OPEN_DESC] = "Shows the folder the game loads DLCs from, one folder per DLC with its dlc.xml. It is created if it is missing.",
     [UI_MENU_MODS_ROW_DESC] = "Game files it replaces: %u. New files it adds: %u.",
     [UI_MENU_MODS_OVERRIDDEN] = "%u of its files come from %s, which is higher in the list.",
     [UI_MENU_MODS_MOVE_HINT] = "The top face button or Ctrl+Up moves it up, the left face button or Ctrl+Down moves it "
@@ -202,8 +209,9 @@ static const char *const text_en[UI_TEXT_COUNT] = {
 
     [UI_MENU_VOLUME] = "Volume", [UI_MENU_VOLUME_DESC] = "Master volume of the game.",
     [UI_MENU_AUDIO_OUTPUT] = "Audio output",
-    [UI_MENU_AUDIO_OUTPUT_DESC] = "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output. Elsewhere the 5.1 mix is folded down to stereo.",
-    [UI_MENU_AUDIO_OUTPUT_DESC_WIN] = "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output, or a headset with spatial sound on: Windows Sonic for Headphones, Dolby Atmos for Headphones or DTS Headphone:X, in the device's properties in the Windows sound settings. Elsewhere the 5.1 mix is folded down to stereo.",
+    [UI_MENU_AUDIO_OUTPUT_DESC] = "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output. Elsewhere the 5.1 mix is folded down to stereo. Automatic picks 5.1 when the output takes it at start, stereo otherwise.",
+    [UI_MENU_AUDIO_OUTPUT_DESC_WIN] = "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output, or a headset with spatial sound on: Windows Sonic for Headphones, Dolby Atmos for Headphones or DTS Headphone:X, in the device's properties in the Windows sound settings. Elsewhere the 5.1 mix is folded down to stereo. Automatic picks 5.1 when the output takes it at start, stereo otherwise.",
+    [UI_MENU_AUDIO_AUTO] = "Automatic",
     [UI_MENU_AUDIO_STEREO] = "Stereo",
     [UI_MENU_AUDIO_51] = "5.1",
     [UI_MENU_AUDIO_TAKES_51_SPATIAL] = "%s: Windows spatial sound is on and turns 5.1 into surround on headphones.",
@@ -286,6 +294,9 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_LSTICK_DEADZONE] = "Left stick dead zone", [UI_MENU_RSTICK_DEADZONE] = "Right stick dead zone",
     [UI_MENU_STICK_DEADZONE_DESC] = "How far a gamepad stick moves before the game sees it. Raise it if the character or the camera moves on its own: let go of the stick, read \"stick now\" and set the dead zone a few percent above it.",
     [UI_MENU_STICK_DEADZONE_NOW] = "stick now: %.0f %%",
+    [UI_MENU_TRIGGER_THRESHOLD] = "Trigger threshold",
+    [UI_MENU_TRIGGER_THRESHOLD_DESC] = "How far a gamepad trigger (ZL, ZR) is pulled before the game sees it pressed. 0 reacts to the slightest pull. Raise it if a trigger presses on its own: let go of it, read \"triggers now\" and set the threshold a few percent above it.",
+    [UI_MENU_TRIGGER_THRESHOLD_NOW] = "triggers now: L %.0f %%, R %.0f %%",
     [UI_MENU_MOUSE_SENS] = "Mouse camera sensitivity",
     [UI_MENU_MOUSE_SENS_DESC] = "How fast the mouse turns the camera.",
     [UI_MENU_WALK_KEY] = "Walk key",

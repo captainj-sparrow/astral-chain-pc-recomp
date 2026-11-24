@@ -36,6 +36,9 @@ int cfg_migrate_deck_res(int deck);
 // astralchain.ini with aspect_migrated = 1. Returns 0 when nothing ran, 1 when only the marker was set, 2 when the
 // aspect line was removed too. Not thread-safe against cfg_load.
 int cfg_migrate_aspect(void);
+// The one-time move of a stored assume_focus other than 1 to the default, 1 (cfg.c; cfg_init runs it and saves). Marks
+// astralchain.ini with assume_focus_migrated = 1. Returns as cfg_migrate_aspect. Not thread-safe against cfg_load.
+int cfg_migrate_focus(void);
 // Writes the keys cfg_set changed since the last save into astralchain.ini next to astralchain.exe (cfg_save_to: the file at path).
 // Only those lines change: the last line of a changed key gets the new value, a missing key goes under its section
 // (after the commented example line of the key when the section has one; the section is added at the end of the file

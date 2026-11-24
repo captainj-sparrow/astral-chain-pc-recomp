@@ -323,11 +323,13 @@ void rt_boot(void) {
     if (!rt_config()->shot) vk_pipeline_async_enable();   // a --shot image must not depend on build timing
     // Shaders and pipelines recorded in earlier runs are made ready while the modules load; the guest waits for them.
     PlatThread *warm = plat_thread_new(prewarm_main, NULL, "prewarm");
+    libc_init();   // host_libc: its overrides must be in place before the relocations
     ldr_load(rt_config()->exefs);
     rt_patches_init();
     mods_exefs_switch();   // after the patch sets' settings: an enabled mod's ExeFS patches on
     frame_step_init();
     res_init();
+    quest_init();
     cheats_init();   // after the patch sets: a cheat's set follows its setting
     cb_addr[0] = hostfn_register("<rtld loader_ready>", cb_loader_ready);
     cb_addr[1] = hostfn_register("<rtld module_inits>", cb_module_inits);

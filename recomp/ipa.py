@@ -58,7 +58,12 @@ PLT = 'plt'   # a TAIL through an import stub, resolved to its function in anoth
 
 
 def mask(regs):
-    return sum(1 << r for r in regs)
+    """The bits of the registers `regs`; a register named twice counts once (a patch helper's source names a register
+    at each use: a sum gave c->x[0] read and written as x1)."""
+    m = 0
+    for r in regs:
+        m |= 1 << r
+    return m
 
 
 def regs_of(m):
@@ -410,10 +415,25 @@ def helper_regs(name, sources):
         m = re.search(HELPER_DEF % re.escape(name), text, re.M)
         if not m:
             continue
-        d, i = 1, m.end()
-        while d:
-            d += {'{': 1, '}': -1}.get(text[i], 0)
+        # the body ends at its closing brace; braces in comments and in string and character literals ('{') do not count
+        d, i, n = 1, m.end(), len(text)
+        while d and i < n:
+            ch = text[i]
+            if ch in '"\'':
+                i += 1
+                while i < n and text[i] != ch:
+                    i += 2 if text[i] == '\\' else 1
+            elif text.startswith('//', i):
+                i = text.find('\n', i)
+                i = n if i < 0 else i
+            elif text.startswith('/*', i):
+                i = text.find('*/', i + 2)
+                i = n if i < 0 else i + 1
+            else:
+                d += {'{': 1, '}': -1}.get(ch, 0)
             i += 1
+        if d:
+            return ALL
         body = text[m.end():i - 1]
         if re.search(r'c->x\[(?!\d+\])', body) or re.search(r'(?<!->)\bc\b(?!->)', body):
             return ALL

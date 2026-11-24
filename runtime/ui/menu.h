@@ -4,8 +4,8 @@
 // present path's command buffer.
 //
 // F1 or Esc on the keyboard and Minus and Plus held together (consumed in poll_merged, input_menu_gate in input.h) open it;
-// F1, Esc, B or "Continue" close it. While it is open the game gets no input (input_menu, input.h) and keeps running; the
-// cursor is released from the mouse camera. Tabs Screen, Game, Mods, Sound, Controls and Menu (L / R or Q / E switch
+// F1, Esc, B or "Continue" close it. While it is open the game gets no input (input_menu, input.h) and is paused
+// (pause.c, AC_MENU_PAUSE); the cursor is released from the mouse camera. Tabs Screen, Game, Mods, Sound, Controls and Menu (L / R or Q / E switch
 // them) hold option rows (ui/option_rows.h) over the cfg settings and the mods folder (mods.h); the bottom row has
 // "Continue" and "Quit game".
 // Test hooks (ui/menu.cpp): AC_MENU_TEST=<frame>[:<frames per page>] opens the menu at that presented frame and saves

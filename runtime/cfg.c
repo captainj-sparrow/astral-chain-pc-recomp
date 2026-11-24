@@ -31,7 +31,7 @@ static int save_ok = 1;                         // the last cfg_save_to wrote (o
 // logged as unknown. A new variable goes here too, or its ini key logs a harmless "unknown key" line. FXAA stays known
 // though nothing reads it any more (it switched TotK's FXAA, which Astral Chain does not have): older files carry it.
 static const char *const known[] = {
-    "AB", "AMIIBO_DIR", "ANISO", "ANTI_ALIASING", "AO", "AO_DEBUG", "APP_POOL", "ASPECT", "ASPECT_MIGRATED", "ASPECT_PATCH", "ASSUME_FOCUS", "ASTC", "ASTC_BC", "ASTC_TIME", "ASYNC_PREEMPT", "AUDIO", "AUDIO_BASS", "AUDIO_CENTER", "AUDIO_FRONT_LEFT", "AUDIO_FRONT_RIGHT", "AUDIO_MIX_PRESET", "AUDIO_OFF", "AUDIO_OUTPUT", "AUDIO_SUBWOOFER", "AUDIO_SURROUND_LEFT", "AUDIO_SURROUND_RIGHT", "AVSYNC_PATCH", "AUDIO_PREFILL_MS",
+    "AB", "AMIIBO_DIR", "ANISO", "ANTI_ALIASING", "AO", "AO_DEBUG", "APP_POOL", "ASPECT", "ASPECT_MIGRATED", "ASPECT_PATCH", "ASSUME_FOCUS", "ASSUME_FOCUS_MIGRATED", "ASTC", "ASTC_BC", "ASTC_TIME", "ASYNC_PREEMPT", "AUDIO", "AUDIO_BASS", "AUDIO_CENTER", "AUDIO_FRONT_LEFT", "AUDIO_FRONT_RIGHT", "AUDIO_MIX_PRESET", "AUDIO_OFF", "AUDIO_OUTPUT", "AUDIO_SUBWOOFER", "AUDIO_SURROUND_LEFT", "AUDIO_SURROUND_RIGHT", "AVSYNC_PATCH", "AUDIO_PREFILL_MS",
     "BACKGROUND_WINDOW", "BIND_A", "BIND_B", "BIND_DOWN", "BIND_L", "BIND_LCLICK", "BIND_LEFT", "BIND_LSTICK_DOWN", "BIND_LSTICK_LEFT",
     "BIND_LSTICK_RIGHT", "BIND_LSTICK_UP", "BIND_MINUS",
     "BIND_PLUS", "BIND_R", "BIND_RCLICK", "BIND_RIGHT", "BIND_RSTICK_DOWN", "BIND_RSTICK_LEFT", "BIND_RSTICK_RIGHT", "BIND_RSTICK_UP",
@@ -39,14 +39,14 @@ static const char *const known[] = {
     "BAR_ELIDE", "BAR_NARROW",
     "BIND_ZL", "BIND_ZR", "BLOCK_VIEWS_3D", "CLEAR_LOAD", "CLOTH_REALTIME", "COLOR_BRIGHTNESS", "COLOR_CONTRAST", "COLOR_GAMMA",
     "COLOR_PRESET", "COLOR_SATURATION", "CONTACT_DEBUG", "CONTACT_SHADOWS", "CORE_DIAG", "CPU_BOOST", "CPU_BOOST_SPIN_US", "CRIT", "CRIT_OUT",
-    "DECK_AA_MIGRATED", "DECK_RES_MIGRATED", "DESC_TEMPLATE", "DEVICE_PROFILE", "DISPATCH_CACHE", "DLAA", "DLAA_JITTER", "DLAA_MV", "DLAA_MVDEBUG", "DLAA_OBJMV", "DLAA_TIMES", "DLSS", "DRAW_DISTANCE", "DRAW_DISTANCE_PATCH", "DUMP", "DUMP_AUTO", "DUMP_BUF", "DUMP_DIR", "DUMP_DRAWS",
+    "DECK_AA_MIGRATED", "DECK_RES_MIGRATED", "DESC_TEMPLATE", "DEVICE_PROFILE", "DISPATCH_CACHE", "DLAA", "DLAA_JITTER", "DLAA_MV", "DLAA_MVDEBUG", "DLAA_OBJMV", "DLAA_TIMES", "DLC", "DLC_PROBE_DIR", "DLSS", "DRAW_DISTANCE", "DRAW_DISTANCE_PATCH", "DUMP", "DUMP_AUTO", "DUMP_BUF", "DUMP_DIR", "DUMP_DRAWS",
     "DUMP_KEY", "DUMP_LOG", "DUMP_N", "DUMP_SKIP_RUNS", "DUMP_TEX", "DUMP_UBO", "DYN_DELTA", "EXEFS", "FEEDBACK", "FIX_C0", "FIX_ZERO", "FLIGHT", "FLIGHT_AT", "FLIGHT_DIR", "FLIGHT_FRAMES",
     "FLIGHT_SPIKE_MS", "FLIGHT_THUMBS", "FLUSH_STAMP", "FOV", "FOV_PATCH", "FPS", "FREEZE_IDLE", "FREE_CORES",
     "FSR4_ANY_VERSION", "FSR4_LIB", "FSR4_MODEL", "FULLSCREEN", "FXAA", "GPL", "GPL_DRAW_BUILD", "GPU", "GPU_INDEX", "GPU_NAME", "GPU_PASSES", "HDR", "HDR_GAME_NITS",
-    "HDR_HUE", "HDR_PEAK_NITS", "HDR_UI_NITS", "HIGHFPS_FIX", "HUD", "INPUT", "INPUT_RECORD", "INPUT_SCRIPT", "LANG", "LANG_DIR", "LIB_PREBUILD",
-    "LIB_PREBUILD_KEEP", "LIB_PREBUILD_THREADS", "LOCALE", "LOD_GUARD", "LOW_LATENCY", "LOW_LATENCY_BACKEND", "LSTICK_DEADZONE", "MEMORY", "MENU_LANG", "MENU_TEST",
+    "HDR_HUE", "HDR_PEAK_NITS", "HDR_UI_NITS", "HIGHFPS_FIX", "HOSTFN_DIRECT", "HOST_LIBC", "HOST_LIBC_AB", "HUD", "INPUT", "INPUT_RECORD", "INPUT_SCRIPT", "LANG", "LANG_DIR", "LIB_PREBUILD",
+    "LIB_PREBUILD_KEEP", "LIB_PREBUILD_THREADS", "LOCALE", "LOD_GUARD", "LOW_LATENCY", "LOW_LATENCY_BACKEND", "LSTICK_DEADZONE", "MEMORY", "MENU_LANG", "MENU_PAUSE", "MENU_TEST",
     "MENU_TEST_DIR", "MENU_TEST_FOCUS", "MENU_TEST_SET", "MINIMAL_LAYOUT", "MIRROR_CHUNKS", "MIRROR_GAP", "MIRROR_LAZY", "MODS_DIR", "MODS_DISABLED", "MODS_ORDER", "MODS_REBUILD", "MOTION", "MOUSE_SENS", "MOVIE_HOST", "MOVIE_PACE", "MOVIE_TRACK",
-    "NOHUD_PATCH", "ONE_PER_CORE", "OPERATION_MODE", "OUTPUT_RES", "PAD_LAYOUT", "PATCH_OUTPUT", "PATCH_SCENE", "PCSS", "PCSS_K", "PERF_OVERLAY", "PERF_SLOW_MS", "PIPELINE_CACHE", "PIPE_MEMO", "PIPE_PREBUILD", "PIPE_SKIP", "PIPE_SYNC", "PIPE_WAIT",
+    "NOHUD_PATCH", "ONE_PER_CORE", "OPERATION_MODE", "OUTPUT_RES", "PAD_LAYOUT", "PATCH_OUTPUT", "PATCH_SCENE", "PCSS", "PCSS_K", "PERF_OVERLAY", "PERF_SLOW_MS", "PHOTO_PATCH", "PIPELINE_CACHE", "PIPE_MEMO", "PIPE_PREBUILD", "PIPE_SKIP", "PIPE_SYNC", "PIPE_WAIT",
     "PRESENT_SHOT", "PREWARM_XLATE", "PROFILE", "PROFILE_CHAINS", "PROFILE_DIR", "PROFILE_FRAMES",
     "PROFILE_MAIN", "PROFILE_RENDER", "PROMPTS", "PUSH_SKIP", "PUSH_STAGE", "RC_APPLY", "RC_DEBUG", "RC_DEBUG_CASCADE", "RC_LIGHT", "RC_TEMPORAL", "RDOC", "RDOC_DIR", "RDOC_DLL", "REALTIME", "REC_END", "REEXEC",
     "RENDER_SCALE", "REPLAY_ASYNC",
@@ -55,7 +55,7 @@ static const char *const known[] = {
     "SHADER_MEMO", "SHADOW", "SHADOW_RANGE", "SHADOW_RES", "SHADOW_SCALE", "SHADOW_SNAP", "SHARED_FONTS", "SHARPNESS", "SHOTS", "SHOTS_DIR",
     "SHOTS_FULL", "SKIP_FS", "SKIP_VS", "SPEED_PROBE", "SPIN", "SPIN_HANDOFF_US", "SPIN_SLEEP_US", "SPLIT_DRAWS", "SPLIT_US", "STICK_DEADZONE", "STICK_SENS",
     "SWKBD_ANSWER",
-    "SWKBD_TEST", "TARGET_COMPRESSION", "TEST_AUDIO_STALL", "TEST_FREEZE", "TEST_HITCH", "TEST_PAD", "TEST_PREPARE_SHADERS", "TEX_ALIAS", "TEX_CACHE_MB", "TEX_MEMO", "TEX_MIP_SKIP", "TEX_PREFETCH", "TEX_VRAM_PRESSURE", "TIMER_1MS", "TRACE", "UBO_DEDUPE", "UBO_SNAPSHOT", "UPSCALER", "UPSCALING", "UPSCALING_FAIL",
+    "SWKBD_TEST", "TARGET_COMPRESSION", "TEST_AUDIO_STALL", "TEST_FREEZE", "TEST_HITCH", "TEST_PAD", "TEST_PREPARE_SHADERS", "TEX_ALIAS", "TEX_CACHE_MB", "TEX_MEMO", "TEX_MIP_SKIP", "TEX_PREFETCH", "TEX_VRAM_PRESSURE", "TIMER_1MS", "TRACE", "TRIGGER_THRESHOLD", "UBO_DEDUPE", "UBO_SNAPSHOT", "UPSCALER", "UPSCALER_PREWARM", "UPSCALING", "UPSCALING_FAIL",
     "UPSCALING_QUALITY", "VERIFY_MIB", "VK_DYN_A2C", "VK_DYN_VERTEX", "VK_NO_FLOAT64",
     "VK_PRESENT", "VK_RECORDER", "VK_SSBO_ALIGN", "VK_SUBGROUP", "VK_SUBGROUP_PIN", "VK_VALIDATION", "VOLUME", "VRAM_HEADROOM", "VRAM_LIMIT_MIB", "VS_OUTS",
     "WALK_KEY", "WALK_SCALE", "WATCH_USED", "WB_EXACT", "WB_FENCE_LIMIT", "WIDE_PATCH", "WINDOW_SIZE", "XESS", "XESS_JITTER_SCALE", "XESS_MV_SCALE",
@@ -80,16 +80,19 @@ static const struct { const char *key, *section; } sections[] = {
     {"ANTI_ALIASING", "display"}, {"UPSCALING", "display"}, {"UPSCALING_QUALITY", "display"}, {"DLAA", "display"},
     {"DLSS", "display"}, {"XESS", "display"},
     {"DEVICE_PROFILE", "display"}, {"DECK_RES_MIGRATED", "display"}, {"DECK_AA_MIGRATED", "display"}, {"ASPECT_MIGRATED", "display"}, {"ASSUME_FOCUS", "display"},
+    {"ASSUME_FOCUS_MIGRATED", "display"},
+    {"MENU_PAUSE", "display"},
     {"SHADOW_SCALE", "display"}, {"SHADOW_RANGE", "display"}, {"CONTACT_SHADOWS", "display"}, {"AO", "display"},
     {"PCSS", "display"},
     {"MODS_DIR", "mods"}, {"MODS_ORDER", "mods"}, {"MODS_DISABLED", "mods"}, {"MODS_REBUILD", "mods"},
+    {"DLC", "mods"},
     {"MENU_LANG", "language"}, {"LANG", "language"}, {"LANG_DIR", "language"}, {"OPERATION_MODE", "language"},
     {"VOLUME", "audio"}, {"AUDIO_OUTPUT", "audio"}, {"AUDIO_MIX_PRESET", "audio"}, {"AUDIO_FRONT_LEFT", "audio"},
     {"AUDIO_FRONT_RIGHT", "audio"}, {"AUDIO_CENTER", "audio"}, {"AUDIO_SURROUND_LEFT", "audio"},
     {"AUDIO_SURROUND_RIGHT", "audio"}, {"AUDIO_SUBWOOFER", "audio"}, {"AUDIO_BASS", "audio"},
     {"MOTION", "input"}, {"RUMBLE_STRENGTH", "input"}, {"RUMBLE_CURVE", "input"}, {"RUMBLE_TRIGGERS", "input"},
     {"PAD_LAYOUT", "input"}, {"PROMPTS", "input"}, {"STICK_DEADZONE", "input"}, {"LSTICK_DEADZONE", "input"}, {"RSTICK_DEADZONE", "input"},
-    {"STICK_SENS", "input"},
+    {"TRIGGER_THRESHOLD", "input"}, {"STICK_SENS", "input"},
     {"MOUSE_SENS", "input"}, {"WALK_KEY", "input"}, {"WALK_SCALE", "input"}, {"INPUT_RECORD", "input"},
     {"BIND_A", "input"}, {"BIND_B", "input"}, {"BIND_X", "input"}, {"BIND_Y", "input"}, {"BIND_LCLICK", "input"},
     {"BIND_RCLICK", "input"}, {"BIND_L", "input"}, {"BIND_R", "input"}, {"BIND_ZL", "input"}, {"BIND_ZR", "input"},
@@ -153,17 +156,19 @@ static const CfgMeta metas[] = {
     {"FPS", "60", "30|60", LIVE},
     {"REALTIME", "1", "0|1", RESTART}, {"CLOTH_REALTIME", "1", "0|1", RESTART},
     {"MODS_REBUILD", "auto", "auto|off", RESTART},
+    {"DLC", "0", "0|1", RESTART},   // dlc.c: the DLC folders read and built into the archives at start
     {"HIGHFPS_FIX", "1", "0|1", RESTART},
     {"LANG", "", "ja|en-US|fr|de|it|es|zh-CN|ko|nl|pt|ru|zh-TW|en-GB|fr-CA|es-419|zh-Hans|zh-Hant|pt-BR", RESTART},
     {"OPERATION_MODE", "docked", "docked|handheld", RESTART},
-    {"ASSUME_FOCUS", "1", "0|1", LIVE},   // read on every focus change (ov_system.c)
+    {"ASSUME_FOCUS", "1", "0|1", LIVE},   // 0: the game stands still out of focus (pause.c)
+    {"MENU_PAUSE", "1", "0|1", LIVE},     // the game stands still while the menu is open (pause.c)
     {"HUD", "1", "0|1", LIVE},            // the gameplay HUD is drawn (resolution.c res_hud_tick); F12 switches it
     // Sound, Controls, Menu
     {"VOLUME", "100", "0..100", LIVE},
     // what the game mixes (ov_audout.c out_open: fixed when the game opens its output, at start); the 5.1 mix of the
     // output thread (mix_frame): a gain per speaker in dB, the bass of the other five to the subwoofer, and the menu's
     // preset that writes them (custom once one is moved)
-    {"AUDIO_OUTPUT", "stereo", "stereo|5.1", RESTART},
+    {"AUDIO_OUTPUT", "auto", "auto|stereo|5.1", RESTART},   // auto: 5.1 when the output takes it (audio_out.h)
     {"AUDIO_MIX_PRESET", "balanced", "balanced|voices|immersive|custom", LIVE},
     {"AUDIO_FRONT_LEFT", "0", "-12..6", LIVE}, {"AUDIO_FRONT_RIGHT", "0", "-12..6", LIVE},
     {"AUDIO_CENTER", "-2", "-12..6", LIVE}, {"AUDIO_SURROUND_LEFT", "0", "-12..6", LIVE},
@@ -174,6 +179,7 @@ static const CfgMeta metas[] = {
     {"PROMPTS", "auto", "auto|nintendo|xbox|playstation", RESTART},
     {"STICK_DEADZONE", "8", "0..50", LIVE}, {"STICK_SENS", "1", "0.1..3", RESTART},
     {"LSTICK_DEADZONE", "", "0..50", LIVE}, {"RSTICK_DEADZONE", "", "0..50", LIVE},
+    {"TRIGGER_THRESHOLD", "5", "0..95", LIVE},
     {"MOUSE_SENS", "1", "0..10", LIVE},
     {"WALK_KEY", "none", NULL, LIVE}, {"WALK_SCALE", "0.51", "0.2..0.9", LIVE},
     {"MENU_LANG", "", NULL, LIVE}, {"LANG_DIR", "", NULL, RESTART},
@@ -186,6 +192,10 @@ static const CfgMeta metas[] = {
     {"PIPE_WAIT", "default", "default|draw", RESTART}, {"PIPE_SKIP", "fullscreen", "strict|any|fullscreen", RESTART},
     {"LIB_PREBUILD", "1", "0|1", RESTART}, {"LIB_PREBUILD_THREADS", "", "1..64", RESTART},
     {"LIB_PREBUILD_KEEP", "1024", "0..4096", RESTART}, {"PIPE_PREBUILD", "1", "0|1", RESTART}, {"PREWARM_XLATE", "", "1..64", RESTART}, {"GPL", "", "0|1", RESTART},
+    // the sdk's memset, memmove, memcmp, strlen, strcmp, strncmp on host code (ov_libc.c), bound before ldr_load
+    {"HOST_LIBC", "1", "0|1", RESTART},
+    // host calls from the dispatch cache straight to their functions (hostfn.c hostfn_direct)
+    {"HOSTFN_DIRECT", "1", "0|1", RESTART},
     // textures and memory
     {"ASTC", "auto", "auto|gpu|native|cpu", RESTART}, {"MEMORY", "auto", "auto|import|mirror|verify", RESTART},
     {"TEX_ALIAS", "1", "0|1", RESTART}, {"TEX_CACHE_MB", "", "", RESTART}, {"TEX_VRAM_PRESSURE", "90", "0..100", RESTART}, {"ASTC_BC", "auto", "auto|bc1|1|0", RESTART}, {"TEX_MIP_SKIP", "0", "0|1024|2048", RESTART}, {"TEX_PREFETCH", "1", "0|1", RESTART}, {"ZSTD_NATIVE", "1", "0|1", RESTART}, {"ZSTD_CHECK", "0", "0|1", RESTART},
@@ -892,6 +902,35 @@ int cfg_migrate_deck_res(int deck) {
     return reset ? 2 : 1;
 }
 
+// A setting's one-time move to its default: the file's line of key is removed unless it says keep, and the marker key
+// done goes into the file either way, so a value picked afterwards stays. *was: the value removed (it stays valid).
+// Returns 0 when nothing ran (already done), 1 when only the marker was set, 2 when the line was removed as well.
+static int migrate_once(const char *key, const char *done, const char *keep, const char **was) {
+    plat_mutex_lock(&set_lock);
+    CfgEntry *mark = NULL, *e = NULL;
+    for (int i = 0; i < n_entries; i++) {
+        if (!strcmp(entries[i].key, done)) mark = &entries[i];
+        if (!strcmp(entries[i].key, key)) e = &entries[i];
+    }
+    if (mark && mark->value && strcmp(mark->value, "0")) {
+        plat_mutex_unlock(&set_lock);
+        return 0;
+    }
+    int reset = e && e->value && !e->removed && strcmp(e->value, keep);
+    if (reset) {
+        *was = e->value;
+        __atomic_store_n(&e->value, NULL, __ATOMIC_RELEASE);   // the old string stays for readers
+        e->dirty = 0;
+        e->removed = 1;   // cfg_save_to deletes the line
+        __atomic_add_fetch(&version, 1, __ATOMIC_RELEASE);
+    }
+    plat_mutex_unlock(&set_lock);
+    char var[64];
+    snprintf(var, sizeof var, PREFIX "%s", done);
+    cfg_set(var, "1");
+    return reset ? 2 : 1;
+}
+
 // ---- the picture's shape: one move to wide. Up to 1.11.0 aspect was fit or stretch; wide, which fills a window wider
 // or taller than 16:9 with a view of its shape and is the same as fit in a 16:9 one, is the default since. A fit or stretch line in
 // astralchain.ini was chosen when there was no wide to choose, so it is removed once and the default applies. The
@@ -899,28 +938,27 @@ int cfg_migrate_deck_res(int deck) {
 // stays. The environment's AC_ASPECT is a choice for one launch and is not looked at. Returns 0 when nothing ran
 // (already done), 1 when only the marker was set, 2 when the aspect line was removed as well; the caller saves.
 int cfg_migrate_aspect(void) {
-    plat_mutex_lock(&set_lock);
-    CfgEntry *mark = NULL, *aspect = NULL;
-    for (int i = 0; i < n_entries; i++) {
-        if (!strcmp(entries[i].key, "ASPECT_MIGRATED")) mark = &entries[i];
-        if (!strcmp(entries[i].key, "ASPECT")) aspect = &entries[i];
-    }
-    if (mark && mark->value && strcmp(mark->value, "0")) {
-        plat_mutex_unlock(&set_lock);
-        return 0;
-    }
-    int reset = aspect && aspect->value && !aspect->removed && strcmp(aspect->value, "wide");
-    if (reset) {
+    const char *was;
+    int r = migrate_once("ASPECT", "ASPECT_MIGRATED", "wide", &was);
+    if (r == 2)
         rt_log("cfg: astralchain.ini aspect = %s dates from before the wide view; removed once so the default, wide, "
-               "applies (aspect_migrated = 1 marks it done: fit or stretch picked again stays)", aspect->value);
-        __atomic_store_n(&aspect->value, NULL, __ATOMIC_RELEASE);   // the old string stays for readers
-        aspect->dirty = 0;
-        aspect->removed = 1;   // cfg_save_to deletes the line
-        __atomic_add_fetch(&version, 1, __ATOMIC_RELEASE);
-    }
-    plat_mutex_unlock(&set_lock);
-    cfg_set(PREFIX "ASPECT_MIGRATED", "1");
-    return reset ? 2 : 1;
+               "applies (aspect_migrated = 1 marks it done: fit or stretch picked again stays)", was);
+    return r;
+}
+
+// ---- out of focus: one move to running on. Up to 1.21.0 assume_focus = 0 paused nothing; now it stops the
+// game at each Alt+Tab, which nobody who stored a 0 then has seen. So a stored value other than 1 is removed once and
+// the default, 1, applies. The marker assume_focus_migrated = 1 goes into the file whether or not a line moved, so a 0
+// picked afterwards stays. The environment's AC_ASSUME_FOCUS is a choice for one launch and is not looked at. Returns
+// as migrate_once; the caller saves.
+int cfg_migrate_focus(void) {
+    const char *was;
+    int r = migrate_once("ASSUME_FOCUS", "ASSUME_FOCUS_MIGRATED", "1", &was);
+    if (r == 2)
+        rt_log("cfg: astralchain.ini assume_focus = %s dates from before it paused the game; removed once so the "
+               "default, 1 (keep running out of focus), applies (assume_focus_migrated = 1 marks it done: 0 picked "
+               "again stays)", was);
+    return r;
 }
 
 // The environment's anti_aliasing of 1.10.1 (AC_ANTI_ALIASING=dlaa, xess or fsr3: scripts, docs/building.md's checks),
@@ -964,7 +1002,8 @@ void cfg_init(void) {
                "turns it off)");
     // Saved at once, but no file is made only for the marker: without astralchain.ini it stays pending in memory and goes
     // in with the first save that makes the file (a menu change, F11), the only way a stored output_res can appear.
-    int moved = cfg_migrate_deck_res(profile_of()), shape = cfg_migrate_aspect();
+    int moved = cfg_migrate_deck_res(profile_of()), shape = cfg_migrate_aspect(), focus = cfg_migrate_focus();
     if (moved < shape) moved = shape;
+    if (moved < focus) moved = focus;
     if (moved == 2 || (moved == 1 && find_ini() && plat_file_exists(ini_path))) cfg_save();
 }

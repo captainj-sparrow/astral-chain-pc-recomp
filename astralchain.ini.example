@@ -17,7 +17,7 @@
 
 [performance]
 # The keys of this section and of [diagnostics] are for testing and troubleshooting, and take effect at the next start.
-# The Advanced tab of the settings menu (F1) shows all of them except zstd_native and zstd_check.
+# The Advanced tab of the settings menu (F1) shows all of them except zstd_native, zstd_check, host_libc and hostfn_direct.
 
 # Scheduling.
 # A thread waiting for a virtual core interrupts the owner when it runs game code: 1 = on, 2 = priority inheritance
@@ -38,6 +38,10 @@
 # 1 = poll whatever the governor, 0 = all of it off (lower CPU use and power; lower and uneven frame rate where the
 # cores then stay at a low frequency). Off by default on the Steam Deck, whose CPU and GPU share one power limit.
 # cpu_boost = auto
+# The game's memset, memmove, memcmp, strlen, strcmp and strncmp run as host code (0 = as the game's own code).
+# host_libc = 1
+# The game's calls into host functions jump straight to the function (0 = through a common entry first, as before).
+# hostfn_direct = 1
 
 # Shaders and pipelines.
 # Draws whose pipeline is still building: default waits on a reserved worker; draw is the previous scheduling.
@@ -152,9 +156,20 @@
 # window_size = 1920x1080
 # fullscreen = 1
 # 1, the default: the game keeps running while you are in another window; the keyboard stays quiet until the window is
-# in front again. 0: it pauses when its window loses focus, as it does on the Switch when Home is pressed; a load
-# interrupted that way can stop for good. Read at each focus change.
+# in front again. 0: it pauses while its window is out of focus, as it does on the Switch when Home is pressed:
+# picture, sound, vibration and game time stand still and go on when the window is back. The pause waits for a save
+# being written.
+# Takes effect at once.
 # assume_focus = 1
+# Written by the game, not a setting: up to 1.21.0 assume_focus = 0 paused nothing, and the first start of a later
+# version removes such a line here once, so the default, 1, applies. assume_focus_migrated = 1 records that this ran,
+# so a 0 picked afterwards (here or in the menu) is kept.
+# assume_focus_migrated = 1
+# 1, the default: the game pauses while its settings menu (F1, or Minus + Plus) is open: picture, sound and game time
+# stand still and go on when it closes. The pause waits for a save being written. A setting whose effect the game
+# draws (upscaling, ambient occlusion, the HUD) then shows when the menu closes. 0: the game keeps running behind the
+# menu. Takes effect at once.
+# menu_pause = 1
 # 1, the default: the game draws its HUD. 0: the HUD of play (the gauges, the map, the prompts, the markers) is not
 # drawn; the menus stay. F12 switches it in game and saves it here, as does the menu's Game tab.
 # hud = 1
@@ -311,11 +326,13 @@
 # audio_prefill_ms = 20
 # Volume in percent (0 to 100), on top of the game's own. Changes while the game runs take effect at once.
 # volume = 100
-# What the game mixes: stereo, or 5.1 (front left and right, centre, LFE, two surrounds). 5.1 needs an output that takes
-# it: a 5.1 or 7.1 output, or on Windows a headset with spatial sound on (Windows Sonic for Headphones, Dolby Atmos for
-# Headphones, DTS Headphone:X: the device's properties in the Windows sound settings). Elsewhere the 5.1 mix is folded
-# down to stereo. The settings menu shows what the output takes. Read at start.
-# audio_output = stereo
+# What the game mixes: auto (the default), stereo, or 5.1 (front left and right, centre, LFE, two surrounds). 5.1 needs
+# an output that takes it: a 5.1 or 7.1 output, or on Windows a headset with spatial sound on (Windows Sonic for
+# Headphones, Dolby Atmos for Headphones, DTS Headphone:X: the device's properties in the Windows sound settings).
+# Elsewhere the 5.1 mix is folded down to stereo. auto picks 5.1 when the default output runs 6 channels or more, or has
+# a spatial sound format on, and stereo otherwise; a stereo output that merely accepts a 6 channel stream stays stereo,
+# since Windows would fold the 5.1 down there. The settings menu shows what the output takes. Read at start.
+# audio_output = auto
 # The 5.1 mix. Changes while the game runs take effect at once. The menu's preset writes the gains below: balanced,
 # voices (clearer dialogue), immersive (stronger surrounds, bass to the subwoofer), or custom once a gain is moved.
 # audio_mix_preset = balanced
@@ -366,6 +383,10 @@
 # tab shows each stick's deflection now, so a drifting stick's resting value can be read off.
 # lstick_deadzone = 8
 # rstick_deadzone = 8
+# How far a gamepad trigger (ZL, ZR) must be pulled before the game sees it pressed, in percent of its travel (0 to 95;
+# 0 = the slightest pull). The Switch's ZL and ZR are buttons, so a low value keeps the triggers as quick; raise it for
+# a worn trigger that does not rest at 0. The Controls tab shows both triggers' travel now. 1.21.1 and earlier used 50.
+# trigger_threshold = 5
 # Mouse camera sensitivity (0 to 10; 0 = no mouse camera and no cursor capture).
 # mouse_sens = 1
 # The keyboard's sticks are all or nothing, so the game only sees a full tilt from them; while this key is held the
@@ -408,6 +429,11 @@
 # the setup's rebuild at start (a few minutes) and starts again after it. off: the game starts with the code it has.
 # A rebuild that failed or was cancelled is not started again for the same cheats. Default: auto.
 # mods_rebuild = auto
+# Load DLC (the Mods tab's "Load DLC"): 1 reads the DLC folders in dlc next to astralchain.exe (dlc/<name>/dlc.xml,
+# docs/dlc.md and dlc/README.md): trainings, texts and tutorial windows written as XML, which the game builds at start
+# into its archives from your own game files and keeps in the profile's dlc folder. 0 reads none and runs the game as it
+# is. Takes effect at the next start. Default: 0.
+# dlc = 0
 
 [files]
 # Developer overlay: a folder with RomFS files and a manifest.tsv (tools/make_romfs_patches.py format). Players put

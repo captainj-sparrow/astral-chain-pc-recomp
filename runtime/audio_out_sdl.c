@@ -1,6 +1,10 @@
 // The audio output on hosts other than Windows (audio_out.h): an SDL3 stream on the default playback device, filled
 // from SDL's audio thread. audio_out_win.c is the Windows one; the reason it does not use SDL is in its header.
 //
+// Under audio_output = auto the default device chooses what the game mixes (audio_out_auto_channels: 5.1 when it has
+// 6 channels or more; SDL tells nothing of a spatial sound format). The stream starts after that choice, so the fill
+// never runs before it.
+//
 // A 5.1 game opens a 6 channel stream when the default device has 6 channels or more (SDL's 5.1 order, FL FR FC LFE
 // BL BR, is Wwise's with the surrounds named back), else a stereo one that the fill folds down. SDL follows the
 // default device by itself and keeps a stream without a device running at the rate of the clock, so the game keeps its
@@ -19,7 +23,7 @@
 
 static struct {
     AudioOutFill fill;
-    int stream_channels;
+    int channels, stream_channels;   // what the game mixes, and what the stream carries
     PlatMutex info_lock;
     AudioOutInfo info;
 } s = {.info_lock = PLAT_MUTEX_INIT};
@@ -33,14 +37,14 @@ static void SDLCALL out_pull(void *user, SDL_AudioStream *stream, int additional
         int frames = additional / bytes;
         if (frames > OUT_MAX_FRAME) frames = OUT_MAX_FRAME;
         if (frames <= 0) break;
-        s.fill(tmp, frames, s.stream_channels);
+        s.fill(tmp, frames, s.channels, s.stream_channels);
         if (!SDL_PutAudioStreamData(stream, tmp, frames * bytes)) break;
         additional -= frames * bytes;
     }
 }
 
 int audio_out_start(int channels, AudioOutFill fill) {
-    AudioOutInfo info = {.started = 1, .spatial = -1, .stream_channels = channels};
+    AudioOutInfo info = {.started = 1, .spatial = -1};
     s.fill = fill;
     if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {
         rt_log("audout: SDL audio init failed (%s): buffers are recycled without sound", SDL_GetError());
@@ -49,6 +53,14 @@ int audio_out_start(int channels, AudioOutFill fill) {
     SDL_AudioSpec have = {0};
     if (SDL_GetAudioDeviceFormat(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &have, NULL)) info.device_channels = have.channels;
     info.surround_ok = info.device_channels >= 6;
+    if (channels == AUDIO_OUT_AUTO) {
+        channels = audio_out_auto_channels(&info);
+        rt_log("audout: audio_output = auto: the default device has %d channels, the game mixes %s",
+               info.device_channels, channels == 6 ? "5.1" : "stereo");
+    }
+    channels = channels == 6 ? 6 : 2;
+    s.channels = channels;
+    info.stream_channels = channels;
     s.stream_channels = channels == 6 && info.surround_ok ? 6 : 2;
     SDL_AudioSpec spec = {SDL_AUDIO_F32, s.stream_channels, OUT_RATE};
     SDL_AudioStream *stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, out_pull, NULL);
@@ -76,7 +88,7 @@ int audio_out_start(int channels, AudioOutFill fill) {
            "period %d frames",
            info.name, info.device_channels, channels, s.stream_channels,
            channels == 6 && s.stream_channels == 2 ? " (the 5.1 mix folded down here)" : "", period);
-    return 1;
+    return channels;
 }
 
 void audio_out_info(AudioOutInfo *out) {

@@ -380,6 +380,16 @@ void lowlat_input(void) {
     }
 }
 
+// A pause's repeats took present IDs of their own (vk_lowlat_flip_begin). The frames' IDs go on above them, or every
+// later frame's present would carry another ID than its markers. The margin covers the repeats still on their way to
+// the present.
+#define RESUME_ID_MARGIN 8
+void lowlat_resume(void) {
+    if (g_backend != LL_REFLEX) return;
+    uint64_t id = __atomic_load_n(&g_last_pid, __ATOMIC_RELAXED) + RESUME_ID_MARGIN;
+    if (id > __atomic_load_n(&g_next, __ATOMIC_RELAXED)) __atomic_store_n(&g_next, id, __ATOMIC_RELAXED);
+}
+
 void lowlat_present(int image, uint64_t slot, uint64_t period) {
     if (!g_on) return;
     uint64_t id = g_img_id[image & 3];
@@ -436,7 +446,7 @@ const void *vk_lowlat_flip_begin(uint64_t id, VkPresentIdKHR *pi, uint64_t *pid)
     if (g_backend != LL_REFLEX) return NULL;
     reflex_mode_apply();   // the pacer's period may have changed (a held cutscene)
     *pid = id > g_last_pid ? id : g_last_pid + 1;
-    g_last_pid = *pid;
+    __atomic_store_n(&g_last_pid, *pid, __ATOMIC_RELAXED);
     *pi = (VkPresentIdKHR){.sType = VK_STRUCTURE_TYPE_PRESENT_ID_KHR, .swapchainCount = 1, .pPresentIds = pid};
     marker(VK_LATENCY_MARKER_PRESENT_START_NV, *pid);
     return pi;

@@ -9,7 +9,8 @@
 // the file's volume, file id, size and times skips it on later starts, AC_ROMFS_VERIFY=force ignores the proof.
 //
 // Reads are positional (platform.h plat_file_pread), so threads read the image in parallel without a file-pointer
-// lock. AC_ROMFS_MMAP=1 maps the image instead.
+// lock. AC_ROMFS_MMAP=1 maps the image instead. AC_TRACE=fs logs each open and each read of a .pkz archive with its
+// range, which names the archive entries the game loads (a quest, a stage) against the archive's own table.
 //
 // Overlays: files listed in a directory's manifest.tsv are served in place of the originals. Each line names a RomFS
 // path, the overlay's size and SHA-256 and the original's SHA-256 ("-" adds a file the RomFS lacks; it is numbered
@@ -26,12 +27,16 @@
 // The resource size table: with a player mod enabled, the game's table is rebuilt at start with the tables the mods
 // ship merged in and the entries of the mods' files raised to what they need (restbl_overlay), and served from
 // <profile>/mods/ in place of the game's or a mod's table.
+//
+// DLCs (dlc.c): the quest and text archives with the DLCs' entries added are built at start from the archives served
+// so far, kept in <profile>/dlc/ and served in their place (dlc_archive).
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 
 #include "cfg.h"
+#include "dlc.h"
 #include "fs.h"
 #include "host.h"
 #include "input.h"
@@ -615,6 +620,90 @@ static int serve_generated(const char *rel, Overlay *base, void *out, size_t out
     return 1;
 }
 
+// ---- the DLCs' archives (dlc.c)
+
+// The archive `rel` with the DLCs' entries, served in its place from <profile>/dlc/. It is built from the archive as
+// the game would read it (the image's, or a player mod's that replaces it) and kept: a start whose key file there
+// names the same DLC sources and builder (dlc_key) and the same archive under it (its identity; in the image its
+// place too) serves the kept file without reading the archive.
+static void dlc_archive(const char *rel) {
+    if (!dlc_changes(rel)) return;
+    static const char keeps[] = "the DLCs' part of it is left out";
+    uint64_t i = lower(rel);
+    if (i >= file_count || strcmp(entry_name(entry(i)), rel)) {
+        rt_log("RomFS: %s missing; %s", rel, keeps);
+        return;
+    }
+    Overlay *base = NULL;
+    for (size_t k = 0; k < noverlay; k++)
+        if (overlays[k].index == i) base = &overlays[k];
+    struct { Identity id; uint64_t offset, size; } under = {base ? base->id : identity_of(image),
+                                                            base ? 0 : entry(i).offset, base ? base->size : entry(i).size};
+    Sha256 h;
+    uint8_t d[32];
+    char want[65], have[65] = "", dir[2100], file[2200], key_file[2210];
+    sha256_init(&h);
+    sha256_update(&h, dlc_key(), 32);
+    sha256_update(&h, &under, sizeof under);
+    sha256_final(&h, d);
+    hex32(d, want);
+    const char *leaf = strrchr(rel, '/') ? strrchr(rel, '/') + 1 : rel;
+    need(snprintf(dir, sizeof dir, "%s/dlc", rt_config()->profile) < (int)sizeof dir, "DLC archive path");
+    need(snprintf(file, sizeof file, "%s/%s", dir, leaf) < (int)sizeof file, "DLC archive path");
+    snprintf(key_file, sizeof key_file, "%s.key", file);
+    uint64_t key_n = 0;
+    uint8_t *kept = plat_file_read(key_file, &key_n);
+    if (kept && key_n == 64) memcpy(have, kept, 64);
+    free(kept);
+    double t0 = now_s();
+    if (strcmp(have, want) || plat_file_size(file) <= 0) {
+        size_t n, out_n;
+        void *in = read_served(rel, &base, &n, keeps);
+        void *out = in ? dlc_build(rel, in, n, &out_n) : NULL;
+        free(in);
+        if (!out) return;
+        plat_file_mkdir_p(dir);
+        plat_file_delete(key_file);   // a build that stops half way leaves no key for the old file
+        int ok = plat_file_write_atomic(file, out, out_n) && plat_file_write_atomic(key_file, want, 64);
+        free(out);
+        if (!ok) {
+            rt_log("RomFS: cannot write %s; %s", file, keeps);
+            return;
+        }
+        rt_log("RomFS overlay: %s built with the DLCs' entries in %.0f ms", file, (now_s() - t0) * 1e3);
+    }
+    PlatFile *r = open_read(file);
+    if (!r) {
+        rt_log("RomFS: cannot open %s; %s", file, keeps);
+        return;
+    }
+    Identity id = identity_of(r);
+    plat_file_close(r);
+    char *copy = strdup(file);
+    need(copy != NULL, "overlay path copy");
+    if (base) {
+        free(base->path);
+        base->path = copy, base->size = id.size, base->id = id;
+    } else {
+        if (noverlay == overlay_cap) {
+            overlay_cap = overlay_cap ? overlay_cap * 2 : 16;
+            overlays = realloc(overlays, overlay_cap * sizeof *overlays);
+            need(overlays != NULL, "overlay table");
+        }
+        char *name = strdup(rel);
+        need(name != NULL, "overlay path copy");
+        overlays[noverlay++] = (Overlay){i, id.size, copy, name, id};
+    }
+    rt_log("RomFS overlay: %s (%llu bytes, the DLCs' entries) replaces %s", file, (unsigned long long)id.size,
+           base ? "the mod's file" : "the original");
+}
+
+static void dlc_overlay(void) {
+    dlc_scan();
+    dlc_archive("quest/quest.pkz");
+    dlc_archive("Text/Text.pkz");
+}
+
 // ---- the resource size table (restbl.c)
 
 // The decompressed size of a file's bytes as the game unpacks them: the content size its zstd frame records (.zs;
@@ -895,6 +984,7 @@ static void overlay_init(void) {
     restbl_overlay();
     heapdef_overlay();
     camera_overlay();
+    dlc_overlay();
     added_init();
     if (noverlay) qsort(overlays, noverlay, sizeof *overlays, overlay_order);
     for (size_t k = 1; k < noverlay; k++)   // overlay_contest left one per file; the generated ones replace in place
@@ -1027,11 +1117,32 @@ void fs_init(void) {
 }
 
 // ---- the RomFS interface (fs.h)
-void fs_trace(const char *what, const char *path) {
+static double trace_s(void) {
     static double t0;
-    if (!(rt_trace & RT_TRACE_FS)) return;
     if (!t0) t0 = now_s();
-    rt_log("fs %8.3f %s %s", now_s() - t0, what, path ? path : "(null)");
+    return now_s() - t0;
+}
+
+void fs_trace(const char *what, const char *path) {
+    if (!(rt_trace & RT_TRACE_FS)) return;
+    rt_log("fs %8.3f %s %s", trace_s(), what, path ? path : "(null)");
+}
+
+// AC_TRACE=fs: one line per read of an archive (.pkz) with the range read, so that the log tells which entries of the
+// archive the game loaded and when (the archive's own table gives the entry of an offset). Other files are left out:
+// the audio and movie streams read all the time.
+static void trace_read(uint64_t h, int64_t offset, uint64_t n) {
+    uint64_t j = h - ROMFS_HANDLE_BASE;
+    plat_mutex_lock_shared(&lock);
+    uint64_t i = handles[j];
+    uint32_t ov = handle_ovl[j];
+    plat_mutex_unlock_shared(&lock);
+    if (!i) return;
+    const char *name = i - 1 < file_count ? entry_name(entry(i - 1)) : ov ? overlays[ov - 1].name : "";
+    size_t len = strlen(name);
+    if (len < 4 || strcasecmp(name + len - 4, ".pkz")) return;
+    rt_log("fs %8.3f pkz %s %#llx %#llx%s", trace_s(), name, (unsigned long long)offset, (unsigned long long)n,
+           ov ? " (overlay)" : "");
 }
 
 uint64_t romfs_file_count(void) { return file_count; }
@@ -1139,6 +1250,7 @@ uint32_t romfs_read(uint64_t *out, uint64_t h, int64_t offset, void *buffer, uin
     if (!out || offset < 0 || !handle_source(h, &f, &base, &fsize)) return FS_R_INVALID;
     if ((uint64_t)offset > fsize || (!buffer && size)) return FS_R_INVALID;
     uint64_t n = size < fsize - (uint64_t)offset ? size : fsize - (uint64_t)offset, done = 0;
+    if (rt_trace & RT_TRACE_FS) trace_read(h, offset, n);
     if (f == image && image_map) {
         memcpy(buffer, image_map + base + (uint64_t)offset, (size_t)n);
         done = n;

@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The script of the training "DLC: PC controls" (quest c0f0). The port builds it into the game's binary XML at start
+  (runtime/dlc.c); runtime/quest.c describes the conditions and actions of a quest script.
+
+  A quest is tasks (TaskList) that run side by side; a task is lines (LineList) and a line is commands (CommandList)
+  run in order: a condition (typeIF and its parameters) with an action (typeEXEC and its parameters). Action 1 holds
+  its line while its condition is true, action 2 goes to the next line (EXECLine -1: the task ends).
+
+  start   the "training started" notice (groups 0 and 4 of the base quest's EnemySet), as the game's trainings
+  intro   controls off for one second; the tutorial window af00 (action 18; a window of this DLC, dlc.xml); waits
+          for it to close (condition 33); controls on; quest flag 0
+  press   waits for flag 0, then for ZL and ZR held together, whatever input they are bound to (condition 0x20300:
+          a condition the port answers, 0x20000 + the buttons' bits, true while one of them is not held); flag 1
+  end     waits for flag 1: the window closed, the "training finished" notice (group 2), action 46 ends the quest
+-->
+<QuestRoot>
+  <Version>16</Version>
+  <QuestData>
+    <TaskList TaskName="start" TemplateName="">
+      <TaskEnable>1</TaskEnable>
+      <WorkInAdvanced>0</WorkInAdvanced>
+      <TaskColor>0</TaskColor>
+      <LineListTree>
+        <LineList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>53</typeEXEC>
+            <Type>2</Type>
+            <bSet>1</bSet>
+          </CommandList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>5</typeEXEC>
+            <EXECGroupNo>0</EXECGroupNo>
+            <EXECSetMax>0</EXECSetMax>
+          </CommandList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>5</typeEXEC>
+            <EXECGroupNo>4</EXECGroupNo>
+            <EXECSetMax>0</EXECSetMax>
+          </CommandList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>35</typeEXEC>
+            <Index>10</Index>
+            <bOn>0</bOn>
+          </CommandList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>2</typeEXEC>
+            <EXECIsNextLine>1</EXECIsNextLine>
+            <EXECLine>0</EXECLine>
+          </CommandList>
+        </LineList>
+      </LineListTree>
+    </TaskList>
+    <TaskList TaskName="intro" TemplateName="">
+      <TaskEnable>1</TaskEnable>
+      <WorkInAdvanced>0</WorkInAdvanced>
+      <TaskColor>0</TaskColor>
+      <LineListTree>
+        <LineList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>35</typeEXEC>
+            <Index>0</Index>
+            <bOn>1</bOn>
+          </CommandList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>4</typeEXEC>
+            <EXECTimer>1.000000</EXECTimer>
+          </CommandList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>2</typeEXEC>
+            <EXECIsNextLine>1</EXECIsNextLine>
+            <EXECLine>0</EXECLine>
+          </CommandList>
+        </LineList>
+        <LineList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>53</typeEXEC>
+            <Type>2</Type>
+            <bSet>0</bSet>
+          </CommandList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>18</typeEXEC>
+            <ExecDispTipsEnable>1</ExecDispTipsEnable>
+            <ExecDispTipsNo>44800</ExecDispTipsNo>
+          </CommandList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>2</typeEXEC>
+            <EXECIsNextLine>1</EXECIsNextLine>
+            <EXECLine>0</EXECLine>
+          </CommandList>
+        </LineList>
+        <LineList>
+          <CommandList>
+            <typeIF>33</typeIF>
+            <bCheck>1</bCheck>
+            <typeEXEC>1</typeEXEC>
+          </CommandList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>35</typeEXEC>
+            <Index>0</Index>
+            <bOn>0</bOn>
+          </CommandList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>12</typeEXEC>
+            <ExecFlagNo>0</ExecFlagNo>
+            <ExecbCheck>1</ExecbCheck>
+          </CommandList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>2</typeEXEC>
+            <EXECIsNextLine>1</EXECIsNextLine>
+            <EXECLine>-1</EXECLine>
+          </CommandList>
+        </LineList>
+      </LineListTree>
+    </TaskList>
+    <TaskList TaskName="press" TemplateName="">
+      <TaskEnable>1</TaskEnable>
+      <WorkInAdvanced>0</WorkInAdvanced>
+      <TaskColor>0</TaskColor>
+      <LineListTree>
+        <LineList>
+          <CommandList>
+            <typeIF>7</typeIF>
+            <IFQuestId>0</IFQuestId>
+            <IFFlagNo>0</IFFlagNo>
+            <IFbCheck>0</IFbCheck>
+            <typeEXEC>1</typeEXEC>
+          </CommandList>
+          <CommandList>
+            <typeIF>131840</typeIF>
+            <typeEXEC>1</typeEXEC>
+          </CommandList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>12</typeEXEC>
+            <ExecFlagNo>1</ExecFlagNo>
+            <ExecbCheck>1</ExecbCheck>
+          </CommandList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>2</typeEXEC>
+            <EXECIsNextLine>1</EXECIsNextLine>
+            <EXECLine>-1</EXECLine>
+          </CommandList>
+        </LineList>
+      </LineListTree>
+    </TaskList>
+    <TaskList TaskName="end" TemplateName="">
+      <TaskEnable>1</TaskEnable>
+      <WorkInAdvanced>0</WorkInAdvanced>
+      <TaskColor>0</TaskColor>
+      <LineListTree>
+        <LineList>
+          <CommandList>
+            <typeIF>7</typeIF>
+            <IFQuestId>0</IFQuestId>
+            <IFFlagNo>1</IFFlagNo>
+            <IFbCheck>0</IFbCheck>
+            <typeEXEC>1</typeEXEC>
+          </CommandList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>18</typeEXEC>
+            <ExecDispTipsEnable>0</ExecDispTipsEnable>
+            <ExecDispTipsNo>-1</ExecDispTipsNo>
+          </CommandList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>35</typeEXEC>
+            <Index>0</Index>
+            <bOn>1</bOn>
+          </CommandList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>4</typeEXEC>
+            <EXECTimer>0.500000</EXECTimer>
+          </CommandList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>5</typeEXEC>
+            <EXECGroupNo>2</EXECGroupNo>
+            <EXECSetMax>0</EXECSetMax>
+          </CommandList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>46</typeEXEC>
+          </CommandList>
+          <CommandList>
+            <typeIF>0</typeIF>
+            <typeEXEC>2</typeEXEC>
+            <EXECIsNextLine>1</EXECIsNextLine>
+            <EXECLine>-1</EXECLine>
+          </CommandList>
+        </LineList>
+      </LineListTree>
+    </TaskList>
+  </QuestData>
+  <QuestSub SetMainScenarioValueStr="case1_100">
+    <MinLevel>1</MinLevel>
+    <MaxLevel>1</MaxLevel>
+    <bSetPlStartPos>1</bSetPlStartPos>
+    <PlStartPos>11.563552 -10.000000 -32.396465 143.000000</PlStartPos>
+    <PlStartRotY>-1.850227</PlStartRotY>
+    <bSetMainScenario>0</bSetMainScenario>
+  </QuestSub>
+  <QuestFlagNameList>
+    <Name QuestFlagName="Flag00"/>
+    <Name QuestFlagName="Flag01"/>
+    <Name QuestFlagName="Flag02"/>
+    <Name QuestFlagName="Flag03"/>
+    <Name QuestFlagName="Flag04"/>
+    <Name QuestFlagName="Flag05"/>
+    <Name QuestFlagName="Flag06"/>
+    <Name QuestFlagName="Flag07"/>
+    <Name QuestFlagName="Flag08"/>
+    <Name QuestFlagName="Flag09"/>
+    <Name QuestFlagName="Flag10"/>
+    <Name QuestFlagName="Flag11"/>
+    <Name QuestFlagName="Flag12"/>
+    <Name QuestFlagName="Flag13"/>
+    <Name QuestFlagName="Flag14"/>
+    <Name QuestFlagName="Flag15"/>
+    <Name QuestFlagName="Flag16"/>
+    <Name QuestFlagName="Flag17"/>
+    <Name QuestFlagName="Flag18"/>
+    <Name QuestFlagName="Flag19"/>
+    <Name QuestFlagName="Flag20"/>
+    <Name QuestFlagName="Flag21"/>
+    <Name QuestFlagName="Flag22"/>
+    <Name QuestFlagName="Flag23"/>
+    <Name QuestFlagName="Flag24"/>
+    <Name QuestFlagName="Flag25"/>
+    <Name QuestFlagName="Flag26"/>
+    <Name QuestFlagName="Flag27"/>
+    <Name QuestFlagName="Flag28"/>
+    <Name QuestFlagName="Flag29"/>
+    <Name QuestFlagName="Flag30"/>
+    <Name QuestFlagName="Flag31"/>
+    <Name QuestFlagName="Flag32"/>
+    <Name QuestFlagName="Flag33"/>
+    <Name QuestFlagName="Flag34"/>
+    <Name QuestFlagName="Flag35"/>
+    <Name QuestFlagName="Flag36"/>
+    <Name QuestFlagName="Flag37"/>
+    <Name QuestFlagName="Flag38"/>
+    <Name QuestFlagName="Flag39"/>
+    <Name QuestFlagName="Flag40"/>
+    <Name QuestFlagName="Flag41"/>
+    <Name QuestFlagName="Flag42"/>
+    <Name QuestFlagName="Flag43"/>
+    <Name QuestFlagName="Flag44"/>
+    <Name QuestFlagName="Flag45"/>
+    <Name QuestFlagName="Flag46"/>
+    <Name QuestFlagName="Flag47"/>
+    <Name QuestFlagName="Flag48"/>
+    <Name QuestFlagName="Flag49"/>
+    <Name QuestFlagName="Flag50"/>
+    <Name QuestFlagName="Flag51"/>
+    <Name QuestFlagName="Flag52"/>
+    <Name QuestFlagName="Flag53"/>
+    <Name QuestFlagName="Flag54"/>
+    <Name QuestFlagName="Flag55"/>
+    <Name QuestFlagName="Flag56"/>
+    <Name QuestFlagName="Flag57"/>
+    <Name QuestFlagName="Flag58"/>
+    <Name QuestFlagName="Flag59"/>
+    <Name QuestFlagName="Flag60"/>
+    <Name QuestFlagName="Flag61"/>
+    <Name QuestFlagName="Flag62"/>
+    <Name QuestFlagName="Flag63"/>
+  </QuestFlagNameList>
+  <SaveFlagNameList>
+    <Name SaveFlagName="SaveFlag00"/>
+    <Name SaveFlagName="SaveFlag01"/>
+    <Name SaveFlagName="SaveFlag02"/>
+    <Name SaveFlagName="SaveFlag03"/>
+    <Name SaveFlagName="SaveFlag04"/>
+    <Name SaveFlagName="SaveFlag05"/>
+    <Name SaveFlagName="SaveFlag06"/>
+    <Name SaveFlagName="SaveFlag07"/>
+    <Name SaveFlagName="SaveFlag08"/>
+    <Name SaveFlagName="SaveFlag09"/>
+    <Name SaveFlagName="SaveFlag10"/>
+    <Name SaveFlagName="SaveFlag11"/>
+    <Name SaveFlagName="SaveFlag12"/>
+    <Name SaveFlagName="SaveFlag13"/>
+    <Name SaveFlagName="SaveFlag14"/>
+    <Name SaveFlagName="SaveFlag15"/>
+    <Name SaveFlagName="SaveFlag16"/>
+    <Name SaveFlagName="SaveFlag17"/>
+    <Name SaveFlagName="SaveFlag18"/>
+    <Name SaveFlagName="SaveFlag19"/>
+    <Name SaveFlagName="SaveFlag20"/>
+    <Name SaveFlagName="SaveFlag21"/>
+    <Name SaveFlagName="SaveFlag22"/>
+    <Name SaveFlagName="SaveFlag23"/>
+    <Name SaveFlagName="SaveFlag24"/>
+    <Name SaveFlagName="SaveFlag25"/>
+    <Name SaveFlagName="SaveFlag26"/>
+    <Name SaveFlagName="SaveFlag27"/>
+    <Name SaveFlagName="SaveFlag28"/>
+    <Name SaveFlagName="SaveFlag29"/>
+    <Name SaveFlagName="SaveFlag30"/>
+    <Name SaveFlagName="SaveFlag31"/>
+    <Name SaveFlagName="SaveFlag32"/>
+    <Name SaveFlagName="SaveFlag33"/>
+    <Name SaveFlagName="SaveFlag34"/>
+    <Name SaveFlagName="SaveFlag35"/>
+    <Name SaveFlagName="SaveFlag36"/>
+    <Name SaveFlagName="SaveFlag37"/>
+    <Name SaveFlagName="SaveFlag38"/>
+    <Name SaveFlagName="SaveFlag39"/>
+    <Name SaveFlagName="SaveFlag40"/>
+    <Name SaveFlagName="SaveFlag41"/>
+    <Name SaveFlagName="SaveFlag42"/>
+    <Name SaveFlagName="SaveFlag43"/>
+    <Name SaveFlagName="SaveFlag44"/>
+    <Name SaveFlagName="SaveFlag45"/>
+    <Name SaveFlagName="SaveFlag46"/>
+    <Name SaveFlagName="SaveFlag47"/>
+    <Name SaveFlagName="SaveFlag48"/>
+    <Name SaveFlagName="SaveFlag49"/>
+    <Name SaveFlagName="SaveFlag50"/>
+    <Name SaveFlagName="SaveFlag51"/>
+    <Name SaveFlagName="SaveFlag52"/>
+    <Name SaveFlagName="SaveFlag53"/>
+    <Name SaveFlagName="SaveFlag54"/>
+    <Name SaveFlagName="SaveFlag55"/>
+    <Name SaveFlagName="SaveFlag56"/>
+    <Name SaveFlagName="SaveFlag57"/>
+    <Name SaveFlagName="SaveFlag58"/>
+    <Name SaveFlagName="SaveFlag59"/>
+    <Name SaveFlagName="SaveFlag60"/>
+    <Name SaveFlagName="SaveFlag61"/>
+    <Name SaveFlagName="SaveFlag62"/>
+    <Name SaveFlagName="SaveFlag63"/>
+  </SaveFlagNameList>
+  <AreaList/>
+</QuestRoot>

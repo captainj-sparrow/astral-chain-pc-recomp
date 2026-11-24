@@ -2,14 +2,27 @@
 // Host functions at synthetic guest addresses: the HOST_OVERRIDE / HOST_OBSERVER
 // linker tables, the registry behind them, and the calls between host and guest (rt_call, rt_original).
 //
-// Every registered function dispatches through hostfn_entry, which in play jumps straight to the real function; with
-// AC_TRACE=host or AC_CORE_DIAG, and for nn::fs, it goes through hostfn_full, which counts the call
-// (hostfn_count_calls), traces the first one (AC_TRACE=host) and raises the host depth (AC_CORE_DIAG). The registry is
-// fixed by hostfn_seal, which builds the dispatch table; guest threads start after that, so lookups need no lock.
+// Every registered function is registered as hostfn_entry. In play a thread's target cache holds the function itself
+// instead (hostfn_direct, from dispatch_miss; AC_HOSTFN_DIRECT=0 keeps hostfn_entry, which then jumps to it); with
+// AC_TRACE=host or AC_CORE_DIAG, and for nn::fs, hostfn_entry stays the target and goes through hostfn_full, which
+// counts the call (hostfn_count_calls), traces the first one (AC_TRACE=host) and raises the host depth (AC_CORE_DIAG).
+// The registry is fixed by hostfn_seal, which builds the dispatch table; guest threads start after that, so lookups
+// need no lock.
+//
+// Measured for hostfn_direct on 2026-11-21 (ROG Ally at 15 W, 4 cores / 8 threads, Steam Deck profile, plain build,
+// town with the camera turning):
+// - Before: hostfn_entry was 1.75% of the draw command thread's cycles, 0.40% of the render thread's.
+// - Four in-launch A/Bs (throwaway builds switching the cache's targets, 8 s a side, 22-23 blocks each): the draw
+//   command thread's CPU time per frame -1.9, -2.4, -1.8 and -2.5% (+-0.8 to 1.1), its instructions -6.1 to -6.6%;
+//   the render thread's CPU time unchanged; the frame interval -0.3, -0.4, -0.3 and -0.6% (+-0.2 to 0.3).
+// - Twelve launches, two alternated series of six, do not resolve it. The first (with a shared store on every cache
+//   miss, since removed) gave the frame +0.7% and the draw thread's CPU time -0.3%, the second +0.1% and -3.2%; the
+//   replay thread, which the change does not touch, moved up to 2% in cycles between their sides.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "cfg.h"
 #include "host.h"
 
 #define MAX_HOSTFN 4096   // dispatch.c holds HOST_CAP / 2 host functions
@@ -154,15 +167,27 @@ __attribute__((noinline)) static void hostfn_tracked(Cpu *c, GuestFn fn) {
 static int counting = 1;
 static int track_calls;                   // AC_CORE_DIAG: every call in the host depth
 static int full_path = 1;                 // counting || track_calls: hostfn_entry goes through hostfn_full
+static int direct_on;                     // AC_HOSTFN_DIRECT, read by hostfn_seal
+static int direct_given;                  // hostfn_direct gave a target, which some thread's cache keeps
 static uint64_t batched;                  // calls counted per thread and handed over, CALL_BATCH at a time
 static _Thread_local uint32_t own_calls;
 
+// A thread's cached target is never invalidated (dispatch.c), so a call that has to go through hostfn_full cannot be
+// asked for once one thread may hold a function's own address.
+static void need_entry(const char *who) {
+    if (__atomic_load_n(&direct_given, __ATOMIC_RELAXED))
+        rt_fatal("%s after host calls were dispatched straight to their functions (AC_HOSTFN_DIRECT=0 keeps them in "
+                 "hostfn_entry)", who);
+}
+
 void hostfn_count_calls(int on) {
+    if (on) need_entry("hostfn_count_calls");
     counting = on;
     full_path = counting || track_calls;
 }
 
 void hostfn_track_calls(void) {
+    need_entry("hostfn_track_calls");
     track_calls = 1;
     full_path = 1;
 }
@@ -209,6 +234,14 @@ static void hostfn_entry(Cpu *c) {
     __attribute__((musttail)) return s->fn(c);
 }
 
+GuestFn hostfn_direct(uint64_t addr) {
+    uint64_t i = (addr - RT_HOSTFN_BASE) >> 4;
+    if (!direct_on || full_path || (addr & 15) || i >= (uint64_t)nslots || slots[i].blocking) return NULL;
+    if (!__atomic_load_n(&direct_given, __ATOMIC_RELAXED))   // written once: every thread's cache misses come here
+        __atomic_store_n(&direct_given, 1, __ATOMIC_RELAXED);
+    return slots[i].fn;
+}
+
 // A guest jump to the rt_call return sentinel: guest code used x30 as data, which a lifted RET never does.
 static void return_sentinel(Cpu *c) {
     rt_fatal("guest code jumped to the host return address %#llx (x0 %#llx)", (unsigned long long)RT_RET_HOST,
@@ -219,6 +252,7 @@ void hostfn_seal(void) {
     static RtModule mods[16];   // kept by the dispatcher
     if (sealed) return;
     rt_register_host(RT_RET_HOST, return_sentinel);
+    direct_on = cfg_bool("AC_HOSTFN_DIRECT");
     sealed = 1;
     int n = rt_linked_modules(mods, 16);
     rt_dispatch_init(mods, n);

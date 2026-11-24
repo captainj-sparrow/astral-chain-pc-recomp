@@ -1,6 +1,7 @@
 // Text the host shows the player (runtime/ui_text.c): catalogs keyed by stable ids and loaded from lang/*.mo. The
 // software keyboard reads them in the game's language (ui_text); the menu and overlay read them in the menu language.
 #pragma once
+#include <stddef.h>
 
 typedef enum {
     // Software keyboard
@@ -79,6 +80,11 @@ typedef enum {
     UI_MENU_MODS_INSTALLED,
     UI_MENU_MODS_NONE,           // no mod folder yet: where to unpack one
     UI_MENU_MODS_OPEN, UI_MENU_MODS_OPEN_DESC,
+    // DLCs (dlc.c): the dlc setting, the folder, the DLCs loaded at this start
+    UI_MENU_DLC_GROUP, UI_MENU_DLC, UI_MENU_DLC_DESC,
+    UI_MENU_DLC_LOADED,          // printf: the names of the DLCs loaded at this start
+    UI_MENU_DLC_NONE,            // dlc on, but no DLC folder was found at this start
+    UI_MENU_DLC_OPEN, UI_MENU_DLC_OPEN_DESC,
     UI_MENU_MODS_ROW_DESC,       // printf: files it replaces, files it adds (as of this start)
     UI_MENU_MODS_OVERRIDDEN,     // printf: files a higher mod serves instead, that mod's name
     UI_MENU_MODS_MOVE_HINT,
@@ -96,7 +102,7 @@ typedef enum {
     UI_MENU_VOLUME, UI_MENU_VOLUME_DESC,
     UI_MENU_AUDIO_OUTPUT, UI_MENU_AUDIO_OUTPUT_DESC,   // audio_output; the description of hosts other than Windows
     UI_MENU_AUDIO_OUTPUT_DESC_WIN,                     // the same on Windows, which names its spatial sound formats
-    UI_MENU_AUDIO_STEREO, UI_MENU_AUDIO_51,
+    UI_MENU_AUDIO_AUTO, UI_MENU_AUDIO_STEREO, UI_MENU_AUDIO_51,
     // The line under the output row, what the device takes: printf of the output's name (SPATIAL), and of its name and
     // its mixer's channel count (TAKES_51, FOLDS_51); then on Windows the spatial sound hint after FOLDS_51, and SENDING
     // (printf: the channels the game sends now).
@@ -131,7 +137,8 @@ typedef enum {
     // "Restart now" for the cheats rebuild, and its confirmation (Cancel: UI_MENU_RESET_NO)
     UI_MENU_RESTART, UI_MENU_RESTART_DESC, UI_MENU_RESTART_CONFIRM, UI_MENU_RESTART_YES, UI_MENU_RESTART_SAVING,
     UI_MENU_LSTICK_DEADZONE, UI_MENU_RSTICK_DEADZONE, UI_MENU_STICK_DEADZONE_DESC,
-    UI_MENU_STICK_DEADZONE_NOW, UI_MENU_STICK_SENS, UI_MENU_STICK_SENS_DESC,
+    UI_MENU_STICK_DEADZONE_NOW, UI_MENU_TRIGGER_THRESHOLD, UI_MENU_TRIGGER_THRESHOLD_DESC,
+    UI_MENU_TRIGGER_THRESHOLD_NOW, UI_MENU_STICK_SENS, UI_MENU_STICK_SENS_DESC,
     UI_MENU_MOUSE_SENS, UI_MENU_MOUSE_SENS_DESC,
     UI_MENU_WALK_KEY, UI_MENU_WALK_KEY_DESC, UI_MENU_WALK_KEY_TAKEN, UI_MENU_WALK_SCALE, UI_MENU_WALK_SCALE_DESC,
 
@@ -264,3 +271,8 @@ const char *ui_text_lang_at(int i);
 const char *ui_text_lang_name(const char *lang);
 const char *ui_text_font_lang(const char *lang);
 const char *menu_text(UiTextId id);
+// The inputs bound to a Switch action (input_map.h B_*) as the Controls tab's remapping rows label them, in the menu
+// language: its keys with " / " between two ("Left mouse / Z"), the gamepad button of the layout the rows show when
+// no key is bound, "" when neither is. Returns the length written to out (UTF-8, cut to n - 1 bytes). Any thread
+// (ui/binds_page.cpp; it copies the tables under the input lock).
+size_t ui_bind_label(int action, char *out, size_t n);

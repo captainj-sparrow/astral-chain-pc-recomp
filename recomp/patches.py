@@ -19,7 +19,9 @@ its contents. Words in use, by byte offset:
 (runtime/resolution.c res_init), +56..59 the camera's aspect ratio (runtime/resolution.c res_init, set aspect), +60..63
 the field-of-view factor (runtime/resolution.c res_fov_live, set fov), +64..79 the sun shadow cascade ends
 (runtime/resolution.c res_shadow_range, set cascade), +80..83 the draw-distance factor (runtime/resolution.c
-res_drawdist_live, set drawdist), +92..95 the sun shadow map size (runtime/resolution.c shadow_init, set shadow). A new
+res_drawdist_live, set drawdist), +92..95 the sun shadow map size (runtime/resolution.c shadow_init, set shadow),
++1024..1383 the training menu's rows (runtime/quest.c quest_init, set questmenu), +1536..3583 the texts the port fills
+in (runtime/quest.c rt_quest_text, set quest), +4064..4095 runtime/ov_zstd.c. A new
 set takes words outside these.
 
 The replacement words are lifted at the site's address in place of the original instruction, and the generated C reads

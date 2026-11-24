@@ -1,4 +1,4 @@
-// --probe-kernel: the kernel's waits, wake orders, virtual cores, fibers and
+// --probe-kernel: the kernel's waits, wake orders, virtual cores, the pause, fibers and
 // ExitThread on guest threads whose entries are host functions, then real lifted code on four guest threads: main's
 // PLT stub for nn::os::GetSystemTick, through the lifted sdk function, to rt_ticks.
 //
@@ -424,6 +424,138 @@ static void test_cores(Cpu *c) {
     CHECK(ok || !gate, "virtual cores");
 }
 
+// ---- pause: workers that run, sleep and wait with a timeout stand still with the clock, and what is left of a sleep
+// or a timeout is still to run afterwards; many short pauses lose no thread; a holder that will not stop means no pause
+#define PAUSE_RUNNERS 5
+#define PAUSE_CYCLES 300
+#define PAUSE_WAIT_MS 200
+static volatile int32_t g_pw_stop, g_pw_started;
+static uint64_t g_pw_count[PAUSE_RUNNERS], g_pw_took[2];
+static uint32_t g_pw_never;   // a handle that is never signalled while the test waits on it
+static uint64_t a_pause_runner, a_pause_timed, a_pause_hog;
+
+static void pause_runner(Cpu *c) {
+    uint64_t *n = (uint64_t *)(uintptr_t)c->x[0];
+    while (!__atomic_load_n(&g_pw_stop, __ATOMIC_RELAXED)) {
+        __atomic_fetch_add(n, 1, __ATOMIC_RELAXED);
+        sv(c, 0x0B, 0, 0, 0, 0);   // a yield: the checkpoint of every SVC
+    }
+    exit_thread(c);
+}
+
+static void pause_timed(Cpu *c) {   // 0: SleepThread, 1: WaitSynchronization with a timeout
+    int kind = (int)c->x[0];
+    uint64_t t0 = rt_ticks();
+    plat_inc32(&g_pw_started);
+    if (kind) CHECK(wait1(c, g_pw_never, PAUSE_WAIT_MS * 1000000ll) == KERN_R_TIMEOUT, "paused wait did not time out");
+    else sleep_ms(c, PAUSE_WAIT_MS);
+    g_pw_took[kind] = (rt_ticks() - t0) / 19200;   // ms of the guest's time
+    exit_thread(c);
+}
+
+static void pause_hog(Cpu *c) {   // holds its core in a host call for longer than kern_pause waits
+    plat_inc32(&g_pw_started);
+    uint64_t end = kern_now_ns() + 800000000ull;
+    while (kern_now_ns() < end) plat_pause();
+    exit_thread(c);
+}
+
+static void test_pause(Cpu *c, uint32_t me) {
+    if (cfg_bool("AC_FREE_CORES")) {
+        printf("pause: not checked (AC_FREE_CORES is set)\n");
+        return;
+    }
+    uint32_t run[PAUSE_RUNNERS], timed[2];
+    g_pw_stop = g_pw_started = 0;
+    g_pw_never = me;
+    for (int i = 0; i < PAUSE_RUNNERS; i++) {
+        g_pw_count[i] = 0;
+        run[i] = create(c, a_pause_runner, &g_pw_count[i], 44, -2);
+        start(c, run[i]);
+    }
+    for (int i = 0; i < 2; i++) {
+        timed[i] = create(c, a_pause_timed, (void *)(intptr_t)i, 40, -2);
+        start(c, timed[i]);
+    }
+    for (int i = 0; i < 5000 && g_pw_started < 2; i++) sleep_ms(c, 1);
+    sleep_ms(c, 20);
+
+    int away = kern_core_away();
+    uint64_t t0 = kern_now_ns();
+    int ok = kern_pause();
+    double stop_ms = ms_since(t0);
+    CHECK(ok, "kern_pause failed");
+    if (ok) {
+        int held, held_max;
+        kern_core_stats(&held, &held_max);
+        uint64_t count[PAUSE_RUNNERS], ticks = rt_ticks(), guest = kern_guest_ns();
+        for (int i = 0; i < PAUSE_RUNNERS; i++) count[i] = __atomic_load_n(&g_pw_count[i], __ATOMIC_RELAXED);
+        plat_sleep_ms(600);
+        CHECK(!held && kern_paused(), "paused with %d core holders", held);
+        CHECK(rt_ticks() == ticks && kern_guest_ns() == guest, "the guest's clock ran on through the pause");
+        for (int i = 0; i < PAUSE_RUNNERS; i++)
+            CHECK(__atomic_load_n(&g_pw_count[i], __ATOMIC_RELAXED) == count[i], "runner %d ran while paused", i);
+        for (int i = 0; i < 2; i++)
+            CHECK(kern_thread_state(timed[i]) != KERN_THREAD_EXITED, "timed wait %d ended while paused", i);
+        kern_resume();
+    }
+    kern_core_back(&away);
+    for (int i = 0; i < 2; i++) {
+        join(c, timed[i]);
+        CHECK(g_pw_took[i] + 1 >= PAUSE_WAIT_MS && g_pw_took[i] < PAUSE_WAIT_MS + 60,
+              "timed wait %d took %llu ms of guest time, want %d", i, (unsigned long long)g_pw_took[i], PAUSE_WAIT_MS);
+    }
+
+    int refused = 0;
+    uint64_t worst = 0, before = rt_ticks();
+    for (int k = 0; k < PAUSE_CYCLES; k++) {
+        away = kern_core_away();
+        t0 = kern_now_ns();
+        if (kern_pause()) {
+            uint64_t d = kern_now_ns() - t0;
+            if (d > worst) worst = d;
+            plat_wait_ns((uint64_t)(k * 7 % 11) * 100000);
+            kern_resume();
+        } else {
+            refused++;
+        }
+        kern_core_back(&away);
+        uint64_t now = rt_ticks();
+        CHECK(now >= before, "the guest's clock went back over pause %d", k);
+        before = now;
+        sleep_ms(c, k % 2);
+    }
+    CHECK(!refused, "%d of %d pauses refused", refused, PAUSE_CYCLES);
+    uint64_t count[PAUSE_RUNNERS];
+    for (int i = 0; i < PAUSE_RUNNERS; i++) count[i] = __atomic_load_n(&g_pw_count[i], __ATOMIC_RELAXED);
+    sleep_ms(c, 100);
+    for (int i = 0; i < PAUSE_RUNNERS; i++)
+        CHECK(__atomic_load_n(&g_pw_count[i], __ATOMIC_RELAXED) != count[i], "runner %d did not go on after the pauses", i);
+    g_pw_stop = 1;
+    for (int i = 0; i < PAUSE_RUNNERS; i++) join(c, run[i]);
+
+    g_pw_started = 0;
+    uint32_t hog = create(c, a_pause_hog, NULL, 44, -2);
+    start(c, hog);
+    for (int i = 0; i < 5000 && !g_pw_started; i++) sleep_ms(c, 1);
+    away = kern_core_away();
+    ok = kern_pause();
+    CHECK(!ok && !kern_paused(), "paused over a thread that held its core");
+    if (ok) kern_resume();
+    kern_core_back(&away);
+    join(c, hog);
+
+    uint64_t sink = 0, n = 10000000;
+    t0 = kern_now_ns();
+    for (uint64_t i = 0; i < n; i++) sink += rt_ticks();
+    double tick_ns = (double)(kern_now_ns() - t0) / (double)n;
+    __asm__ volatile("" : : "r"(sink));
+    printf("pause: stopped in %.2f ms, a %d ms sleep and wait took %llu and %llu ms of guest time around 600 ms paused; "
+           "%d more pauses, %d refused, slowest stop %.2f ms; a holder that will not stop: not paused; rt_ticks %.1f ns\n",
+           stop_ms, PAUSE_WAIT_MS, (unsigned long long)g_pw_took[0], (unsigned long long)g_pw_took[1], PAUSE_CYCLES,
+           refused, (double)worst / 1e6, tick_ns);
+}
+
 // ---- fibers: two fibers switch to each other; each checks its callee-saved registers, sp and tpidr survive
 typedef struct { uint64_t self, other; int id; } FiberJob;
 static volatile int32_t g_switches, g_runs[3];
@@ -681,6 +813,7 @@ static void probe_main(Cpu *c) {
     test_arbiter(c);
     test_events(c);
     test_cores(c);
+    test_pause(c, me);
     test_fibers(c);
     test_exit(c);
     test_module_stack(c);
@@ -754,6 +887,9 @@ int probe_kernel(void) {
     a_core_worker = hostfn_register("probe-kernel core worker", core_worker);
     a_exit_entry = hostfn_register("probe-kernel exit entry", exit_entry);
     a_exit_nested = hostfn_register("probe-kernel exit nested", exit_nested);
+    a_pause_runner = hostfn_register("probe-kernel pause runner", pause_runner);
+    a_pause_timed = hostfn_register("probe-kernel pause timed", pause_timed);
+    a_pause_hog = hostfn_register("probe-kernel pause hog", pause_hog);
     a_fiber_fn = hostfn_register("probe-kernel fiber", fiber_fn);
     a_fiber_exit_thread = hostfn_register("probe-kernel fiber exit thread", fiber_exit_thread);
     a_fiber_exit_fn = hostfn_register("probe-kernel fiber exit", fiber_exit_fn);

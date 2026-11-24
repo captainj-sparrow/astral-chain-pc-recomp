@@ -291,9 +291,63 @@ int probe_cfg(void) {
     plat_setenv("AC_STICK_DEADZONE", NULL);
     plat_setenv("AC_LSTICK_DEADZONE", NULL);
     plat_setenv("AC_RSTICK_DEADZONE", NULL);
+    plat_setenv("AC_TRIGGER_THRESHOLD", NULL);
+    CHECK(input_pad_trigger_on() == 1638, "trigger threshold: 5% of the travel by default");
+    plat_setenv("AC_TRIGGER_THRESHOLD", "0");
+    CHECK(input_pad_trigger_on() == 0, "trigger threshold: 0 takes the slightest pull");
+    plat_setenv("AC_TRIGGER_THRESHOLD", "100");
+    CHECK(input_pad_trigger_on() == 31129, "trigger threshold: clamped to 95%");
+    plat_setenv("AC_TRIGGER_THRESHOLD", NULL);
     CHECK(input_stick_percent(32767, 0) > 99.99 && input_stick_percent(32767, 0) < 100.01 &&
               input_stick_percent(0, 0) == 0 && fabs(input_stick_percent(3000, -4000) - 5000 * 100.0 / 32767) < 1e-9,
           "stick percent: an axis's end is 100%, the centre 0%, round in between");
+    // The release gate after the menu or a text entry closed (input_map.c): `gate` is one poll of the game
+    {
+        const uint64_t a = 1ull << B_A, b = 1ull << B_B, zl = 1ull << B_ZL, up = 1ull << B_SL_UP, right = 1ull << B_SL_RIGHT;
+        const uint32_t lstick = 0xfu << B_SL_LEFT, rstick = 0xfu << B_SR_LEFT;
+        uint32_t wait;
+        uint64_t got;
+        int32_t gs[4];
+#define GATE(buttons, tilt, x0, y0, x1, y1) \
+    (got = (buttons), gs[0] = (x0), gs[1] = (y0), gs[2] = (x1), gs[3] = (y1), \
+     wait = input_release_gate(wait, input_release_held(got, (tilt)), &got, gs))
+        wait = INPUT_RELEASE_ALL;
+        GATE(0, 0, 955, 0, -300, 120);
+        CHECK(!wait && !got && gs[0] == 955 && gs[1] == 0 && gs[2] == -300 && gs[3] == 120,
+              "release gate: sticks resting off the centre hold nothing and reach the game as they are");
+        wait = INPUT_RELEASE_ALL;
+        GATE(b, 0, 955, 0, 0, 0);
+        CHECK(wait == b && !got && gs[0] == 955, "release gate: the button that closed the menu is hidden");
+        GATE(b | a, 0, 0, 0, 0, 0);
+        CHECK(wait == b && got == a, "release gate: another button pressed meanwhile reaches the game at once");
+        GATE(0, 0, 0, 0, 0, 0);
+        CHECK(!wait && !got, "release gate: released, nothing is waited for");
+        GATE(b, 0, 0, 0, 0, 0);
+        CHECK(!wait && got == b, "release gate: the same button pressed again reaches the game");
+        wait = INPUT_RELEASE_ALL;
+        GATE(zl, 0, 0, 0, 0, 0);
+        GATE(zl | a, 0, 0, 20000, 0, 0);
+        CHECK(wait == zl && got == a && gs[1] == 20000,
+              "release gate: a trigger that never reads released hides itself alone");
+        wait = INPUT_RELEASE_ALL;
+        GATE(up, 0, 0, 30000, 0, 25000);
+        CHECK(wait == lstick && !got && gs[0] == 0 && gs[1] == 0 && gs[3] == 25000,
+              "release gate: a stick held past half its travel reads centred, the other one is the game's");
+        GATE(right, 0, 30000, 0, 0, 0);
+        CHECK(wait == lstick && !got && gs[0] == 0, "release gate: a held stick turned to another direction stays hidden");
+        GATE(0, 0, 12000, 0, 0, 0);
+        CHECK(!wait && gs[0] == 12000, "release gate: back under half its travel the stick is the game's again");
+        wait = INPUT_RELEASE_ALL;
+        GATE(0, 2, 0, 0, 0, 6553);
+        CHECK(wait == rstick && gs[3] == 0, "release gate: keys that tilt a stick part way (walk key) hold it");
+        GATE(0, 0, 0, 0, 0, 0);
+        CHECK(!wait, "release gate: the keys released, the stick is free");
+        wait = 0;
+        GATE(a | up, 3, 0, 30000, 5, 6);
+        CHECK(!wait && got == (a | up) && gs[1] == 30000 && gs[2] == 5 && gs[3] == 6,
+              "release gate: with nothing waited for the sample is untouched");
+#undef GATE
+    }
     // Gamepad layouts (input_map.c)
     CHECK(input_pad_layout_pick("auto", 1, PAD_KIND_NONE) == PAD_LAYOUT_NINTENDO &&
               input_pad_layout_pick(NULL, 0, PAD_KIND_NONE) == PAD_LAYOUT_XBOX,
@@ -586,6 +640,49 @@ int probe_cfg(void) {
     CHECK(plat_file_write(path, shape_wide, sizeof shape_wide - 1) && cfg_load(path) == 1 && cfg_migrate_aspect() == 1 &&
               EQ(cfg_get("AC_ASPECT"), "wide"),
           "aspect migration: a wide line stays, the marker only");
+    // The one-time move of a stored assume_focus = 0 to the default, 1 (cfg.c cfg_migrate_focus). The test scripts set
+    // AC_ASSUME_FOCUS=1, which would hide the file's value: the checks run without it.
+    char *focus_env = getenv("AC_ASSUME_FOCUS") ? strdup(getenv("AC_ASSUME_FOCUS")) : NULL;
+    plat_setenv("AC_ASSUME_FOCUS", NULL);
+    static const char focus_old[] = "[display]\r\nassume_focus = 0\r\n";
+    static const char focus_done[] = "[display]\r\nassume_focus_migrated = 1\r\n";
+    CHECK(plat_file_write(path, focus_old, sizeof focus_old - 1) && cfg_load(path) == 1 && cfg_migrate_focus() == 2 &&
+              !cfg_is_set("AC_ASSUME_FOCUS") && cfg_bool("AC_ASSUME_FOCUS") && cfg_save_to(path) == 1,
+          "focus migration: a stored 0 is removed and the default, 1, applies");
+    got = plat_file_read(path, &got_n);
+    CHECK(got && got_n == sizeof focus_done - 1 && !memcmp(got, focus_done, got_n),
+          "focus migration: the assume_focus line leaves the file, the marker comes in");
+    if (got && (got_n != sizeof focus_done - 1 || memcmp(got, focus_done, got_n)))
+        fprintf(stderr, "---- saved:\n%s\n----\n", got);
+    free(got);
+    CHECK(cfg_load(path) == 1 && cfg_migrate_focus() == 0, "focus migration: runs once");
+    cfg_set("AC_ASSUME_FOCUS", "0");   // the pause picked in the menu
+    CHECK(cfg_save_to(path) == 1 && cfg_load(path) == 1 && cfg_migrate_focus() == 0 && !cfg_bool("AC_ASSUME_FOCUS"),
+          "focus migration: 0 picked after the move stays");
+    CHECK(plat_file_write(path, focus_old, sizeof focus_old - 1) && cfg_load(path) == 1 && cfg_migrate_focus() == 2,
+          "focus migration: a stored 0 again");
+    cfg_set("AC_ASSUME_FOCUS", "0");   // picked before the move was saved
+    CHECK(cfg_save_to(path) == 1 && cfg_load(path) == 1 && cfg_migrate_focus() == 0 && !cfg_bool("AC_ASSUME_FOCUS"),
+          "focus migration: 0 picked in the same session stays");
+    static const char focus_twice[] = "[display]\nassume_focus = 1\nAC_Assume_Focus = 0\n";
+    CHECK(plat_file_write(path, focus_twice, sizeof focus_twice - 1) && cfg_load(path) == 1 && cfg_migrate_focus() == 2 &&
+              cfg_save_to(path) == 1 && cfg_load(path) == 1 && cfg_migrate_focus() == 0 && cfg_bool("AC_ASSUME_FOCUS"),
+          "focus migration: every spelling and copy of the line goes");
+    static const char focus_one[] = "[display]\nassume_focus = 1\n";
+    CHECK(plat_file_write(path, focus_one, sizeof focus_one - 1) && cfg_load(path) == 1 && cfg_migrate_focus() == 1 &&
+              EQ(cfg_get("AC_ASSUME_FOCUS"), "1"),
+          "focus migration: a 1 line stays, the marker only");
+    static const char both_old[] = "[display]\naspect = fit\nassume_focus = 0\n";
+    CHECK(plat_file_write(path, both_old, sizeof both_old - 1) && cfg_load(path) == 1 && cfg_migrate_aspect() == 2 &&
+              cfg_migrate_focus() == 2 && cfg_save_to(path) == 1 && cfg_load(path) == 1 && cfg_migrate_aspect() == 0 &&
+              cfg_migrate_focus() == 0 && !cfg_is_set("AC_ASPECT") && !cfg_is_set("AC_ASSUME_FOCUS"),
+          "focus migration: saved together with the aspect's");
+    plat_setenv("AC_ASSUME_FOCUS", "0");   // one launch's choice
+    CHECK(plat_file_write(path, focus_one, sizeof focus_one - 1) && cfg_load(path) == 1 && cfg_migrate_focus() == 1 &&
+              !cfg_bool("AC_ASSUME_FOCUS"),
+          "focus migration: the environment is left alone");
+    plat_setenv("AC_ASSUME_FOCUS", focus_env);
+    free(focus_env);
     // The Steam Deck's one-time move from a stored 1080p output_res to the profile's 1280x720 (cfg.c cfg_migrate_deck_res)
     static const char deck_1080[] = "[display]\noutput_res = 1920x1080\n";
     static const char deck_done[] = "[display]\ndeck_res_migrated = 1\n";

@@ -1282,9 +1282,47 @@ static void probe_paths(void) {
            bad ? "FAIL" : "ok");
 }
 
+// The SDK finds files through the tables MountRom writes into the caller's cache (romfs.c ov_mount_rom): a buffer of
+// the size QueryMountRomCacheSize gives holds the header and the image's four tables, with the header's offsets
+// pointing into the buffer; one that is too small is left alone.
+static void probe_rom_cache(PlatFile *image) {
+    enum { HDR = 0x50, GUARD = 0x1000 };
+    uint64_t size = 0, orig[HDR / 8];
+    CHECK(RES(S_QUERY_CACHE, 0) == FS_R_INVALID, "QueryMountRomCacheSize without an output");
+    CHECK(RES(S_QUERY_CACHE, U(&size)) == 0 && size > HDR && !(size & 0xFFF), "QueryMountRomCacheSize: %#llx bytes",
+          (unsigned long long)size);
+    if (size <= HDR) return;
+    if (independent_read(image, (uint8_t *)orig, HDR, 0) != HDR) rt_fatal("probe-fs: cannot read the RomFS header");
+    uint8_t *cache = mem_kernel_alloc(size + GUARD, 0x1000), *want = malloc(size);
+    need(cache && want, "probe cache");
+    memset(cache, 0xA5, size + GUARD);
+    CHECK(RES(S_MOUNT_ROM, U("rom"), U(cache), HDR) == 0 && cache[0] == 0xA5 && cache[HDR] == 0xA5,
+          "MountRom wrote into a cache that is too small");
+    CHECK(RES(S_MOUNT_ROM, U("rom"), U(cache), size) == 0, "MountRom with a cache");
+    uint64_t got[HDR / 8], at = HDR;
+    memcpy(got, cache, HDR);
+    CHECK(got[0] == HDR && got[9] == orig[9], "cache header: size %#llx, data at %#llx", (unsigned long long)got[0],
+          (unsigned long long)got[9]);
+    for (int i = 1; i < 9; i += 2) {   // directory hash and meta, file hash and meta: {offset, size}
+        uint64_t n = orig[i + 1];
+        int ok = n <= size - at && got[i] == at && got[i + 1] == n &&
+                 independent_read(image, want, n, orig[i]) == (int64_t)n && !memcmp(cache + at, want, n);
+        CHECK(ok, "cache table %d is not the image's", i / 2);
+        if (!ok) break;
+        at += n;
+    }
+    for (int i = 0; i < GUARD; i++)
+        if (cache[size + i] != 0xA5) {
+            CHECK(0, "MountRom wrote %#x bytes past the cache", i + 1);
+            break;
+        }
+    printf("romfs: the mount cache (%#llx bytes) holds the image's four tables\n", (unsigned long long)size);
+    free(want);
+    mem_kernel_free(cache, size + GUARD);
+}
+
 static uint64_t probe_romfs(void) {
-    uint64_t count = romfs_file_count(), cache = ~0ull;
-    CHECK(RES(S_QUERY_CACHE, U(&cache)) == 0 && cache == 0, "QueryMountRomCacheSize");
+    uint64_t count = romfs_file_count();
     CHECK(RES(S_MOUNT_ROM, U("rom"), 0, 0) == 0, "MountRom(\"rom\")");
     CHECK(RES(S_MOUNT_ROM, U("rom"), 0, 0) == 0, "MountRom(\"rom\") again");
     CHECK(RES(S_MOUNT_ROM, U("../x"), 0, 0) == FS_R_INVALID, "MountRom with a bad name");
@@ -1292,6 +1330,7 @@ static uint64_t probe_romfs(void) {
 
     PlatFile *image = plat_file_open(romfs_image_path());
     if (!image) rt_fatal("probe-fs: cannot open the RomFS image");
+    probe_rom_cache(image);
     uint8_t *a = malloc(HEAD_BYTES), *b = malloc(HEAD_BYTES);
     need(a && b, "probe buffers");
     uint64_t step = count / SAMPLES, bytes = 0, sampled = 0, deep = 0, high = 0, largest = 0, lsize = 0;

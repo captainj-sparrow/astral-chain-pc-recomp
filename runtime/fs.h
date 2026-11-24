@@ -49,7 +49,7 @@ const char *romfs_prompts(void);
 int romfs_prompts_ready(const char *folder);
 int romfs_prompts_off(const char *folder);
 const char *romfs_overlay(size_t k, const char **file, uint64_t *size, int *is_added);   // RomFS path of overlay k
-void fs_trace(const char *what, const char *path);         // AC_TRACE=fs: one line per open
+void fs_trace(const char *what, const char *path);         // AC_TRACE=fs: one line per open (and per .pkz read, romfs.c)
 
 // ---- fs_host.c
 void fs_host_set_profile(const char *dir);                 // profile directory; before the first storage mount only
