@@ -1,0 +1,2131 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: astral-chain-pc-recomp\n"
+"Language: pt-BR\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"X-Astral-Language-Name: Português (Brasil)\n"
+
+#. English: "Text entry"
+msgid "UI_SWKBD_TITLE"
+msgstr "Inserir texto"
+
+#. English: "Enter a name"
+msgid "UI_SWKBD_PROMPT"
+msgstr "Insira um nome"
+
+#. English: "Horse"
+msgid "UI_SWKBD_DEFAULT_NAME"
+msgstr "Cavalo"
+
+#. English: "OK"
+msgid "UI_SWKBD_OK"
+msgstr "OK"
+
+#. English: "Cancel"
+msgid "UI_SWKBD_CANCEL"
+msgstr "Cancelar"
+
+#. English: "Controller: A = OK, B = Cancel"
+msgid "UI_SWKBD_PAD_HINT"
+msgstr "Controle: A = OK, B = Cancelar"
+
+#. English: "Settings"
+msgid "UI_MENU_TITLE"
+msgstr "Configurações"
+
+#. English: "Screen"
+msgid "UI_MENU_TAB_SCREEN"
+msgstr "Tela"
+
+#. English: "Game"
+msgid "UI_MENU_TAB_GAME"
+msgstr "Jogo"
+
+#. English: "Mods"
+msgid "UI_MENU_TAB_MODS"
+msgstr "Mods"
+
+#. English: "Sound"
+msgid "UI_MENU_TAB_SOUND"
+msgstr "Som"
+
+#. English: "Controls"
+msgid "UI_MENU_TAB_CONTROLS"
+msgstr "Controles"
+
+#. English: "Menu"
+msgid "UI_MENU_TAB_MENU"
+msgstr "Menu"
+
+#. English: "Advanced"
+msgid "UI_MENU_TAB_ADVANCED"
+msgstr "Avançado"
+
+#. English: "Continue"
+msgid "UI_MENU_CONTINUE"
+msgstr "Continuar"
+
+#. English: "Quit game"
+msgid "UI_MENU_QUIT"
+msgstr "Sair do jogo"
+
+#. English: "On"
+msgid "UI_MENU_ON"
+msgstr "Ligado"
+
+#. English: "Off"
+msgid "UI_MENU_OFF"
+msgstr "Desligado"
+
+#. English: "Automatic"
+msgid "UI_MENU_AUTO"
+msgstr "Automático"
+
+#. English: "default"
+msgid "UI_MENU_DEFAULT_MARK"
+msgstr "padrão"
+
+#. English: "after restart"
+msgid "UI_MENU_AFTER_RESTART"
+msgstr "após reiniciar"
+
+#. English: "set by environment variable"
+msgid "UI_MENU_SET_BY_ENV"
+msgstr "definido por variável de ambiente"
+
+#. English: "could not save settings"
+msgid "UI_MENU_SAVE_FAILED"
+msgstr "não foi possível salvar as configurações"
+
+#. English: "Astral Chain Recomp %s, game %s"
+msgid "UI_MENU_VERSION"
+msgstr "Astral Chain Recomp %s, jogo %s"
+
+#. English: "Fullscreen"
+msgid "UI_MENU_FULLSCREEN"
+msgstr "Tela cheia"
+
+#. English: "Fills the screen with the game; F11 toggles it."
+msgid "UI_MENU_FULLSCREEN_DESC"
+msgstr "O jogo ocupa a tela inteira; F11 alterna."
+
+#. English: "Window size"
+msgid "UI_MENU_WINDOW_SIZE"
+msgstr "Tamanho da janela"
+
+#. English: "Size of the game window when not fullscreen."
+msgid "UI_MENU_WINDOW_SIZE_DESC"
+msgstr "Tamanho da janela do jogo fora da tela cheia."
+
+#. English: "Custom"
+msgid "UI_MENU_WINDOW_SIZE_CUSTOM"
+msgstr "Personalizado"
+
+#. English: "Presentation"
+msgid "UI_MENU_PRESENT"
+msgstr "Apresentação"
+
+#. English: "How finished frames reach the screen."
+msgid "UI_MENU_PRESENT_DESC"
+msgstr "Como os quadros prontos chegam à tela."
+
+#. English: "Mailbox"
+msgid "UI_MENU_PRESENT_MAILBOX"
+msgstr "Mailbox"
+
+#. English: "VSync"
+msgid "UI_MENU_PRESENT_VSYNC"
+msgstr "VSync"
+
+#. English: "Immediate"
+msgid "UI_MENU_PRESENT_IMMEDIATE"
+msgstr "Imediato"
+
+#. English: "in use: %s"
+msgid "UI_MENU_PRESENT_IN_USE"
+msgstr "em uso: %s"
+
+#. English: "Low latency"
+msgid "UI_MENU_LOW_LATENCY"
+msgstr "Baixa latência"
+
+#. English: "Starts each frame as late as it can still be shown on time, so the picture answers the controls sooner. Uses NVIDIA Reflex or AMD Anti-Lag 2 when the driver offers them, the port's own timing otherwise. Boost: with Reflex the GPU also keeps its clocks up; otherwise shorter waits, with a dropped frame now and then."
+msgid "UI_MENU_LOW_LATENCY_DESC"
+msgstr "Começa cada quadro o mais tarde possível ainda a tempo de ser exibido, para a imagem responder antes aos controles. Usa NVIDIA Reflex ou AMD Anti-Lag 2 quando o driver os oferece; senão, o controle de tempo do próprio port. Turbo: com Reflex a GPU também mantém o clock alto; nos outros casos, esperas mais curtas, com um quadro perdido de vez em quando."
+
+#. English: "Off"
+msgid "UI_MENU_LOW_LATENCY_OFF"
+msgstr "Desligado"
+
+#. English: "On"
+msgid "UI_MENU_LOW_LATENCY_ON"
+msgstr "Ligado"
+
+#. English: "Boost"
+msgid "UI_MENU_LOW_LATENCY_BOOST"
+msgstr "Turbo"
+
+#. English: "built-in timing"
+msgid "UI_MENU_LOW_LATENCY_BUILTIN"
+msgstr "controle integrado"
+
+#. English: "Graphics card"
+msgid "UI_MENU_GPU"
+msgstr "Placa de vídeo"
+
+#. English: "The Vulkan device that draws the game."
+msgid "UI_MENU_GPU_DESC"
+msgstr "O dispositivo Vulkan que desenha o jogo."
+
+#. English: "Automatic"
+msgid "UI_MENU_GPU_AUTO"
+msgstr "Automática"
+
+#. English: "Performance overlay"
+msgid "UI_MENU_PERF_OVERLAY"
+msgstr "Indicador de desempenho"
+
+#. English: "Frame rate in the top right corner. Full adds frame times with a graph, CPU, GPU and memory load, temperatures and the render thread's waits. F10 cycles the modes."
+msgid "UI_MENU_PERF_OVERLAY_DESC"
+msgstr "Taxa de quadros no canto superior direito. Completo adiciona os tempos de quadro com gráfico, o uso de CPU, GPU e memória, as temperaturas e as esperas da thread de renderização. F10 alterna os modos."
+
+#. English: "Off"
+msgid "UI_MENU_PERF_OFF"
+msgstr "Desligado"
+
+#. English: "FPS"
+msgid "UI_MENU_PERF_FPS"
+msgstr "FPS"
+
+#. English: "Full"
+msgid "UI_MENU_PERF_FULL"
+msgstr "Completo"
+
+#. English: "%.0f fps"
+msgid "UI_PERF_LINE_FPS"
+msgstr "%.0f fps"
+
+#. English: "Picture"
+msgid "UI_MENU_GRAPHICS"
+msgstr "Imagem"
+
+#. English: "Game resolution"
+msgid "UI_MENU_OUTPUT_RES"
+msgstr "Resolução do jogo"
+
+#. English: "The size the game draws its picture and interface in. 1280 x 720 is the lightest, for weaker GPUs. Above 1920 x 1080 the game needs more memory (about 240 MB more at 2560 x 1440, 790 MB at 3840 x 2160) and GPU time. Takes effect after a restart. Automatic takes the screen's size: up to 1920 x 1080, and up to 3840 x 2160 while an upscaler runs."
+msgid "UI_MENU_OUTPUT_RES_DESC"
+msgstr "O tamanho em que o jogo desenha a imagem e a interface. 1280 × 720 é o mais leve, para GPUs mais fracas. Acima de 1920 × 1080 o jogo precisa de mais memória (cerca de 240 MB a mais em 2560 × 1440, 790 MB em 3840 × 2160) e tempo de GPU. Vale após reiniciar. Automático usa o tamanho da tela: até 1920 × 1080 e, com um upscaler, até 3840 × 2160."
+
+#. English: "Scaling to the window"
+msgid "UI_MENU_UPSCALER"
+msgstr "Escala para a janela"
+
+#. English: "How the picture is scaled to the window. FSR keeps edges and detail sharper than bilinear, and sharpens the picture even when it already fits the window."
+msgid "UI_MENU_UPSCALER_DESC"
+msgstr "Como a imagem é ajustada à janela. O FSR mantém bordas e detalhes mais nítidos que o bilinear e aumenta a nitidez mesmo quando a imagem já tem o tamanho da janela."
+
+#. English: "AMD FSR 1"
+msgid "UI_MENU_UPSCALER_FSR"
+msgstr "AMD FSR 1"
+
+#. English: "Bilinear"
+msgid "UI_MENU_UPSCALER_BILINEAR"
+msgstr "Bilinear"
+
+#. English: "Field of view"
+msgid "UI_MENU_FOV"
+msgstr "Campo de visão"
+
+#. English: "How much of the world the camera shows, in percent of the game's own (50 degrees vertically in play). Cutscenes keep the game's own framing."
+msgid "UI_MENU_FOV_DESC"
+msgstr "Quanto do mundo a câmera mostra, em porcentagem do original do jogo (50 graus na vertical durante o jogo). As cenas mantêm o enquadramento original."
+
+#. English: "Draw distance"
+msgid "UI_MENU_DRAW_DISTANCE"
+msgstr "Distância de renderização"
+
+#. English: "How far away objects keep their detailed model and small objects stay visible, in percent of the game's own. Higher shows less pop-in and draws more. Takes effect on what the game loads after the change, at the next loading screen."
+msgid "UI_MENU_DRAW_DISTANCE_DESC"
+msgstr "Até que distância os objetos mantêm o modelo detalhado e os objetos pequenos continuam visíveis, em porcentagem do original do jogo. Valores maiores reduzem o surgimento repentino de objetos e desenham mais. Vale para o que o jogo carregar depois da mudança, a partir da próxima tela de carregamento."
+
+#. English: "Texture filtering"
+msgid "UI_MENU_ANISO"
+msgstr "Filtragem de texturas"
+
+#. English: "Anisotropic filtering of surface textures: ground, roads and walls seen at a shallow angle stay sharp into the distance instead of blurring. Game: the level the game asks for, as on the Switch. Auto: 16x with 3D render scale 1440p, twice the game's level at 2160p, the game's level otherwise."
+msgid "UI_MENU_ANISO_DESC"
+msgstr "Filtragem anisotrópica das texturas de superfície: chão, estradas e paredes vistos em ângulo raso continuam nítidos ao longe em vez de borrar. Jogo: o nível que o jogo pede, como no Switch. Auto: 16x com escala de renderização 3D 1440p, o dobro do nível do jogo em 2160p, o nível do jogo nos demais casos."
+
+#. English: "Game"
+msgid "UI_MENU_ANISO_GAME"
+msgstr "Jogo"
+
+#. English: "Auto"
+msgid "UI_MENU_ANISO_AUTO"
+msgstr "Auto"
+
+#. English: "FSR sharpness"
+msgid "UI_MENU_SHARPNESS"
+msgstr "Nitidez do FSR"
+
+#. English: "Sharpening after FSR scaling; 0 turns it off."
+msgid "UI_MENU_SHARPNESS_DESC"
+msgstr "Aumento de nitidez após a ampliação do FSR; 0 desliga."
+
+#. English: "Colour"
+msgid "UI_MENU_COLOR"
+msgstr "Cor"
+
+#. English: "Colour profile"
+msgid "UI_MENU_COLOR_PRESET"
+msgstr "Perfil de cor"
+
+#. English: "Sets the four values below. Vivid: more contrast and saturation, shadows opened a little (made for OLED screens). Clarity: a little more contrast, saturation and brightness. Moving a value makes the profile Custom. The HUD changes with the picture; this menu does not."
+msgid "UI_MENU_COLOR_PRESET_DESC"
+msgstr "Define os quatro valores abaixo. Vívido: mais contraste e saturação, sombras um pouco mais abertas (feito para telas OLED). Clareza: um pouco mais de contraste, saturação e brilho. Mexer em um valor torna o perfil Personalizado. O HUD muda com a imagem; este menu não."
+
+#. English: "Game's own"
+msgid "UI_MENU_COLOR_DEFAULT"
+msgstr "Do jogo"
+
+#. English: "Vivid (OLED)"
+msgid "UI_MENU_COLOR_VIVID"
+msgstr "Vívido (OLED)"
+
+#. English: "Clarity"
+msgid "UI_MENU_COLOR_CLARITY"
+msgstr "Clareza"
+
+#. English: "Custom"
+msgid "UI_MENU_COLOR_CUSTOM"
+msgstr "Personalizado"
+
+#. English: "Brightness"
+msgid "UI_MENU_COLOR_BRIGHTNESS"
+msgstr "Brilho"
+
+#. English: "Added to every colour; 0 leaves it."
+msgid "UI_MENU_COLOR_BRIGHTNESS_DESC"
+msgstr "Somado a todas as cores; 0 não muda nada."
+
+#. English: "Contrast"
+msgid "UI_MENU_COLOR_CONTRAST"
+msgstr "Contraste"
+
+#. English: "Spreads colours away from mid-grey (above 100 %) or towards it; 100 % leaves them."
+msgid "UI_MENU_COLOR_CONTRAST_DESC"
+msgstr "Afasta as cores do cinza médio (acima de 100 %) ou as aproxima dele; 100 % não muda nada."
+
+#. English: "Saturation"
+msgid "UI_MENU_COLOR_SATURATION"
+msgstr "Saturação"
+
+#. English: "Colour strength against grey; 100 % leaves it."
+msgid "UI_MENU_COLOR_SATURATION_DESC"
+msgstr "Força da cor em relação ao cinza; 100 % não muda nada."
+
+#. English: "Gamma"
+msgid "UI_MENU_COLOR_GAMMA"
+msgstr "Gama"
+
+#. English: "Below 1 brightens dark and middle tones, above 1 darkens them; 1 leaves them."
+msgid "UI_MENU_COLOR_GAMMA_DESC"
+msgstr "Abaixo de 1 clareia os tons escuros e médios, acima de 1 os escurece; 1 não muda nada."
+
+#. English: "HDR"
+msgid "UI_MENU_HDR_GROUP"
+msgstr "HDR"
+
+#. English: "HDR output"
+msgid "UI_MENU_HDR"
+msgstr "Saída HDR"
+
+#. English: "Bright highlights on an HDR display. Needs HDR turned on in Windows (\"Use HDR\") or in a Wayland compositor with colour management; without it the picture stays SDR. Applies after a restart. The colour profile above is for SDR and is not used in HDR."
+msgid "UI_MENU_HDR_DESC"
+msgstr "Realces brilhantes em uma tela HDR. Precisa do HDR ligado no Windows (\"Usar HDR\") ou num compositor Wayland com gerenciamento de cor; sem isso a imagem continua SDR. Vale após reiniciar. O perfil de cor acima é para SDR e não é usado em HDR."
+
+#. English: "Peak brightness"
+msgid "UI_MENU_HDR_PEAK"
+msgstr "Brilho máximo"
+
+#. English: "Your display's peak in nits; the brightest highlights stop there."
+msgid "UI_MENU_HDR_PEAK_DESC"
+msgstr "O pico da sua tela em nits; os realces mais claros param aí."
+
+#. English: "Game brightness"
+msgid "UI_MENU_HDR_GAME"
+msgstr "Brilho do jogo"
+
+#. English: "Nits of the picture's white (paper white). 203 is the HDR reference; raise it in a bright room."
+msgid "UI_MENU_HDR_GAME_DESC"
+msgstr "Nits do branco da imagem (branco de papel). 203 é a referência de HDR; aumente num ambiente claro."
+
+#. English: "HUD and menu brightness"
+msgid "UI_MENU_HDR_UI"
+msgstr "Brilho do HUD e do menu"
+
+#. English: "Nits of the HUD's and this menu's white."
+msgid "UI_MENU_HDR_UI_DESC"
+msgstr "Nits do branco do HUD e deste menu."
+
+#. English: "Highlight hue correction"
+msgid "UI_MENU_HDR_HUE"
+msgstr "Correção de matiz dos realces"
+
+#. English: "Bright colours such as fire and sparks turn towards white as in the game's own SDR picture, matching the light they cast; 0 keeps them fully saturated."
+msgid "UI_MENU_HDR_HUE_DESC"
+msgstr "Cores intensas, como fogo e faíscas, tendem ao branco como na imagem SDR do próprio jogo, combinando com a luz que emitem; 0 as mantém totalmente saturadas."
+
+#. English: "Shadow resolution"
+msgid "UI_MENU_SHADOW_SCALE"
+msgstr "Resolução das sombras"
+
+#. English: "Draws the sun's shadow map this many times larger on each side than the game's 2048x2048: sharper shadow edges and leaf shadows, for more video memory (about 85 to 130 MiB at 2x, 340 to 520 MiB at 4x). Takes effect at the next start."
+msgid "UI_MENU_SHADOW_SCALE_DESC"
+msgstr "Desenha o mapa de sombras do sol essa quantidade de vezes maior em cada lado que os 2048x2048 do jogo: bordas de sombra e sombras de folhas mais nítidas, com mais memória de vídeo (85 a 130 MiB em 2x, 340 a 520 MiB em 4x). Vale no próximo início."
+
+#. English: "Ambient occlusion"
+msgid "UI_MENU_AO"
+msgstr "Oclusão de ambiente"
+
+#. English: "Darkens creases, corners and the ground under characters and objects, where little of the surrounding light reaches. High + bounce light also adds the light the surfaces on screen send back to each other: a lit wall or floor brightens and tints what faces it, even from far away. Computed on the screen after the world is lit; the game has none of its own. Each level costs more GPU time than the one before; High + bounce light is demanding, so on a weak graphics card prefer High. Takes effect at once."
+msgid "UI_MENU_AO_DESC"
+msgstr "Escurece dobras, cantos e o chão sob personagens e objetos, onde chega pouca luz ao redor. Alta + luz indireta também adiciona a luz que as superfícies na tela refletem umas nas outras: uma parede ou um chão iluminado clareia e tinge o que está à sua frente, mesmo de longe. Calculada na tela depois da iluminação; o jogo não tem a sua. Cada nível custa mais tempo de GPU que o anterior; Alta + luz indireta é pesada, então em uma placa de vídeo fraca prefira Alta. Vale na hora."
+
+#. English: "Off"
+msgid "UI_MENU_AO_OFF"
+msgstr "Desligada"
+
+#. English: "Low"
+msgid "UI_MENU_AO_LOW"
+msgstr "Baixa"
+
+#. English: "High"
+msgid "UI_MENU_AO_HIGH"
+msgstr "Alta"
+
+#. English: "High + bounce light (demanding)"
+msgid "UI_MENU_AO_GI"
+msgstr "Alta + luz indireta (pesada)"
+
+#. English: "Upscaler"
+msgid "UI_MENU_UPSCALING"
+msgstr "Upscaler"
+
+#. English: "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less shimmer, and with a mode below Native more frames per second. NVIDIA DLSS needs an NVIDIA RTX GPU and nvngx_dlss.dll next to astralchain.exe, Intel XeSS a recent GPU and libxess.dll next to astralchain.exe; AMD FSR 3 runs on any GPU, AMD FSR 4 on a Radeon RX 6000 or newer. Automatic takes DLSS where it can run and FSR 3 elsewhere. DLSS, XeSS and FSR 4 chosen here take effect after a restart. The HUD is not touched."
+msgid "UI_MENU_UPSCALING_DESC"
+msgstr "Um upscaler temporal no lugar do antisserrilhado do jogo: bordas mais suaves e menos cintilação e, com um modo abaixo de Nativo, mais quadros por segundo. NVIDIA DLSS precisa de uma placa NVIDIA RTX e do nvngx_dlss.dll ao lado do astralchain.exe, Intel XeSS de uma placa recente e do libxess.dll ao lado do astralchain.exe; AMD FSR 3 roda em qualquer placa, AMD FSR 4 em uma Radeon RX 6000 ou mais recente. Automático usa o DLSS onde ele pode rodar e o FSR 3 nos outros casos. DLSS, XeSS e FSR 4 escolhidos aqui valem após reiniciar. O HUD não é afetado."
+
+#. English: "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less shimmer, and with a mode below Native more frames per second. AMD FSR 3 runs on any GPU, AMD FSR 4 on a Radeon RX 6000 or newer; Automatic is FSR 3 here (NVIDIA DLSS and Intel XeSS are Windows only). FSR 4 chosen here takes effect after a restart. The HUD is not touched."
+msgid "UI_MENU_UPSCALING_DESC_OTHER"
+msgstr "Um upscaler temporal no lugar do antisserrilhado do jogo: bordas mais suaves e menos cintilação e, com um modo abaixo de Nativo, mais quadros por segundo. AMD FSR 3 roda em qualquer placa, AMD FSR 4 em uma Radeon RX 6000 ou mais recente; Automático é o FSR 3 aqui (NVIDIA DLSS e Intel XeSS são somente no Windows). FSR 4 escolhido aqui vale após reiniciar. O HUD não é afetado."
+
+#. English: "Off"
+msgid "UI_MENU_UPSCALING_OFF"
+msgstr "Desligado"
+
+#. English: "Automatic"
+msgid "UI_MENU_UPSCALING_AUTO"
+msgstr "Automático"
+
+#. English: "not available here"
+msgid "UI_MENU_UPSCALING_UNAVAILABLE"
+msgstr "indisponível aqui"
+
+#. English: "not available here: %s in use"
+msgid "UI_MENU_UPSCALING_INSTEAD"
+msgstr "indisponível aqui: %s em uso"
+
+#. English: "%s is missing: %s in use"
+msgid "UI_MENU_UPSCALING_MISSING"
+msgstr "%s não encontrado: %s em uso"
+
+#. English: "%s until a restart"
+msgid "UI_MENU_UPSCALING_UNTIL"
+msgstr "%s até reiniciar"
+
+#. English: "Upscaler mode"
+msgid "UI_MENU_UPSCALING_QUALITY"
+msgstr "Modo do upscaler"
+
+#. English: "The size the 3D scene is drawn at before the upscaler brings it to the game resolution (shown under the value). Native draws it at full size, the sharpest (DLAA under DLSS). Quality, Balanced, Performance and Ultra performance draw it at about 67, 58, 50 and 33 % for more frames per second; Ultra performance is meant for 3840 x 2160. Takes effect after a restart."
+msgid "UI_MENU_UPSCALING_QUALITY_DESC"
+msgstr "O tamanho em que a cena 3D é desenhada antes que o upscaler a leve à resolução do jogo (mostrado sob o valor). Nativo a desenha no tamanho cheio, o mais nítido (DLAA no DLSS). Qualidade, Equilibrado, Desempenho e Ultradesempenho a desenham em cerca de 67, 58, 50 e 33 % para mais quadros por segundo; Ultradesempenho é pensado para 3840 × 2160. Vale após reiniciar."
+
+#. English: "Native"
+msgid "UI_MENU_UPSCALING_NATIVE"
+msgstr "Nativo"
+
+#. English: "Quality"
+msgid "UI_MENU_DLSS_QUALITY"
+msgstr "Qualidade"
+
+#. English: "Balanced"
+msgid "UI_MENU_DLSS_BALANCED"
+msgstr "Equilibrado"
+
+#. English: "Performance"
+msgid "UI_MENU_DLSS_PERFORMANCE"
+msgstr "Desempenho"
+
+#. English: "Ultra performance"
+msgid "UI_MENU_UPSCALING_ULTRA"
+msgstr "Ultradesempenho"
+
+#. English: "no upscaler"
+msgid "UI_MENU_UPSCALING_MODE_OFF"
+msgstr "sem upscaler"
+
+#. English: "Game anti-aliasing"
+msgid "UI_MENU_AA"
+msgstr "Antisserrilhado do jogo"
+
+#. English: "The game's own anti-aliasing, SMAA, for when no upscaler runs. Off leaves the edges jagged."
+msgid "UI_MENU_AA_DESC"
+msgstr "O antisserrilhado do próprio jogo, SMAA, para quando nenhum upscaler roda. Desligado deixa as bordas serrilhadas."
+
+#. English: "Off"
+msgid "UI_MENU_AA_OFF"
+msgstr "Desligado"
+
+#. English: "the upscaler smooths the edges"
+msgid "UI_MENU_AA_BY_UPSCALER"
+msgstr "o upscaler suaviza as bordas"
+
+#. English: "Automatic"
+msgid "UI_MENU_OUTPUT_RES_AUTO"
+msgstr "Automático"
+
+#. English: ", %s after restart"
+msgid "UI_MENU_OUTPUT_RES_NEXT"
+msgstr ", %s após reiniciar"
+
+#. English: "Frame rate"
+msgid "UI_MENU_FPS_LIMIT"
+msgstr "Taxa de quadros"
+
+#. English: "60 FPS runs the game's 60 fps patch; 30 FPS switches it off. Read live."
+msgid "UI_MENU_FPS_LIMIT_DESC"
+msgstr "60 FPS usa o patch de 60 fps do jogo; 30 FPS o desliga. Lido na hora."
+
+#. English: "30 FPS"
+msgid "UI_MENU_FPS_30"
+msgstr "30 FPS"
+
+#. English: "60 FPS"
+msgid "UI_MENU_FPS_60"
+msgstr "60 FPS"
+
+#. English: "Game speed follows the clock"
+msgid "UI_MENU_REALTIME"
+msgstr "Velocidade do jogo pelo relógio"
+
+#. English: "Steps the game by real time, so a slow frame does not slow the game down."
+msgid "UI_MENU_REALTIME_DESC"
+msgstr "Avança o jogo pelo tempo real, para que um quadro lento não deixe o jogo mais lento."
+
+#. English: "Cloth on the clock"
+msgid "UI_MENU_CLOTH_REALTIME"
+msgstr "Tecidos pelo relógio"
+
+#. English: "Steps cloth and hair by real time as well."
+msgid "UI_MENU_CLOTH_REALTIME_DESC"
+msgstr "Avança tecidos e cabelos pelo tempo real também."
+
+#. English: "High frame rate fixes"
+msgid "UI_MENU_HIGHFPS_FIX"
+msgstr "Correções para alta taxa de quadros"
+
+#. English: "Corrects physics that misbehave above 30 frames per second, and objects that stay see-through or invisible above 60."
+msgid "UI_MENU_HIGHFPS_FIX_DESC"
+msgstr "Corrige a física que se comporta mal acima de 30 quadros por segundo e objetos que ficam transparentes ou invisíveis acima de 60."
+
+#. English: "Game language"
+msgid "UI_MENU_GAME_LANG"
+msgstr "Idioma do jogo"
+
+#. English: "Language of the game's text and voices."
+msgid "UI_MENU_GAME_LANG_DESC"
+msgstr "Idioma dos textos e das vozes do jogo."
+
+#. English: "Automatic"
+msgid "UI_MENU_GAME_LANG_AUTO"
+msgstr "Automático"
+
+#. English: "Console mode"
+msgid "UI_MENU_OPERATION_MODE"
+msgstr "Modo do console"
+
+#. English: "Whether the game thinks it runs docked or handheld."
+msgid "UI_MENU_OPERATION_MODE_DESC"
+msgstr "Se o jogo acha que está no modo TV ou no modo portátil."
+
+#. English: "Docked"
+msgid "UI_MENU_MODE_DOCKED"
+msgstr "Modo TV"
+
+#. English: "Handheld"
+msgid "UI_MENU_MODE_HANDHELD"
+msgstr "Modo portátil"
+
+#. English: "Keep running out of focus"
+msgid "UI_MENU_ASSUME_FOCUS"
+msgstr "Continuar rodando fora de foco"
+
+#. English: "On (the default), the game keeps running while you are in another window, and the keyboard stays quiet until the window is in front again. Off, it pauses when its window loses focus, as on the Switch when Home is pressed; a load interrupted that way can stop for good."
+msgid "UI_MENU_ASSUME_FOCUS_DESC"
+msgstr "Ligado (o padrão), o jogo continua rodando enquanto você está em outra janela, e o teclado fica sem efeito até a janela voltar para a frente. Desligado, ele pausa quando a janela perde o foco, como no Switch ao apertar Home; um carregamento interrompido assim pode parar de vez."
+
+#. English: "HUD"
+msgid "UI_MENU_HUD"
+msgstr "HUD"
+
+#. English: "Off, the game's HUD is not drawn during play; the menus stay. F12 toggles it."
+msgid "UI_MENU_HUD_DESC"
+msgstr "Desligado, o HUD do jogo não é desenhado durante a partida; os menus continuam. F12 alterna."
+
+#. English: "Installed mods"
+msgid "UI_MENU_MODS_INSTALLED"
+msgstr "Mods instalados"
+
+#. English: "No mods yet. Unpack a mod into the mods folder, one folder per mod with its romfs folder inside, and restart the game. TKMM can export its merged mods into a folder there too."
+msgid "UI_MENU_MODS_NONE"
+msgstr "Nenhum mod ainda. Descompacte um mod na pasta mods, uma pasta por mod com a pasta romfs dentro, e reinicie o jogo. O TKMM também pode exportar os mods mesclados para uma pasta ali."
+
+#. English: "Open mods folder"
+msgid "UI_MENU_MODS_OPEN"
+msgstr "Abrir pasta de mods"
+
+#. English: "Shows the folder the game loads mods from. It is created if it is missing."
+msgid "UI_MENU_MODS_OPEN_DESC"
+msgstr "Mostra a pasta de onde o jogo carrega os mods. Ela é criada se não existir."
+
+#. English: "Game files it replaces: %u. New files it adds: %u."
+msgid "UI_MENU_MODS_ROW_DESC"
+msgstr "Arquivos do jogo que substitui: %u. Arquivos novos que adiciona: %u."
+
+#. English: "%u of its files come from %s, which is higher in the list."
+msgid "UI_MENU_MODS_OVERRIDDEN"
+msgstr "%u dos seus arquivos vêm de %s, que está acima na lista."
+
+#. English: "The top face button or Ctrl+Up moves it up, the left face button or Ctrl+Down moves it down. When two mods change the same file, the higher one wins. Changes apply after a restart."
+msgid "UI_MENU_MODS_MOVE_HINT"
+msgstr "O botão de cima ou Ctrl+Cima sobe o mod, o botão da esquerda ou Ctrl+Baixo desce. Quando dois mods mudam o mesmo arquivo, vale o de cima. As mudanças valem após reiniciar."
+
+#. English: "This folder has no romfs, exefs or cheats files."
+msgid "UI_MENU_MODS_EMPTY"
+msgstr "Esta pasta não tem arquivos romfs, exefs ou cheats."
+
+#. English: "This mod brings its own game code (a subsdk plugin or a replaced main). The port cannot load code modules, so the whole mod stays off."
+msgid "UI_MENU_MODS_SUBSDK"
+msgstr "Este mod traz código próprio do jogo (um plugin subsdk ou um main substituído). O port não carrega módulos de código, então o mod inteiro fica desligado."
+
+#. English: "This mod patches the game code (exefs). The game builds the patches in when it starts next (a rebuild of a few minutes); until then the whole mod stays off."
+msgid "UI_MENU_MODS_EXEFS_LATER"
+msgstr "Este mod altera o código do jogo (exefs). O jogo compila esses patches na próxima vez que iniciar (uma recompilação de alguns minutos); até lá o mod inteiro fica desligado."
+
+#. English: "The folder name contains |, which the mod list uses between names. Rename the folder."
+msgid "UI_MENU_MODS_BAD_NAME"
+msgstr "O nome da pasta contém |, que a lista de mods usa entre os nomes. Renomeie a pasta."
+
+#. English: "This mod patches the game code (exefs) in a way the port cannot apply, so the whole mod stays off. %s"
+msgid "UI_MENU_MODS_EXEFS_UNSUPPORTED"
+msgstr "Este mod altera o código do jogo (exefs) de um jeito que o port não consegue aplicar, então o mod inteiro fica desligado. %s"
+
+#. English: "Its code patches (exefs) are made for another game version."
+msgid "UI_MENU_MODS_EXEFS_OTHER"
+msgstr "Os patches de código dele (exefs) são para outra versão do jogo."
+
+#. English: "Code patches in use: %d files."
+msgid "UI_MENU_MODS_EXEFS_ON"
+msgstr "Patches de código em uso: %d arquivos."
+
+#. English: "Code patches in use: %d files. They replace the port's own patch %s, which stays off while this mod is on."
+msgid "UI_MENU_MODS_REPLACES_BUILTIN"
+msgstr "Patches de código em uso: %d arquivos. Eles substituem o patch do próprio port %s, que fica desligado enquanto este mod está ligado."
+
+#. English: "%u of its files are made for another game version and are left out. Look for a version of this mod made for your game version."
+msgid "UI_MENU_MODS_OTHER_VERSION"
+msgstr "%u dos seus arquivos são de outra versão do jogo e ficam de fora. Procure uma versão deste mod feita para a sua versão do jogo."
+
+#. English: "not used"
+msgid "UI_MENU_MODS_UNUSED"
+msgstr "não usado"
+
+#. English: "Cheats: %d."
+msgid "UI_MENU_MODS_CHEATS"
+msgstr "Cheats: %d."
+
+#. English: "Cheats for this game version are read at start from cheats\\%s in this mod."
+msgid "UI_MENU_MODS_CHEATS_FILE"
+msgstr "Os cheats desta versão do jogo são lidos ao iniciar de cheats\\%s neste mod."
+
+#. English: "Volume"
+msgid "UI_MENU_VOLUME"
+msgstr "Volume"
+
+#. English: "Master volume of the game."
+msgid "UI_MENU_VOLUME_DESC"
+msgstr "Volume geral do jogo."
+
+#. English: "Audio output"
+msgid "UI_MENU_AUDIO_OUTPUT"
+msgstr "Saída de áudio"
+
+#. English: "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output. Elsewhere the 5.1 mix is folded down to stereo."
+msgid "UI_MENU_AUDIO_OUTPUT_DESC"
+msgstr "O que o jogo mixa. Em 5.1 o canal central (as vozes) e os surrounds têm canais próprios; requer uma saída 5.1 ou 7.1. Caso contrário, a mixagem 5.1 é convertida para estéreo."
+
+#. English: "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output, or a headset with spatial sound on: Windows Sonic for Headphones, Dolby Atmos for Headphones or DTS Headphone:X, in the device's properties in the Windows sound settings. Elsewhere the 5.1 mix is folded down to stereo."
+msgid "UI_MENU_AUDIO_OUTPUT_DESC_WIN"
+msgstr "O que o jogo mixa. Em 5.1 o canal central (as vozes) e os surrounds têm canais próprios; requer uma saída 5.1 ou 7.1, ou um headset com som espacial ativado: Windows Sonic for Headphones, Dolby Atmos for Headphones ou DTS Headphone:X, nas propriedades do dispositivo nas configurações de som do Windows. Caso contrário, a mixagem 5.1 é convertida para estéreo."
+
+#. English: "Stereo"
+msgid "UI_MENU_AUDIO_STEREO"
+msgstr "Estéreo"
+
+#. English: "5.1"
+msgid "UI_MENU_AUDIO_51"
+msgstr "5.1"
+
+#. English: "%s: Windows spatial sound is on and turns 5.1 into surround on headphones."
+msgid "UI_MENU_AUDIO_TAKES_51_SPATIAL"
+msgstr "%s: o som espacial do Windows está ativado e transforma o 5.1 em surround nos fones."
+
+#. English: "%s: %d channels, 5.1 goes out as it is."
+msgid "UI_MENU_AUDIO_TAKES_51"
+msgstr "%s: %d canais, o 5.1 sai como está."
+
+#. English: "%s: %d channels, no 5.1: a 5.1 mix is folded down to stereo."
+msgid "UI_MENU_AUDIO_FOLDS_51"
+msgstr "%s: %d canais, sem 5.1: a mixagem 5.1 é convertida para estéreo."
+
+#. English: "With headphones, turn on Windows Sonic for Headphones (or Dolby Atmos, DTS Headphone:X) in the device's properties."
+msgid "UI_MENU_AUDIO_SONIC_HINT"
+msgstr "Com fones, ative o Windows Sonic for Headphones (ou Dolby Atmos, DTS Headphone:X) nas propriedades do dispositivo."
+
+#. English: "The game sends %d channels."
+msgid "UI_MENU_AUDIO_SENDING"
+msgstr "O jogo envia %d canais."
+
+#. English: "No audio output found."
+msgid "UI_MENU_AUDIO_NO_DEVICE"
+msgstr "Nenhuma saída de áudio encontrada."
+
+#. English: "Choose 5.1 above and restart the game to set each speaker."
+msgid "UI_MENU_AUDIO_MIX_HINT"
+msgstr "Escolha 5.1 acima e reinicie o jogo para ajustar cada caixa."
+
+#. English: "Speakers and headphones"
+msgid "UI_MENU_AUDIO_GROUP_OUTPUT"
+msgstr "Caixas de som e fones"
+
+#. English: "Speaker mix"
+msgid "UI_MENU_AUDIO_GROUP_MIX"
+msgstr "Mixagem das caixas"
+
+#. English: "Closes the game and starts it again with the new audio output. Progress since your last save is lost."
+msgid "UI_MENU_AUDIO_RESTART_DESC"
+msgstr "Fecha o jogo e o abre de novo com a nova saída de áudio. O progresso desde o último salvamento é perdido."
+
+#. English: "Test speakers"
+msgid "UI_MENU_AUDIO_TEST"
+msgstr "Testar caixas"
+
+#. English: "Plays a noise on each speaker in turn, as an A/V receiver does: check that every speaker works and sits where the diagram shows it. The game's sound is muted meanwhile. Press again to stop."
+msgid "UI_MENU_AUDIO_TEST_DESC"
+msgstr "Toca um ruído em cada caixa por vez, como um receiver A/V: confira se cada caixa funciona e está onde o diagrama mostra. O som do jogo fica mudo enquanto isso. Pressione de novo para parar."
+
+#. English: "Start"
+msgid "UI_MENU_AUDIO_TEST_START"
+msgstr "Iniciar"
+
+#. English: "press to stop"
+msgid "UI_MENU_AUDIO_TEST_STOP"
+msgstr "pressione para parar"
+
+#. English: "Mix"
+msgid "UI_MENU_AUDIO_PRESET"
+msgstr "Mixagem"
+
+#. English: "Ready-made mixes. Balanced: the recommended mix. Clear voices: the dialogue in front, softer surrounds. Immersive: stronger surrounds, and the bass to the subwoofer. Moving any speaker below makes it Custom."
+msgid "UI_MENU_AUDIO_PRESET_DESC"
+msgstr "Mixagens prontas. Equilibrada: a recomendada. Vozes claras: diálogos à frente, surrounds mais suaves. Imersiva: surrounds mais fortes e graves no subwoofer. Mexer em qualquer caixa abaixo a torna Personalizada."
+
+#. English: "Balanced"
+msgid "UI_MENU_AUDIO_PRESET_BALANCED"
+msgstr "Equilibrada"
+
+#. English: "Clear voices"
+msgid "UI_MENU_AUDIO_PRESET_VOICES"
+msgstr "Vozes claras"
+
+#. English: "Immersive"
+msgid "UI_MENU_AUDIO_PRESET_IMMERSIVE"
+msgstr "Imersiva"
+
+#. English: "Custom"
+msgid "UI_MENU_AUDIO_PRESET_CUSTOM"
+msgstr "Personalizada"
+
+#. English: "Front left"
+msgid "UI_MENU_AUDIO_FRONT_LEFT"
+msgstr "Frontal esquerda"
+
+#. English: "Front right"
+msgid "UI_MENU_AUDIO_FRONT_RIGHT"
+msgstr "Frontal direita"
+
+#. English: "Centre (voices)"
+msgid "UI_MENU_AUDIO_CENTER"
+msgstr "Central (vozes)"
+
+#. English: "Surround left"
+msgid "UI_MENU_AUDIO_SURROUND_LEFT"
+msgstr "Surround esquerda"
+
+#. English: "Surround right"
+msgid "UI_MENU_AUDIO_SURROUND_RIGHT"
+msgstr "Surround direita"
+
+#. English: "Subwoofer"
+msgid "UI_MENU_AUDIO_SUBWOOFER"
+msgstr "Subwoofer"
+
+#. English: "Level of this front speaker. The fronts carry mostly the music, which the game mixes in stereo, and the sounds in front of you; lowering them lowers the music most. For the music alone, use the game's own music volume."
+msgid "UI_MENU_AUDIO_FRONT_DESC"
+msgstr "Nível desta caixa frontal. As frontais levam principalmente a música, que o jogo mixa em estéreo, e os sons à sua frente; diminuí-las diminui sobretudo a música. Para a música sozinha, use o volume de música do próprio jogo."
+
+#. English: "Level of the centre speaker, where the voices and the interface sounds are. Lower it if voices or beeps are too loud; -2 dB keeps them near their level in stereo."
+msgid "UI_MENU_AUDIO_CENTER_DESC"
+msgstr "Nível da caixa central, onde ficam as vozes e os sons da interface. Diminua se as vozes ou os bipes estiverem altos demais; -2 dB os mantém perto do nível em estéreo."
+
+#. English: "Level of this surround speaker. The surrounds carry the ambience, the reverb and the sounds beside and behind you."
+msgid "UI_MENU_AUDIO_SURROUND_DESC"
+msgstr "Nível desta caixa surround. As surrounds levam o ambiente, a reverberação e os sons ao seu lado e atrás de você."
+
+#. English: "Level of the subwoofer. The game sends it nothing of its own: turn on Bass to subwoofer to give it the low end of the other speakers."
+msgid "UI_MENU_AUDIO_SUBWOOFER_DESC"
+msgstr "Nível do subwoofer. O jogo não envia nada próprio para ele: ative Graves no subwoofer para mandar os graves das outras caixas."
+
+#. English: "Bass to subwoofer"
+msgid "UI_MENU_AUDIO_BASS"
+msgstr "Graves no subwoofer"
+
+#. English: "Sends the bass (below 120 Hz) of the other five speakers to the subwoofer. Leave it off with headphones, or when your receiver already manages the bass."
+msgid "UI_MENU_AUDIO_BASS_DESC"
+msgstr "Envia os graves (abaixo de 120 Hz) das outras cinco caixas para o subwoofer. Deixe desligado com fones, ou quando o seu receiver já gerencia os graves."
+
+#. English: "Left"
+msgid "UI_MENU_SPK_LEFT"
+msgstr "Esquerda"
+
+#. English: "Right"
+msgid "UI_MENU_SPK_RIGHT"
+msgstr "Direita"
+
+#. English: "Centre"
+msgid "UI_MENU_SPK_CENTER"
+msgstr "Central"
+
+#. English: "Surround L"
+msgid "UI_MENU_SPK_SURROUND_LEFT"
+msgstr "Surround E"
+
+#. English: "Surround R"
+msgid "UI_MENU_SPK_SURROUND_RIGHT"
+msgstr "Surround D"
+
+#. English: "Sub"
+msgid "UI_MENU_SPK_SUB"
+msgstr "Sub"
+
+#. English: "You"
+msgid "UI_MENU_SPK_YOU"
+msgstr "Você"
+
+#. English: "Motion controls"
+msgid "UI_MENU_MOTION"
+msgstr "Controles de movimento"
+
+#. English: "Aiming with the controller's gyroscope."
+msgid "UI_MENU_MOTION_DESC"
+msgstr "Mirar com o giroscópio do controle."
+
+#. English: "Vibration strength"
+msgid "UI_MENU_RUMBLE_STRENGTH"
+msgstr "Intensidade da vibração"
+
+#. English: "How strong the controller vibrates."
+msgid "UI_MENU_RUMBLE_STRENGTH_DESC"
+msgstr "Quão forte o controle vibra."
+
+#. English: "Vibration curve"
+msgid "UI_MENU_RUMBLE_CURVE"
+msgstr "Curva da vibração"
+
+#. English: "Lower values make weak vibration stronger."
+msgid "UI_MENU_RUMBLE_CURVE_DESC"
+msgstr "Valores menores deixam a vibração fraca mais forte."
+
+#. English: "Trigger vibration (Xbox)"
+msgid "UI_MENU_RUMBLE_TRIGGERS"
+msgstr "Vibração dos gatilhos (Xbox)"
+
+#. English: "Vibrates the triggers of an Xbox controller too."
+msgid "UI_MENU_RUMBLE_TRIGGERS_DESC"
+msgstr "Também vibra os gatilhos de um controle de Xbox."
+
+#. English: "Button layout"
+msgid "UI_MENU_PAD_LAYOUT"
+msgstr "Layout dos botões"
+
+#. English: "Which button is A. Nintendo: the right one, as on a Switch. Xbox: the bottom one, as labelled on an Xbox controller. PlayStation: the bottom one as labelled (cross) and the rest by position, to match the PlayStation button mod. Automatic picks Nintendo for controllers with Nintendo labels, PlayStation for PlayStation controllers and Xbox for the others. Which controller the game's prompts show is set under Button prompts."
+msgid "UI_MENU_PAD_LAYOUT_DESC"
+msgstr "Qual botão é o A. Nintendo: o da direita, como no Switch. Xbox: o de baixo, como indicado no controle de Xbox. PlayStation: o de baixo como indicado (cruz) e os demais pela posição, para acompanhar o mod de botões de PlayStation. Automático escolhe Nintendo para controles com os rótulos da Nintendo, PlayStation para os de PlayStation e Xbox para os demais. Os botões que os ícones do jogo mostram estão em Ícones de botões."
+
+#. English: "Automatic"
+msgid "UI_MENU_PAD_LAYOUT_AUTO"
+msgstr "Automático"
+
+#. English: "Nintendo (A right)"
+msgid "UI_MENU_PAD_LAYOUT_NINTENDO"
+msgstr "Nintendo (A à direita)"
+
+#. English: "Xbox (A bottom)"
+msgid "UI_MENU_PAD_LAYOUT_XBOX"
+msgstr "Xbox (A embaixo)"
+
+#. English: "PlayStation (A bottom)"
+msgid "UI_MENU_PAD_LAYOUT_PLAYSTATION"
+msgstr "PlayStation (A embaixo)"
+
+#. English: "in use: %s"
+msgid "UI_MENU_PAD_LAYOUT_IN_USE"
+msgstr "em uso: %s"
+
+#. English: "Button prompts"
+msgid "UI_MENU_PROMPTS"
+msgstr "Ícones de botões"
+
+#. English: "Which controller's buttons the game's prompts show. Automatic follows the controller in use (the Xbox or PlayStation mod when built, else Nintendo). Nintendo: the game's own. Xbox and PlayStation: button mods drawn for one layout each (a loaded mod forces its layout: Xbox for the Xbox mod, PlayStation for the PlayStation mod). The game reads its prompts at start, so they change after a restart."
+msgid "UI_MENU_PROMPTS_DESC"
+msgstr "Os botões de qual controle os ícones do jogo mostram. Automático segue o controle em uso (o mod de Xbox ou PlayStation quando instalado, senão Nintendo). Nintendo: os do próprio jogo. Xbox e PlayStation: mods de botões desenhados cada um para um layout (um mod carregado força seu layout: Xbox para o mod de Xbox, PlayStation para o de PlayStation). O jogo lê os ícones ao iniciar, então eles mudam depois de reiniciar."
+
+#. English: "Automatic"
+msgid "UI_MENU_PROMPTS_AUTO"
+msgstr "Automático"
+
+#. English: "Nintendo"
+msgid "UI_MENU_PROMPTS_NINTENDO"
+msgstr "Nintendo"
+
+#. English: "Xbox"
+msgid "UI_MENU_PROMPTS_XBOX"
+msgstr "Xbox"
+
+#. English: "PlayStation"
+msgid "UI_MENU_PROMPTS_PLAYSTATION"
+msgstr "PlayStation"
+
+#. English: "prompt files missing: run the setup again"
+msgid "UI_MENU_PROMPTS_MISSING"
+msgstr "faltam os arquivos dos ícones: execute a instalação de novo"
+
+#. English: "prompt files damaged: run the setup again"
+msgid "UI_MENU_PROMPTS_FAILED"
+msgstr "arquivos dos ícones danificados: execute a instalação de novo"
+
+#. English: "prompts change after restart"
+msgid "UI_MENU_PROMPTS_RESTART"
+msgstr "os ícones mudam após reiniciar"
+
+#. English: "off at a game resolution not 16:9"
+msgid "UI_MENU_PROMPTS_OFF_SHAPE"
+msgstr "desligados numa resolução de jogo que não é 16:9"
+
+#. English: "off: a RomFS mod replaces their files"
+msgid "UI_MENU_PROMPTS_OFF_MODS"
+msgstr "desligados: um mod de RomFS substitui os arquivos deles"
+
+#. English: "off while AC_ROMFS_PATCHES is set"
+msgid "UI_MENU_PROMPTS_OFF_PATCHES"
+msgstr "desligados enquanto AC_ROMFS_PATCHES está definido"
+
+#. English: "Restart now"
+msgid "UI_MENU_RESTART"
+msgstr "Reiniciar agora"
+
+#. English: "Closes the game and starts it again with the new prompts. Progress since your last save is lost."
+msgid "UI_MENU_RESTART_DESC"
+msgstr "Fecha o jogo e o abre de novo com os novos ícones. O progresso desde o último salvamento é perdido."
+
+#. English: "Restart the game now? Progress since your last save is lost."
+msgid "UI_MENU_RESTART_CONFIRM"
+msgstr "Reiniciar o jogo agora? O progresso desde o último salvamento é perdido."
+
+#. English: "Restart"
+msgid "UI_MENU_RESTART_YES"
+msgstr "Reiniciar"
+
+#. English: "The game is saving: Restart is possible in a moment."
+msgid "UI_MENU_RESTART_SAVING"
+msgstr "O jogo está salvando: dá para reiniciar em um instante."
+
+#. English: "Left stick dead zone"
+msgid "UI_MENU_LSTICK_DEADZONE"
+msgstr "Zona morta do analógico esquerdo"
+
+#. English: "Right stick dead zone"
+msgid "UI_MENU_RSTICK_DEADZONE"
+msgstr "Zona morta do analógico direito"
+
+#. English: "How far a gamepad stick moves before the game sees it. Raise it if the character or the camera moves on its own: let go of the stick, read \"stick now\" and set the dead zone a few percent above it."
+msgid "UI_MENU_STICK_DEADZONE_DESC"
+msgstr "Quanto um analógico do controle precisa se mover antes que o jogo perceba. Aumente se o personagem ou a câmera se moverem sozinhos: solte o analógico, leia \"analógico agora\" e coloque a zona morta alguns por cento acima."
+
+#. English: "stick now: %.0f %%"
+msgid "UI_MENU_STICK_DEADZONE_NOW"
+msgstr "analógico agora: %.0f %%"
+
+#. English: "Stick camera speed"
+msgid "UI_MENU_STICK_SENS"
+msgstr "Velocidade da câmera (analógico)"
+
+#. English: "Multiplies the game's own right-stick camera speed, top speed included, at each of the game's five camera sensitivities. The mouse keeps its own setting."
+msgid "UI_MENU_STICK_SENS_DESC"
+msgstr "Multiplica a velocidade da câmera do analógico direito do jogo, incluindo a máxima, em cada uma das cinco sensibilidades de câmera do jogo. O mouse mantém a própria configuração."
+
+#. English: "Mouse camera sensitivity"
+msgid "UI_MENU_MOUSE_SENS"
+msgstr "Sensibilidade da câmera no mouse"
+
+#. English: "How fast the mouse turns the camera."
+msgid "UI_MENU_MOUSE_SENS_DESC"
+msgstr "Quão rápido o mouse gira a câmera."
+
+#. English: "Walk key"
+msgid "UI_MENU_WALK_KEY"
+msgstr "Tecla de andar"
+
+#. English: "Hold it to tilt the keyboard's sticks part of the way, so the keyboard walks instead of runs. The walk scale sets how far. A controller and the mouse are not affected."
+msgid "UI_MENU_WALK_KEY_DESC"
+msgstr "Segure para inclinar os analógicos do teclado só em parte, assim o teclado anda em vez de correr. A intensidade do andar define quanto. Controle e mouse não são afetados."
+
+#. English: "also %s"
+msgid "UI_MENU_WALK_KEY_TAKEN"
+msgstr "também %s"
+
+#. English: "Walk scale"
+msgid "UI_MENU_WALK_SCALE"
+msgstr "Intensidade do andar"
+
+#. English: "The tilt the keyboard's sticks get while the walk key is held. Half is a walk, the full tilt a run."
+msgid "UI_MENU_WALK_SCALE_DESC"
+msgstr "A inclinação dos analógicos do teclado enquanto a tecla de andar está segura. Metade é andar, a inclinação total é correr."
+
+#. English: "Select a cell and press A or Enter, then the key, mouse button or controller button. Delete or X clears a cell. A key in use moves here; a controller button swaps with the one it replaces."
+msgid "UI_BINDS_HELP"
+msgstr "Selecione uma célula e aperte A ou Enter, depois a tecla, o botão do mouse ou o botão do controle. Delete ou X limpa a célula. Uma tecla já em uso vem para cá; um botão do controle troca de lugar com o que ele substitui."
+
+#. English: "Key 1"
+msgid "UI_BINDS_COL_KEY1"
+msgstr "Tecla 1"
+
+#. English: "Key 2"
+msgid "UI_BINDS_COL_KEY2"
+msgstr "Tecla 2"
+
+#. English: "Controller"
+msgid "UI_BINDS_COL_PAD"
+msgstr "Controle"
+
+#. English: "Buttons"
+msgid "UI_BINDS_GROUP_BUTTONS"
+msgstr "Botões"
+
+#. English: "Movement"
+msgid "UI_BINDS_GROUP_MOVE"
+msgstr "Movimento"
+
+#. English: "Camera"
+msgid "UI_BINDS_GROUP_CAMERA"
+msgstr "Câmera"
+
+#. English: "Press a key or mouse button for %s"
+msgid "UI_BINDS_PRESS_KEY"
+msgstr "Aperte uma tecla ou um botão do mouse para %s"
+
+#. English: "Press a controller button for %s"
+msgid "UI_BINDS_PRESS_PAD"
+msgstr "Aperte um botão do controle para %s"
+
+#. English: "Esc cancels, or wait %d s"
+msgid "UI_BINDS_CANCEL_HINT"
+msgstr "Esc cancela, ou aguarde %d s"
+
+#. English: "%s was taken from %s"
+msgid "UI_BINDS_TAKEN"
+msgstr "%s saiu de %s"
+
+#. English: "%s swapped with %s"
+msgid "UI_BINDS_SWAPPED"
+msgstr "%s trocou de lugar com %s"
+
+#. English: "Reset all buttons"
+msgid "UI_BINDS_RESET"
+msgstr "Restaurar todos os botões"
+
+#. English: "Back to the default keys and controller buttons. The button layout above applies again: remapped controller buttons stay where you put them until this reset."
+msgid "UI_BINDS_RESET_DESC"
+msgstr "Volta às teclas e aos botões do controle padrão. O layout dos botões acima volta a valer: os botões do controle remapeados ficam onde você os colocou até esta restauração."
+
+#. English: "A"
+msgid "UI_BIND_A"
+msgstr "A"
+
+#. English: "B"
+msgid "UI_BIND_B"
+msgstr "B"
+
+#. English: "X"
+msgid "UI_BIND_X"
+msgstr "X"
+
+#. English: "Y"
+msgid "UI_BIND_Y"
+msgstr "Y"
+
+#. English: "Left stick click"
+msgid "UI_BIND_LCLICK"
+msgstr "Clique do analógico esquerdo"
+
+#. English: "Right stick click"
+msgid "UI_BIND_RCLICK"
+msgstr "Clique do analógico direito"
+
+#. English: "L"
+msgid "UI_BIND_L"
+msgstr "L"
+
+#. English: "R"
+msgid "UI_BIND_R"
+msgstr "R"
+
+#. English: "ZL"
+msgid "UI_BIND_ZL"
+msgstr "ZL"
+
+#. English: "ZR"
+msgid "UI_BIND_ZR"
+msgstr "ZR"
+
+#. English: "Plus"
+msgid "UI_BIND_PLUS"
+msgstr "Mais"
+
+#. English: "Minus"
+msgid "UI_BIND_MINUS"
+msgstr "Menos"
+
+#. English: "D-pad left"
+msgid "UI_BIND_LEFT"
+msgstr "Direcional para a esquerda"
+
+#. English: "D-pad up"
+msgid "UI_BIND_UP"
+msgstr "Direcional para cima"
+
+#. English: "D-pad right"
+msgid "UI_BIND_RIGHT"
+msgstr "Direcional para a direita"
+
+#. English: "D-pad down"
+msgid "UI_BIND_DOWN"
+msgstr "Direcional para baixo"
+
+#. English: "Move left"
+msgid "UI_BIND_LSTICK_LEFT"
+msgstr "Mover para a esquerda"
+
+#. English: "Move forward"
+msgid "UI_BIND_LSTICK_UP"
+msgstr "Mover para a frente"
+
+#. English: "Move right"
+msgid "UI_BIND_LSTICK_RIGHT"
+msgstr "Mover para a direita"
+
+#. English: "Move back"
+msgid "UI_BIND_LSTICK_DOWN"
+msgstr "Mover para trás"
+
+#. English: "Camera left"
+msgid "UI_BIND_RSTICK_LEFT"
+msgstr "Câmera para a esquerda"
+
+#. English: "Camera up"
+msgid "UI_BIND_RSTICK_UP"
+msgstr "Câmera para cima"
+
+#. English: "Camera right"
+msgid "UI_BIND_RSTICK_RIGHT"
+msgstr "Câmera para a direita"
+
+#. English: "Camera down"
+msgid "UI_BIND_RSTICK_DOWN"
+msgstr "Câmera para baixo"
+
+#. English: "Interact, pick up, talk."
+msgid "UI_BIND_DESC_A"
+msgstr "Interagir, pegar, conversar."
+
+#. English: "Run, cancel, go back."
+msgid "UI_BIND_DESC_B"
+msgstr "Correr, cancelar, voltar."
+
+#. English: "Jump."
+msgid "UI_BIND_DESC_X"
+msgstr "Pular."
+
+#. English: "Attack."
+msgid "UI_BIND_DESC_Y"
+msgstr "Atacar."
+
+#. English: "Crouch."
+msgid "UI_BIND_DESC_LCLICK"
+msgstr "Agachar."
+
+#. English: "First-person view."
+msgid "UI_BIND_DESC_RCLICK"
+msgstr "Visão em primeira pessoa."
+
+#. English: "Abilities."
+msgid "UI_BIND_DESC_L"
+msgstr "Habilidades."
+
+#. English: "Throw a weapon."
+msgid "UI_BIND_DESC_R"
+msgstr "Arremessar a arma."
+
+#. English: "Shield, lock on."
+msgid "UI_BIND_DESC_ZL"
+msgstr "Escudo, travar a mira."
+
+#. English: "Bow."
+msgid "UI_BIND_DESC_ZR"
+msgstr "Arco."
+
+#. English: "Menu, inventory."
+msgid "UI_BIND_DESC_PLUS"
+msgstr "Menu, inventário."
+
+#. English: "Map."
+msgid "UI_BIND_DESC_MINUS"
+msgstr "Mapa."
+
+#. English: "Quick-select."
+msgid "UI_BIND_DESC_DPAD"
+msgstr "Seleção rápida."
+
+#. English: "Moves Link like the left stick. The controller's left stick always works too."
+msgid "UI_BIND_DESC_MOVE"
+msgstr "Move o Link como o analógico esquerdo. O analógico esquerdo do controle também sempre funciona."
+
+#. English: "Turns the camera like the right stick. The mouse and the controller's right stick always work too."
+msgid "UI_BIND_DESC_CAMERA"
+msgstr "Gira a câmera como o analógico direito. O mouse e o analógico direito do controle também sempre funcionam."
+
+#. English: "Space"
+msgid "UI_KEY_SPACE"
+msgstr "Espaço"
+
+#. English: "Tab"
+msgid "UI_KEY_TAB"
+msgstr "Tab"
+
+#. English: "Left Shift"
+msgid "UI_KEY_LSHIFT"
+msgstr "Shift esquerdo"
+
+#. English: "Left Ctrl"
+msgid "UI_KEY_LCTRL"
+msgstr "Ctrl esquerdo"
+
+#. English: "Up arrow"
+msgid "UI_KEY_UP"
+msgstr "Seta para cima"
+
+#. English: "Down arrow"
+msgid "UI_KEY_DOWN"
+msgstr "Seta para baixo"
+
+#. English: "Left arrow"
+msgid "UI_KEY_LEFT"
+msgstr "Seta para a esquerda"
+
+#. English: "Right arrow"
+msgid "UI_KEY_RIGHT"
+msgstr "Seta para a direita"
+
+#. English: "Left mouse"
+msgid "UI_KEY_MOUSE_L"
+msgstr "Mouse esquerdo"
+
+#. English: "Right mouse"
+msgid "UI_KEY_MOUSE_R"
+msgstr "Mouse direito"
+
+#. English: "Middle mouse"
+msgid "UI_KEY_MOUSE_M"
+msgstr "Mouse do meio"
+
+#. English: "Mouse 4"
+msgid "UI_KEY_MOUSE_X1"
+msgstr "Mouse 4"
+
+#. English: "Mouse 5"
+msgid "UI_KEY_MOUSE_X2"
+msgstr "Mouse 5"
+
+#. English: "Enter"
+msgid "UI_KEY_ENTER"
+msgstr "Enter"
+
+#. English: "Backspace"
+msgid "UI_KEY_BACKSPACE"
+msgstr "Backspace"
+
+#. English: "Right Shift"
+msgid "UI_KEY_RSHIFT"
+msgstr "Shift direito"
+
+#. English: "Right Ctrl"
+msgid "UI_KEY_RCTRL"
+msgstr "Ctrl direito"
+
+#. English: "Alt"
+msgid "UI_KEY_LALT"
+msgstr "Alt"
+
+#. English: "Caps Lock"
+msgid "UI_KEY_CAPSLOCK"
+msgstr "Caps Lock"
+
+#. English: "Insert"
+msgid "UI_KEY_INSERT"
+msgstr "Insert"
+
+#. English: "Delete"
+msgid "UI_KEY_DELETE"
+msgstr "Delete"
+
+#. English: "Home"
+msgid "UI_KEY_HOME"
+msgstr "Home"
+
+#. English: "End"
+msgid "UI_KEY_END"
+msgstr "End"
+
+#. English: "Page Up"
+msgid "UI_KEY_PAGEUP"
+msgstr "Page Up"
+
+#. English: "Page Down"
+msgid "UI_KEY_PAGEDOWN"
+msgstr "Page Down"
+
+#. English: "Num %s"
+msgid "UI_KEY_NUM_FMT"
+msgstr "Num %s"
+
+#. English: "Bottom button"
+msgid "UI_PAD_SOUTH"
+msgstr "Botão de baixo"
+
+#. English: "Right button"
+msgid "UI_PAD_EAST"
+msgstr "Botão da direita"
+
+#. English: "Left button"
+msgid "UI_PAD_WEST"
+msgstr "Botão da esquerda"
+
+#. English: "Top button"
+msgid "UI_PAD_NORTH"
+msgstr "Botão de cima"
+
+#. English: "Left stick"
+msgid "UI_PAD_LSTICK"
+msgstr "Analógico esquerdo"
+
+#. English: "Right stick"
+msgid "UI_PAD_RSTICK"
+msgstr "Analógico direito"
+
+#. English: "Left bumper"
+msgid "UI_PAD_L"
+msgstr "Bumper esquerdo"
+
+#. English: "Right bumper"
+msgid "UI_PAD_R"
+msgstr "Bumper direito"
+
+#. English: "Start"
+msgid "UI_PAD_START"
+msgstr "Start"
+
+#. English: "Back"
+msgid "UI_PAD_BACK"
+msgstr "Back"
+
+#. English: "D-pad left"
+msgid "UI_PAD_DPAD_LEFT"
+msgstr "Direcional para a esquerda"
+
+#. English: "D-pad up"
+msgid "UI_PAD_DPAD_UP"
+msgstr "Direcional para cima"
+
+#. English: "D-pad right"
+msgid "UI_PAD_DPAD_RIGHT"
+msgstr "Direcional para a direita"
+
+#. English: "D-pad down"
+msgid "UI_PAD_DPAD_DOWN"
+msgstr "Direcional para baixo"
+
+#. English: "Left trigger"
+msgid "UI_PAD_ZL"
+msgstr "Gatilho esquerdo"
+
+#. English: "Right trigger"
+msgid "UI_PAD_ZR"
+msgstr "Gatilho direito"
+
+#. English: "Left back button"
+msgid "UI_PAD_LPADDLE1"
+msgstr "Botão traseiro esquerdo"
+
+#. English: "Right back button"
+msgid "UI_PAD_RPADDLE1"
+msgstr "Botão traseiro direito"
+
+#. English: "Left back button 2"
+msgid "UI_PAD_LPADDLE2"
+msgstr "Botão traseiro esquerdo 2"
+
+#. English: "Right back button 2"
+msgid "UI_PAD_RPADDLE2"
+msgstr "Botão traseiro direito 2"
+
+#. English: "Cross"
+msgid "UI_PAD_CROSS"
+msgstr "Cruz"
+
+#. English: "Circle"
+msgid "UI_PAD_CIRCLE"
+msgstr "Círculo"
+
+#. English: "Square"
+msgid "UI_PAD_SQUARE"
+msgstr "Quadrado"
+
+#. English: "Triangle"
+msgid "UI_PAD_TRIANGLE"
+msgstr "Triângulo"
+
+#. English: "Menu language"
+msgid "UI_MENU_MENU_LANG"
+msgstr "Idioma do menu"
+
+#. English: "Language of this menu and the overlay."
+msgid "UI_MENU_MENU_LANG_DESC"
+msgstr "Idioma deste menu e do indicador."
+
+#. English: "Automatic (from Windows)"
+msgid "UI_MENU_MENU_LANG_AUTO"
+msgstr "Automático (do Windows)"
+
+#. English: "English"
+msgid "UI_MENU_LANGNAME_EN"
+msgstr "English"
+
+#. English: "日本語"
+msgid "UI_MENU_LANGNAME_JA"
+msgstr "日本語"
+
+#. English: "Français"
+msgid "UI_MENU_LANGNAME_FR"
+msgstr "Français"
+
+#. English: "Deutsch"
+msgid "UI_MENU_LANGNAME_DE"
+msgstr "Deutsch"
+
+#. English: "Italiano"
+msgid "UI_MENU_LANGNAME_IT"
+msgstr "Italiano"
+
+#. English: "Español"
+msgid "UI_MENU_LANGNAME_ES"
+msgstr "Español"
+
+#. English: "Nederlands"
+msgid "UI_MENU_LANGNAME_NL"
+msgstr "Nederlands"
+
+#. English: "Русский"
+msgid "UI_MENU_LANGNAME_RU"
+msgstr "Русский"
+
+#. English: "简体中文"
+msgid "UI_MENU_LANGNAME_ZH_HANS"
+msgstr "简体中文"
+
+#. English: "繁體中文"
+msgid "UI_MENU_LANGNAME_ZH_HANT"
+msgstr "繁體中文"
+
+#. English: "한국어"
+msgid "UI_MENU_LANGNAME_KO"
+msgstr "한국어"
+
+#. English: "Português (Brasil)"
+msgid "UI_MENU_LANGNAME_PT_BR"
+msgstr "Português (Brasil)"
+
+#. English: "These settings are for testing and troubleshooting. Change them only when you know why."
+msgid "UI_MENU_ADV_WARNING"
+msgstr "Estas configurações são para testes e solução de problemas. Altere-as só quando souber por quê."
+
+#. English: "Scheduling"
+msgid "UI_MENU_GROUP_SCHED"
+msgstr "Agendamento"
+
+#. English: "Shaders and pipelines"
+msgid "UI_MENU_GROUP_SHADERS"
+msgstr "Shaders e pipelines"
+
+#. English: "Textures and memory"
+msgid "UI_MENU_GROUP_TEXMEM"
+msgstr "Texturas e memória"
+
+#. English: "Render fixes"
+msgid "UI_MENU_GROUP_FIXES"
+msgstr "Correções de renderização"
+
+#. English: "Vulkan"
+msgid "UI_MENU_GROUP_VULKAN"
+msgstr "Vulkan"
+
+#. English: "Diagnostics"
+msgid "UI_MENU_GROUP_DIAG"
+msgstr "Diagnóstico"
+
+#. English: "Virtual core preemption"
+msgid "UI_MENU_ASYNC_PREEMPT"
+msgstr "Preempção de núcleo virtual"
+
+#. English: "Lets a game thread interrupt another one on the same virtual core."
+msgid "UI_MENU_ASYNC_PREEMPT_DESC"
+msgstr "Deixa uma thread do jogo interromper outra no mesmo núcleo virtual."
+
+#. English: "Off"
+msgid "UI_MENU_PREEMPT_OFF"
+msgstr "Desligado"
+
+#. English: "On"
+msgid "UI_MENU_PREEMPT_ON"
+msgstr "Ligado"
+
+#. English: "Inheritance only"
+msgid "UI_MENU_PREEMPT_INHERIT"
+msgstr "Só herança"
+
+#. English: "GPU frame prep on its own thread"
+msgid "UI_MENU_REPLAY_ASYNC"
+msgstr "Preparo de quadro da GPU em thread própria"
+
+#. English: "Prepares frames for the GPU on a separate thread instead of the game thread. Adds up to one frame of latency."
+msgid "UI_MENU_REPLAY_ASYNC_DESC"
+msgstr "Prepara os quadros para a GPU numa thread separada em vez da thread do jogo. Adiciona até um quadro de latência."
+
+#. English: "1 ms Windows timer"
+msgid "UI_MENU_TIMER_1MS"
+msgstr "Timer do Windows de 1 ms"
+
+#. English: "Raises the system timer resolution to 1 ms for steadier frame pacing."
+msgid "UI_MENU_TIMER_1MS_DESC"
+msgstr "Aumenta a resolução do timer do sistema para 1 ms, para um ritmo de quadros mais estável."
+
+#. English: "Waiting draw handling"
+msgid "UI_MENU_PIPE_WAIT"
+msgstr "Tratamento de desenhos em espera"
+
+#. English: "Default keeps the current scheduling with a reserved worker for waiting draws; Old (draw) uses the previous scheduling."
+msgid "UI_MENU_PIPE_WAIT_DESC"
+msgstr "Padrão mantém o agendamento atual, com um worker reservado para desenhos em espera; Antigo (draw) usa o agendamento anterior."
+
+#. English: "Default"
+msgid "UI_MENU_PIPE_WAIT_DEFAULT"
+msgstr "Padrão"
+
+#. English: "Old (draw)"
+msgid "UI_MENU_PIPE_WAIT_DRAW"
+msgstr "Antigo (draw)"
+
+#. English: "Draws skipped while a pipeline builds"
+msgid "UI_MENU_PIPE_SKIP"
+msgstr "Desenhos pulados ao montar pipeline"
+
+#. English: "Which draws are dropped instead of waiting for their pipeline."
+msgid "UI_MENU_PIPE_SKIP_DESC"
+msgstr "Quais desenhos são descartados em vez de esperar pelo seu pipeline."
+
+#. English: "Strict"
+msgid "UI_MENU_PIPE_SKIP_STRICT"
+msgstr "Estrito"
+
+#. English: "Any"
+msgid "UI_MENU_PIPE_SKIP_ANY"
+msgstr "Qualquer"
+
+#. English: "Fullscreen passes"
+msgid "UI_MENU_PIPE_SKIP_FULLSCREEN"
+msgstr "Passes de tela cheia"
+
+#. English: "Stage library prebuild"
+msgid "UI_MENU_LIB_PREBUILD"
+msgstr "Pré-montagem das bibliotecas de estágio"
+
+#. English: "Builds shader stage libraries ahead of time in the background."
+msgid "UI_MENU_LIB_PREBUILD_DESC"
+msgstr "Monta antes, em segundo plano, as bibliotecas de estágio dos shaders."
+
+#. English: "Stage library prebuild threads"
+msgid "UI_MENU_LIB_PREBUILD_THREADS"
+msgstr "Threads da pré-montagem das bibliotecas"
+
+#. English: "Threads used for the prebuild; Automatic picks a number from your CPU."
+msgid "UI_MENU_LIB_PREBUILD_THREADS_DESC"
+msgstr "Threads usadas na pré-montagem; Automático escolhe um número pela sua CPU."
+
+#. English: "Pipeline prebuild"
+msgid "UI_MENU_PIPE_PREBUILD"
+msgstr "Pré-montagem de pipelines"
+
+#. English: "Builds known pipelines ahead of time."
+msgid "UI_MENU_PIPE_PREBUILD_DESC"
+msgstr "Monta antes os pipelines conhecidos."
+
+#. English: "Translator prewarm"
+msgid "UI_MENU_PREWARM_XLATE"
+msgstr "Pré-aquecimento do tradutor"
+
+#. English: "Threads that translate known shaders at start; Automatic takes half the CPU threads, at most 16."
+msgid "UI_MENU_PREWARM_XLATE_DESC"
+msgstr "Threads que traduzem os shaders conhecidos ao iniciar; Automático usa metade das threads da CPU, no máximo 16."
+
+#. English: "Graphics pipeline library"
+msgid "UI_MENU_GPL"
+msgstr "Biblioteca de pipelines gráficos"
+
+#. English: "Uses the Vulkan pipeline library extension; turn off if your driver misbehaves with it."
+msgid "UI_MENU_GPL_DESC"
+msgstr "Usa a extensão de biblioteca de pipelines do Vulkan; desligue se o seu driver tiver problemas com ela."
+
+#. English: "ASTC texture decoding"
+msgid "UI_MENU_ASTC"
+msgstr "Decodificação de texturas ASTC"
+
+#. English: "Where compressed ASTC textures are decoded."
+msgid "UI_MENU_ASTC_DESC"
+msgstr "Onde as texturas comprimidas em ASTC são decodificadas."
+
+#. English: "Automatic"
+msgid "UI_MENU_ASTC_AUTO"
+msgstr "Automático"
+
+#. English: "GPU shader"
+msgid "UI_MENU_ASTC_GPU"
+msgstr "Shader da GPU"
+
+#. English: "Native"
+msgid "UI_MENU_ASTC_NATIVE"
+msgstr "Nativo"
+
+#. English: "CPU"
+msgid "UI_MENU_ASTC_CPU"
+msgstr "CPU"
+
+#. English: "GPU memory mode"
+msgid "UI_MENU_MEMORY"
+msgstr "Modo de memória da GPU"
+
+#. English: "How game memory is shared with the GPU."
+msgid "UI_MENU_MEMORY_DESC"
+msgstr "Como a memória do jogo é compartilhada com a GPU."
+
+#. English: "Automatic"
+msgid "UI_MENU_MEMORY_AUTO"
+msgstr "Automático"
+
+#. English: "Import"
+msgid "UI_MENU_MEMORY_IMPORT"
+msgstr "Importar"
+
+#. English: "Mirror"
+msgid "UI_MENU_MEMORY_MIRROR"
+msgstr "Espelhar"
+
+#. English: "Verify"
+msgid "UI_MENU_MEMORY_VERIFY"
+msgstr "Verificar"
+
+#. English: "Texture aliasing"
+msgid "UI_MENU_TEX_ALIAS"
+msgstr "Aliasing de texturas"
+
+#. English: "A new texture created over a live texture's memory starts with that content instead of empty."
+msgid "UI_MENU_TEX_ALIAS_DESC"
+msgstr "Uma textura nova criada sobre a memória de uma textura viva começa com esse conteúdo em vez de vazia."
+
+#. English: "Texture memory limit"
+msgid "UI_MENU_TEX_VRAM_PRESSURE"
+msgstr "Limite de memória de texturas"
+
+#. English: "Percent of video memory above which textures the game released are dropped (they come back from storage when used again). 0 keeps them."
+msgid "UI_MENU_TEX_VRAM_PRESSURE_DESC"
+msgstr "Porcentagem da memória de vídeo acima da qual as texturas liberadas pelo jogo são descartadas (voltam do armazenamento quando usadas de novo). 0 mantém todas."
+
+#. English: "Compress ASTC to BC"
+msgid "UI_MENU_ASTC_BC"
+msgstr "Comprimir ASTC em BC"
+
+#. English: "With the GPU decoder: re-encodes decoded ASTC textures to BC1 when the alpha scan proves them opaque, BC3 otherwise — a quarter to an eighth of the video memory. For GPUs with 4 GB or less; textures look slightly blockier."
+msgid "UI_MENU_ASTC_BC_DESC"
+msgstr "Com o decodificador da GPU: texturas sem transparência são recodificadas em BC1, as demais em BC3 — de um oitavo a um quarto da memória de vídeo. Para GPUs com 4 GB ou menos; as texturas ficam um pouco mais quadriculadas."
+
+#. English: "LOD guard"
+msgid "UI_MENU_LOD_GUARD"
+msgstr "Proteção de LOD"
+
+#. English: "Prevents objects flashing in the wrong place or a flat far field for a frame, by waiting for the game to finish rewriting level-of-detail data before the GPU reads it."
+msgid "UI_MENU_LOD_GUARD_DESC"
+msgstr "Evita que objetos pisquem no lugar errado ou que o plano distante fique achatado por um quadro, esperando o jogo terminar de reescrever os dados de nível de detalhe antes que a GPU os leia."
+
+#. English: "Constant buffer fix"
+msgid "UI_MENU_FIX_C0"
+msgstr "Correção do buffer de constantes"
+
+#. English: "Fills the driver-reserved constant bank c0 (storage sizes, dispatch size, point size, base instance) instead of reading zeros."
+msgid "UI_MENU_FIX_C0_DESC"
+msgstr "Preenche o banco de constantes c0 reservado ao driver (tamanhos de armazenamento, tamanho do dispatch, tamanho do ponto, instância base) em vez de ler zeros."
+
+#. English: "Zero new GPU memory"
+msgid "UI_MENU_FIX_ZERO"
+msgstr "Zerar memória nova da GPU"
+
+#. English: "New GPU memory pools start zero-filled, as Switch memory does."
+msgid "UI_MENU_FIX_ZERO_DESC"
+msgstr "Novos pools de memória da GPU começam zerados, como a memória do Switch."
+
+#. English: "Skip repeated binds"
+msgid "UI_MENU_BIND_SKIP"
+msgstr "Pular bindings repetidos"
+
+#. English: "Optimisation: skips bindings that did not change."
+msgid "UI_MENU_BIND_SKIP_DESC"
+msgstr "Otimização: pula bindings que não mudaram."
+
+#. English: "Shader memo"
+msgid "UI_MENU_SHADER_MEMO"
+msgstr "Memória de shaders"
+
+#. English: "Optimisation: remembers shader lookups."
+msgid "UI_MENU_SHADER_MEMO_DESC"
+msgstr "Otimização: lembra as buscas de shaders."
+
+#. English: "Pipeline memo"
+msgid "UI_MENU_PIPE_MEMO"
+msgstr "Memória de pipeline"
+
+#. English: "Optimisation: reuses the previous draw's pipeline when its state repeats."
+msgid "UI_MENU_PIPE_MEMO_DESC"
+msgstr "Otimização: reaproveita o pipeline do desenho anterior quando o estado se repete."
+
+#. English: "Texture binding memo"
+msgid "UI_MENU_TEX_MEMO"
+msgstr "Memória de bindings de textura"
+
+#. English: "Optimisation: remembers texture descriptors between draws."
+msgid "UI_MENU_TEX_MEMO_DESC"
+msgstr "Otimização: lembra os descritores de textura entre desenhos."
+
+#. English: "Descriptor templates"
+msgid "UI_MENU_DESC_TEMPLATE"
+msgstr "Templates de descritores"
+
+#. English: "Optimisation: updates descriptors in bulk."
+msgid "UI_MENU_DESC_TEMPLATE_DESC"
+msgstr "Otimização: atualiza os descritores em lote."
+
+#. English: "Skip repeated push constants"
+msgid "UI_MENU_PUSH_SKIP"
+msgstr "Pular push constants repetidas"
+
+#. English: "Optimisation: skips push constants that did not change."
+msgid "UI_MENU_PUSH_SKIP_DESC"
+msgstr "Otimização: pula push constants que não mudaram."
+
+#. English: "Early GPU submission"
+msgid "UI_MENU_SPLIT_DRAWS"
+msgstr "Envio antecipado à GPU"
+
+#. English: "Submits GPU work in parts every N draws between passes so the GPU starts earlier; 0 turns it off."
+msgid "UI_MENU_SPLIT_DRAWS_DESC"
+msgstr "Envia o trabalho da GPU em partes a cada N desenhos entre passes, para a GPU começar mais cedo; 0 desliga."
+
+#. English: "Validation layer"
+msgid "UI_MENU_VK_VALIDATION"
+msgstr "Camada de validação"
+
+#. English: "Checks every Vulkan call and slows the game down a lot."
+msgid "UI_MENU_VK_VALIDATION_DESC"
+msgstr "Verifica cada chamada Vulkan e deixa o jogo muito mais lento."
+
+#. English: "The validation layer is not installed."
+msgid "UI_MENU_VK_VALIDATION_MISSING"
+msgstr "A camada de validação não está instalada."
+
+#. English: "Dynamic vertex state"
+msgid "UI_MENU_VK_DYN_VERTEX"
+msgstr "Estado dinâmico de vértices"
+
+#. English: "Forces dynamic vertex input on or off; the default depends on the GPU."
+msgid "UI_MENU_VK_DYN_VERTEX_DESC"
+msgstr "Força a entrada dinâmica de vértices ligada ou desligada; o padrão depende da GPU."
+
+#. English: "Dynamic alpha to coverage"
+msgid "UI_MENU_VK_DYN_A2C"
+msgstr "Alpha to coverage dinâmico"
+
+#. English: "Forces dynamic alpha to coverage on or off. Default: off on AMD's driver for RDNA 2 and older, which draws characters black with it, on elsewhere."
+msgid "UI_MENU_VK_DYN_A2C_DESC"
+msgstr "Força o alpha to coverage dinâmico ligado ou desligado. Padrão: desligado no driver da AMD para RDNA 2 e anteriores, que com ele desenha os personagens pretos, ligado nos demais."
+
+#. English: "Pin subgroup size"
+msgid "UI_MENU_VK_SUBGROUP_PIN"
+msgstr "Fixar tamanho do subgrupo"
+
+#. English: "Fixes the shader subgroup size."
+msgid "UI_MENU_VK_SUBGROUP_PIN_DESC"
+msgstr "Fixa o tamanho do subgrupo dos shaders."
+
+#. English: "Performance log"
+msgid "UI_MENU_TRACE"
+msgstr "Registro de desempenho"
+
+#. English: "Writes frame timings to a file."
+msgid "UI_MENU_TRACE_DESC"
+msgstr "Grava os tempos de quadro num arquivo."
+
+#. English: "Flight recorder"
+msgid "UI_MENU_FLIGHT"
+msgstr "Caixa-preta"
+
+#. English: "Keeps a short history and saves it when a frame freezes."
+msgid "UI_MENU_FLIGHT_DESC"
+msgstr "Guarda um histórico curto e o salva quando um quadro trava."
+
+#. English: "Freeze threshold (ms)"
+msgid "UI_MENU_FLIGHT_SPIKE_MS"
+msgstr "Limite de travamento (ms)"
+
+#. English: "Frame time that counts as a freeze."
+msgid "UI_MENU_FLIGHT_SPIKE_MS_DESC"
+msgstr "Tempo de quadro que conta como travamento."
+
+#. English: "Input recording"
+msgid "UI_MENU_INPUT_RECORD"
+msgstr "Gravação de comandos"
+
+#. English: "Writes your inputs to a file for bug reports."
+msgid "UI_MENU_INPUT_RECORD_DESC"
+msgstr "Grava os seus comandos num arquivo para relatórios de bug."
+
+#. English: "Open log folder"
+msgid "UI_MENU_OPEN_LOG"
+msgstr "Abrir pasta de logs"
+
+#. English: "Shows the folder with the log files."
+msgid "UI_MENU_OPEN_LOG_DESC"
+msgstr "Mostra a pasta com os arquivos de log."
+
+#. English: "Copy system info"
+msgid "UI_MENU_COPY_INFO"
+msgstr "Copiar informações do sistema"
+
+#. English: "Copies GPU, driver, CPU, RAM and changed settings to the clipboard."
+msgid "UI_MENU_COPY_INFO_DESC"
+msgstr "Copia GPU, driver, CPU, RAM e as configurações alteradas para a área de transferência."
+
+#. English: "Copied"
+msgid "UI_MENU_COPY_INFO_DONE"
+msgstr "Copiado"
+
+#. English: "did not work"
+msgid "UI_MENU_ACTION_FAILED"
+msgstr "não funcionou"
+
+#. English: "Reset all settings to defaults"
+msgid "UI_MENU_RESET"
+msgstr "Restaurar todas as configurações"
+
+#. English: "Applies to every tab."
+msgid "UI_MENU_RESET_DESC"
+msgstr "Vale para todas as abas."
+
+#. English: "Reset every setting to its default?"
+msgid "UI_MENU_RESET_CONFIRM"
+msgstr "Restaurar todas as configurações para o padrão?"
+
+#. English: "Reset"
+msgid "UI_MENU_RESET_YES"
+msgstr "Restaurar"
+
+#. English: "Cancel"
+msgid "UI_MENU_RESET_NO"
+msgstr "Cancelar"
+
+#. English: "%.0f FPS"
+msgid "UI_MENU_OV_FPS"
+msgstr "%.0f FPS"
+
+#. English: "%.1f ms"
+msgid "UI_MENU_OV_FRAME_MS"
+msgstr "%.1f ms"
+
+#. English: "game %.0f%%"
+msgid "UI_MENU_OV_GAME_PCT"
+msgstr "jogo %.0f%%"
+
+#. English: "max %.1f ms"
+msgid "UI_MENU_OV_MAX_MS"
+msgstr "máx. %.1f ms"
+
+#. English: "GPU"
+msgid "UI_MENU_OV_GPU"
+msgstr "GPU"
+
+#. English: "CPU"
+msgid "UI_MENU_OV_CPU"
+msgstr "CPU"
+
+#. English: "RAM"
+msgid "UI_MENU_OV_RAM"
+msgstr "RAM"
+
+#. English: "VRAM"
+msgid "UI_MENU_OV_VRAM"
+msgstr "VRAM"
+
+#. English: "Temperature"
+msgid "UI_MENU_OV_TEMP"
+msgstr "Temperatura"
+
+#. English: "Power"
+msgid "UI_MENU_OV_POWER"
+msgstr "Consumo"
+
+#. English: "Clock"
+msgid "UI_MENU_OV_CLOCK"
+msgstr "Frequência"
+
+#. English: "-"
+msgid "UI_MENU_OV_NONE"
+msgstr "-"
+
+#. English: "GPU frame prep"
+msgid "UI_MENU_OV_REPLAY"
+msgstr "Preparo de quadro da GPU"
+
+#. English: "GPU busy per frame"
+msgid "UI_MENU_OV_GPU_TIME"
+msgstr "GPU ocupada por quadro"
+
+#. English: "Pipeline waits"
+msgid "UI_MENU_OV_PIPE_WAIT"
+msgstr "Esperas de pipeline"
+
+#. English: "Shader waits"
+msgid "UI_MENU_OV_SHADER_WAIT"
+msgstr "Esperas de shader"
+
+#. English: "Texture uploads"
+msgid "UI_MENU_OV_TEX_UPLOADS"
+msgstr "Envios de textura"
+
+#. English: "%.0f%%"
+msgid "UI_MENU_OV_FMT_PCT"
+msgstr "%.0f%%"
+
+#. English: "%.0f °C"
+msgid "UI_MENU_OV_FMT_TEMP"
+msgstr "%.0f °C"
+
+#. English: "%.0f W"
+msgid "UI_MENU_OV_FMT_POWER"
+msgstr "%.0f W"
+
+#. English: "%.0f MHz"
+msgid "UI_MENU_OV_FMT_MHZ"
+msgstr "%.0f MHz"
+
+#. English: "%.1f GB"
+msgid "UI_MENU_OV_FMT_GB"
+msgstr "%.1f GB"
+
+#. English: "/ %.1f GB"
+msgid "UI_MENU_OV_FMT_GB_OF"
+msgstr "/ %.1f GB"
+
+#. English: "game %.1f GB"
+msgid "UI_MENU_OV_GAME_GB"
+msgstr "jogo %.1f GB"
+
+#. English: "%.2f ms"
+msgid "UI_MENU_OV_FMT_MS"
+msgstr "%.2f ms"
+
+#. English: "%.1f per frame"
+msgid "UI_MENU_OV_PER_FRAME"
+msgstr "%.1f por quadro"
+
+#. English: "Window"
+msgid "UI_MENU_OV_WINDOW"
+msgstr "Janela"
+
+#. English: "Game image"
+msgid "UI_MENU_OV_OUTPUT"
+msgstr "Imagem do jogo"
+
+#. English: "3D scene"
+msgid "UI_MENU_OV_SCENE"
+msgstr "Cena 3D"
+
+#. English: "Scaling"
+msgid "UI_MENU_OV_SCALING"
+msgstr "Escala"
+
+#. English: "Frame limit"
+msgid "UI_MENU_OV_LIMIT"
+msgstr "Limite de quadros"
+
+#. English: "Presentation"
+msgid "UI_MENU_OV_PRESENT"
+msgstr "Apresentação"
+
+#. English: "Texture compression"
+msgid "UI_MENU_OV_TEX"
+msgstr "Compressão de texturas"
+
+#. English: "OS"
+msgid "UI_MENU_OV_OS"
+msgstr "SO"
+
+#. English: "%ux%u"
+msgid "UI_MENU_OV_FMT_SIZE"
+msgstr "%ux%u"
+
+#. English: "%ux%u, %.0f%%"
+msgid "UI_MENU_OV_FMT_SCENE"
+msgstr "%ux%u, %.0f%%"
+
+#. English: "AMD FSR 1, sharpness %d%%"
+msgid "UI_MENU_OV_FMT_FSR"
+msgstr "AMD FSR 1, nitidez %d%%"
+
+#. English: "area average, sharpness %d%%"
+msgid "UI_MENU_OV_FMT_AREA"
+msgstr "média por área, nitidez %d%%"
+
+#. English: "RCAS before the HUD, sharpness %d%%"
+msgid "UI_MENU_OV_FMT_PRESHARP"
+msgstr "RCAS antes do HUD, nitidez %d%%"
+
+#. English: "none (1:1)"
+msgid "UI_MENU_OV_SCALE_NONE"
+msgstr "nenhuma (1:1)"
+
+#. English: "bilinear"
+msgid "UI_MENU_OV_SCALE_BILINEAR"
+msgstr "bilinear"
+
+#. English: "Cheats"
+msgid "UI_MENU_TAB_CHEATS"
+msgstr "Cheats"
+
+#. English: "No cheats for this game version. A mod's cheats are an Atmosphere cheat file in its cheats folder, named after the game's build: mods\\<mod>\\cheats\\%s. Restart the game to read them. For cheats that change the game's code, the game rebuilds itself at start (a few minutes)."
+msgid "UI_MENU_CHEATS_NONE"
+msgstr "Nenhum cheat para esta versão do jogo. Os cheats de um mod são um arquivo de cheats do Atmosphere na pasta cheats dele, com o nome da build do jogo: mods\\<mod>\\cheats\\%s. Reinicie o jogo para lê-los. Para cheats que alteram o código do jogo, o jogo se recompila sozinho ao iniciar (alguns minutos)."
+
+#. English: "%s: %d cheats"
+msgid "UI_MENU_CHEATS_MOD"
+msgstr "%s: %d cheats"
+
+#. English: "Rebuild the game now"
+msgid "UI_MENU_CHEATS_REBUILD"
+msgstr "Recompilar o jogo agora"
+
+#. English: "Some cheats change the game's code and are not built into it: they are new or edited, or their last rebuild failed or was cancelled. Closes the game; the setup builds them in (a few minutes) and starts the game again. Progress since your last save is lost."
+msgid "UI_MENU_CHEATS_REBUILD_DESC"
+msgstr "Alguns cheats alteram o código do jogo e ainda não foram compilados nele: são novos ou editados, ou a última recompilação falhou ou foi cancelada. Fecha o jogo; o instalador os compila (alguns minutos) e inicia o jogo de novo. O progresso desde o último salvamento é perdido."
+
+#. English: "Changes the game's code. Switches at once."
+msgid "UI_MENU_CHEAT_CODE_DESC"
+msgstr "Altera o código do jogo. Liga e desliga na hora."
+
+#. English: "Changes the game's code while you hold %s. Switches at once."
+msgid "UI_MENU_CHEAT_KEY_DESC"
+msgstr "Altera o código do jogo enquanto você segura %s. Liga e desliga na hora."
+
+#. English: "Writes the game's memory every frame while it is on."
+msgid "UI_MENU_CHEAT_DATA_DESC"
+msgstr "Escreve na memória do jogo a cada quadro enquanto está ligado."
+
+#. English: "always on"
+msgid "UI_MENU_CHEAT_MASTER"
+msgstr "sempre ligado"
+
+#. English: "The file's master code: it is always on."
+msgid "UI_MENU_CHEAT_MASTER_DESC"
+msgstr "O código mestre do arquivo: está sempre ligado."
+
+#. English: "not needed"
+msgid "UI_MENU_CHEAT_RESTORE"
+msgstr "desnecessário"
+
+#. English: "It only writes the game's own code back. Switching a cheat off already does that."
+msgid "UI_MENU_CHEAT_RESTORE_DESC"
+msgstr "Ele só escreve de volta o código original do jogo. Desligar um cheat já faz isso."
+
+#. English: "after the rebuild"
+msgid "UI_MENU_CHEAT_REBUILD"
+msgstr "após recompilar"
+
+#. English: "This cheat changes the game's code and is new or edited since the game was built. The game builds it in when it starts next (a few minutes), or use Rebuild the game now."
+msgid "UI_MENU_CHEAT_REBUILD_DESC"
+msgstr "Este cheat altera o código do jogo e é novo ou foi editado depois que o jogo foi compilado. O jogo o compila na próxima vez que iniciar (alguns minutos), ou use Recompilar o jogo agora."
+
+#. English: "not supported"
+msgid "UI_MENU_CHEAT_UNSUPPORTED"
+msgstr "não suportado"
+
+#. English: "This cheat cannot be used with this version of the game:"
+msgid "UI_MENU_CHEAT_UNSUPPORTED_DESC"
+msgstr "Este cheat não pode ser usado com esta versão do jogo:"
+

@@ -1,5 +1,5 @@
-// Text the host shows the player (runtime/ui_text.c): one catalog, keyed by stable ids. The software keyboard reads it
-// in the game's language (ui_text); the menu and the performance overlay read it in the menu language (menu_text).
+// Text the host shows the player (runtime/ui_text.c): catalogs keyed by stable ids and loaded from lang/*.po. The
+// software keyboard reads them in the game's language (ui_text); the menu and overlay read them in the menu language.
 #pragma once
 
 typedef enum {
@@ -11,8 +11,7 @@ typedef enum {
     UI_SWKBD_CANCEL,
     UI_SWKBD_PAD_HINT,       // how a controller answers
 
-    // Menu: window, tabs, bottom row. UI_MENU_FIRST..UI_MENU_LAST_ID carry English, Italian, Russian, Brazilian
-    // Portuguese and Simplified Chinese texts.
+    // Menu: window, tabs, bottom row. UI_MENU_FIRST..UI_MENU_LAST_ID are the texts the settings menu and overlay draw.
     UI_MENU_FIRST,
     UI_MENU_TITLE = UI_MENU_FIRST,
     UI_MENU_TAB_SCREEN, UI_MENU_TAB_GAME, UI_MENU_TAB_MODS, UI_MENU_TAB_SOUND, UI_MENU_TAB_CONTROLS,
@@ -253,20 +252,15 @@ typedef enum {
 // the longest Russian description is about 850 bytes; the probe checks every menu text leaves room for a note.
 enum { UI_DESC_BYTES = 2048 };
 
-// UTF-8 text for id in the language of ov_language(); English when the catalog has no row for that language.
+void ui_text_init(void);
+void ui_text_reload(void);
 const char *ui_text(UiTextId id);
-// The same for an explicit catalog language ("en", "ja", "fr", "de", "it", "es", "nl", "pt", "ru", "zh-Hans",
-// "zh-Hant", "ko", "pt-BR"); an empty entry gives the English text.
 const char *ui_text_in(const char *lang, UiTextId id);
-// Calls visit(ctx, text) for every string the row of lang has its own text for (an id that falls back to English is not
-// visited): the font builder covers the glyphs of the text a language shows (ui/menu.cpp).
 void ui_text_visit(const char *lang, void (*visit)(void *ctx, const char *text), void *ctx);
-// 1 when the row of lang has its own text for id (no fallback to English), for the probe.
 int ui_text_defined(const char *lang, UiTextId id);
-// The catalog language for a Switch language code ("en-GB" -> "en", "zh-CN" -> "zh-Hans", ...).
 const char *ui_text_lang(const char *switch_code);
-
-// Menu text: ui_text_in(menu language, id). The menu language is AC_MENU_LANG ("en", "it", "ru", "pt-BR", "zh-Hans");
-// unset, the system UI language when the catalog has menu text for it (English, Italian, Russian, Brazilian Portuguese,
-// Simplified Chinese), else English. Follows a live change of the setting.
+int ui_text_lang_count(void);
+const char *ui_text_lang_at(int i);
+const char *ui_text_lang_name(const char *lang);
+const char *ui_text_font_lang(const char *lang);
 const char *menu_text(UiTextId id);

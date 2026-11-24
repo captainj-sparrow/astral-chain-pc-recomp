@@ -1,0 +1,79 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: astral-chain-pc-recomp\n"
+"Language: de\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"X-Astral-Language-Name: Deutsch\n"
+
+#. English: "Text entry"
+msgid "UI_SWKBD_TITLE"
+msgstr "Texteingabe"
+
+#. English: "Enter a name"
+msgid "UI_SWKBD_PROMPT"
+msgstr "Gib einen Namen ein"
+
+#. English: "Horse"
+msgid "UI_SWKBD_DEFAULT_NAME"
+msgstr "Pferd"
+
+#. English: "OK"
+msgid "UI_SWKBD_OK"
+msgstr "OK"
+
+#. English: "Cancel"
+msgid "UI_SWKBD_CANCEL"
+msgstr "Abbrechen"
+
+#. English: "Controller: A = OK, B = Cancel"
+msgid "UI_SWKBD_PAD_HINT"
+msgstr "Controller: A = OK, B = Abbrechen"
+
+#. English: "English"
+msgid "UI_MENU_LANGNAME_EN"
+msgstr "English"
+
+#. English: "日本語"
+msgid "UI_MENU_LANGNAME_JA"
+msgstr "日本語"
+
+#. English: "Français"
+msgid "UI_MENU_LANGNAME_FR"
+msgstr "Français"
+
+#. English: "Deutsch"
+msgid "UI_MENU_LANGNAME_DE"
+msgstr "Deutsch"
+
+#. English: "Italiano"
+msgid "UI_MENU_LANGNAME_IT"
+msgstr "Italiano"
+
+#. English: "Español"
+msgid "UI_MENU_LANGNAME_ES"
+msgstr "Español"
+
+#. English: "Nederlands"
+msgid "UI_MENU_LANGNAME_NL"
+msgstr "Nederlands"
+
+#. English: "Русский"
+msgid "UI_MENU_LANGNAME_RU"
+msgstr "Русский"
+
+#. English: "简体中文"
+msgid "UI_MENU_LANGNAME_ZH_HANS"
+msgstr "简体中文"
+
+#. English: "繁體中文"
+msgid "UI_MENU_LANGNAME_ZH_HANT"
+msgstr "繁體中文"
+
+#. English: "한국어"
+msgid "UI_MENU_LANGNAME_KO"
+msgstr "한국어"
+
+#. English: "Português (Brasil)"
+msgid "UI_MENU_LANGNAME_PT_BR"
+msgstr "Português (Brasil)"
+

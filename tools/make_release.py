@@ -15,7 +15,7 @@ cached in toolchain/release-dl/ and checked against the sha256 in PINS; a mismat
                libraries of SDL3, Opus, libvpx, Vulkan and VMA)
     bin/       ac_xlate.exe (+ .id), hactool.exe, SDL3.dll (upstream), libopus-0.dll, libxess.dll (Intel XeSS SDK),
                amd_fidelityfx_loader_vk.dll and amd_fidelityfx_upscaler_vk.dll (AMD FSR SDK, FSR 4), ninja.exe
-    recomp/, tools/, data/, installer/, licenses/, THIRD_PARTY_NOTICES.md, astralchain.ini.example
+    recomp/, tools/, data/, installer/, lang/, licenses/, THIRD_PARTY_NOTICES.md, astralchain.ini.example
     recomplauncher.json   what RecompLauncher does with the release (installer/progress.py), prepare.version = VERSION
     VERSION    the repository's VERSION plus the commit, 0.1.0+973c626; the installer's release string
     Astral Chain-Setup.exe  installer/launcher/launcher.c built with llvm/ (-mwindows): starts python/pythonw.exe -m installer.gui
@@ -57,6 +57,7 @@ import build_xlate  # noqa: E402
 import check_content  # noqa: E402
 import ffx_sdk  # noqa: E402
 import fsr4_sdk  # noqa: E402
+import ui_text_catalogs  # noqa: E402
 import xess_sdk  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -442,9 +443,9 @@ def runtime_lib(out, llvm):
     rt = out / 'runtime'
     for cpu, name in (('v3', 'libacrt.a'), ('v2', 'libacrt-v2.a')):
         build = MAIN_ROOT / 'build' / 'release-check' / f'rtlib-{cpu}'
-        run([sys.executable, ROOT / 'tools' / 'build_game.py', '--make-runtime-lib', '--toolchain', llvm, '--cpu', cpu,
-             '--version', version, '--deps', out / 'runtime' / 'deps', '--ninja', out / 'bin' / 'ninja.exe',
-             '--gen', gen, '--out', build],
+        run([sys.executable, ROOT / 'tools' / 'build_game.py', '--make-runtime-lib', '--skip-ui-catalogs',
+             '--toolchain', llvm, '--cpu', cpu, '--version', version, '--deps', out / 'runtime' / 'deps',
+             '--ninja', out / 'bin' / 'ninja.exe', '--gen', gen, '--out', build],
             env=clean_env(llvm / 'bin', out / 'bin'))
         shutil.copy2(build / 'libacrt.a', rt / name)
     for p in runtime_files():
@@ -492,6 +493,7 @@ def build_sources(out, profdata):
     # romfs-patches-xbox/playstation overlays at install time); the release check skips them by directory name.
     copy_tree(ROOT / 'controller-ui', out / 'controller-ui', lambda r: False)
     copy_tree(ROOT / 'installer', out / 'installer', lambda r: '__pycache__' in r or r.startswith('launcher/'))
+    copy_tree(ROOT / 'lang', out / 'lang', lambda r: False)
     shutil.copy2(ROOT / 'astralchain.ini.example', out / 'astralchain.ini.example')
     # RecompLauncher reads it at the top of the unpacked release, or at the AppDir root of the AppImage
     write_manifest(out)
@@ -691,6 +693,9 @@ def main():
     if args.prove:
         prove(out, args.cpu)
         return
+    code = ui_text_catalogs.refresh(ROOT)
+    if code:
+        sys.exit(code)
     check_translator()
     if out.exists():
         shutil.rmtree(out)

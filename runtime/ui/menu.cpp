@@ -285,16 +285,11 @@ static int vk_up(const MenuTarget *t) {
     return 1;
 }
 
-// Roboto Medium (Latin, Cyrillic, dashes and quotes) at 26 px per 1080 lines, with the glyphs of the Japanese, Korean
-// and Chinese language names merged in from a system font when there is one (each language is named in its own script).
-// A catalog row also holds menu text (Simplified Chinese), so every string of the row goes into the builder: the merged
+// Roboto Medium (Latin, Cyrillic, dashes and quotes) at 26 px per 1080 lines, with glyphs merged from a system font for
+// every catalog whose X-Astral-Font-Lang header names one. Every string of the catalog goes into the builder: the merged
 // font must cover the whole menu of that language, not only its name. Made again when the window height changes; the old
 // texture goes after the queue is idle (CreateFontsTexture).
 static const ImWchar kRanges[] = {0x0020, 0x00FF, 0x0400, 0x052F, 0x2010, 0x2027, 0};
-static const struct { const char *lang; UiTextId name; } kCjk[] = {
-    {"ja", UI_MENU_LANGNAME_JA}, {"ko", UI_MENU_LANGNAME_KO}, {"zh-Hans", UI_MENU_LANGNAME_ZH_HANS},
-    {"zh-Hant", UI_MENU_LANGNAME_ZH_HANT},
-};
 
 static uint32_t be32(const uint8_t *p) { return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3]; }
 
@@ -346,7 +341,7 @@ static void add_row_glyphs(void *ctx, const char *text) {
 }
 
 static int fonts_up(float scale) {
-    enum { N = sizeof kCjk / sizeof *kCjk };
+    enum { N = 32 };
     ImFontAtlas *fa = ImGui::GetIO().Fonts;
     fa->Clear();
     ImFontConfig fc;
@@ -354,27 +349,35 @@ static int fonts_up(float scale) {
     fa->AddFontFromMemoryTTF((void *)roboto_ttf, (int)sizeof roboto_ttf, 26.0f * scale, &fc, kRanges);
     uint8_t *data[N] = {};
     ImVector<ImWchar> ranges[N];
-    int merged = 0;
-    for (int i = 0; i < N; i++) {
+    const char *font_langs[N] = {};
+    int merged = 0, tried = 0;
+    for (int i = 0; i < ui_text_lang_count() && tried < N; i++) {
+        const char *lang = ui_text_lang_at(i);
+        const char *font_lang = ui_text_font_lang(lang);
+        if (!font_lang || !*font_lang) continue;
+        int seen = 0;
+        for (int j = 0; j < tried; j++) seen |= !strcmp(font_langs[j], font_lang);
+        if (seen) continue;
+        font_langs[tried++] = font_lang;
         char path[512];
         uint64_t size = 0;
-        if (!plat_font_path(kCjk[i].lang, path, sizeof path) || !(data[i] = plat_file_read(path, &size))) continue;
-        if (!font_usable(data[i], size)) {
+        if (!plat_font_path(font_lang, path, sizeof path) || !(data[merged] = plat_file_read(path, &size))) continue;
+        if (!font_usable(data[merged], size)) {
             rt_log("menu: system font %s left out: the font parser cannot read it (%llu bytes)", path,
                    (unsigned long long)size);
-            free(data[i]);
-            data[i] = NULL;
+            free(data[merged]);
+            data[merged] = NULL;
             continue;
         }
-        merged++;
         ImFontGlyphRangesBuilder b;
-        b.AddText(ui_text_in("en", kCjk[i].name));
-        ui_text_visit(kCjk[i].lang, add_row_glyphs, &b);
-        b.BuildRanges(&ranges[i]);
+        b.AddText(ui_text_lang_name(lang));
+        ui_text_visit(lang, add_row_glyphs, &b);
+        b.BuildRanges(&ranges[merged]);
         ImFontConfig mc;
         mc.MergeMode = true;
         mc.FontDataOwnedByAtlas = false;
-        fa->AddFontFromMemoryTTF(data[i], (int)size, 26.0f * scale, &mc, ranges[i].Data);
+        fa->AddFontFromMemoryTTF(data[merged], (int)size, 26.0f * scale, &mc, ranges[merged].Data);
+        merged++;
     }
     vk_queue_lock();   // the upload submits on the queue and waits for it
     int ok = ImGui_ImplVulkan_CreateFontsTexture();
@@ -382,7 +385,7 @@ static int fonts_up(float scale) {
     fa->ClearInputData();   // the glyphs are in the texture: the font files and the pixels are not needed again
     fa->ClearTexData();
     for (uint8_t *d : data) free(d);
-    rt_log("menu: font atlas at %.1f px, language names from %d of %d system fonts", 26.0f * scale, merged, (int)N);
+    rt_log("menu: font atlas at %.1f px, merged %d of %d system fonts", 26.0f * scale, merged, tried);
     g_font_scale = ok ? scale : 0;
     return ok;
 }
@@ -1124,9 +1127,17 @@ static void tab_controls(float scale) {
 
 static void tab_menu(float scale) {
     opt_begin("##menu", scale);
-    static const UiTextId langs[] = {UI_MENU_MENU_LANG_AUTO, UI_MENU_LANGNAME_EN, UI_MENU_LANGNAME_IT,
-                                     UI_MENU_LANGNAME_RU, UI_MENU_LANGNAME_PT_BR, UI_MENU_LANGNAME_ZH_HANS};
-    opt_choice("AC_MENU_LANG", UI_MENU_MENU_LANG, langs, sizeof langs / sizeof *langs, UI_MENU_MENU_LANG_DESC);
+    enum { MAX_LANGS = 32 };
+    const char *values[MAX_LANGS + 1], *names[MAX_LANGS + 1];
+    values[0] = "";
+    names[0] = menu_text(UI_MENU_MENU_LANG_AUTO);
+    int n = ui_text_lang_count();
+    if (n > MAX_LANGS) n = MAX_LANGS;
+    for (int i = 0; i < n; i++) {
+        values[i + 1] = ui_text_lang_at(i);
+        names[i + 1] = ui_text_lang_name(values[i + 1]);
+    }
+    opt_choice_list("AC_MENU_LANG", UI_MENU_MENU_LANG, values, names, n + 1, UI_MENU_MENU_LANG_DESC);
     opt_end();
 }
 

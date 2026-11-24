@@ -25,7 +25,7 @@ The folder holds:
                amd_fidelityfx_upscaler_vk.dll (tools/fsr4_sdk.py's pins, the Windows release's files) and
                libffx_vk_linux.so, which runs them (runtime/third_party/ffx-vk-linux; OpenSSL's libcrypto and
                SPIRV-Tools inside it)
-    recomp/, tools/, data/, installer/, licenses/, THIRD_PARTY_NOTICES.md, astralchain.ini.example, VERSION
+    recomp/, tools/, data/, installer/, lang/, licenses/, THIRD_PARTY_NOTICES.md, astralchain.ini.example, VERSION
     AppRun, astralchain-setup.desktop, astralchain-setup.png   the AppImage entry: python/bin/python3 -m installer.gui
     recomplauncher.json   at the AppDir root, where RecompLauncher reads it from the AppImage without mounting it
 
@@ -53,6 +53,7 @@ import ffx_sdk  # noqa: E402
 import ffx_vk_linux  # noqa: E402
 import fsr4_sdk  # noqa: E402
 import make_release as mr  # noqa: E402
+import ui_text_catalogs  # noqa: E402
 
 ROOT = mr.ROOT
 MAIN_ROOT = mr.MAIN_ROOT
@@ -374,9 +375,10 @@ def runtime_lib(out, llvm, sysroot):
     for cpu, name in (('v3', 'libacrt.a'), ('v2', 'libacrt-v2.a')):
         build = CHECK / f'rtlib-{cpu}'
         shutil.rmtree(build, ignore_errors=True)
-        run([sys.executable, ROOT / 'tools' / 'build_game.py', '--make-runtime-lib', '--toolchain', llvm,
-             '--sysroot', sysroot, '--cpu', cpu, '--deps', out / 'runtime' / 'deps', '--ninja', out / 'bin' / 'ninja',
-             '--version', version, '--gen', MAIN_ROOT / 'generated' / version, '--out', build])
+        run([sys.executable, ROOT / 'tools' / 'build_game.py', '--make-runtime-lib', '--skip-ui-catalogs',
+             '--toolchain', llvm, '--sysroot', sysroot, '--cpu', cpu, '--deps', out / 'runtime' / 'deps',
+             '--ninja', out / 'bin' / 'ninja', '--version', version, '--gen', MAIN_ROOT / 'generated' / version,
+             '--out', build])
         shutil.copy2(build / 'libacrt.a', rt / name)
     for p in mr.runtime_files():
         (rt / p.relative_to(ROOT / 'runtime')).parent.mkdir(parents=True, exist_ok=True)
@@ -777,6 +779,9 @@ def main():
     if args.prove:
         prove(out, args.cpu)
         return
+    code = ui_text_catalogs.refresh(ROOT)
+    if code:
+        sys.exit(code)
     if out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True)

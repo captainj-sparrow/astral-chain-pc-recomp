@@ -110,6 +110,31 @@ def replace_file(src, dst):
     os.replace(tmp, dst)
 
 
+def catalog_files(layout):
+    return sorted(layout.lang.glob('*.po')) if layout.lang.is_dir() else []
+
+
+def catalogs_current(ctx):
+    dst = ctx.dest / 'lang'
+    for src in catalog_files(ctx.layout):
+        target = dst / src.name
+        if not target.is_file() or file_sha256(target) != file_sha256(src):
+            return False
+    return True
+
+
+def copy_catalogs(ctx):
+    files = catalog_files(ctx.layout)
+    if not files:
+        return
+    dst = ctx.dest / 'lang'
+    dst.mkdir(exist_ok=True)
+    for src in files:
+        target = dst / src.name
+        if not target.is_file() or file_sha256(target) != file_sha256(src):
+            replace_file(src, target)
+
+
 def kill_tree(proc):
     if proc.poll() is not None:
         return
@@ -892,14 +917,14 @@ class Prepare(Step):
         xlate_id = layout.xlate.with_suffix('.id')
         tools = [layout.tools / n for n in ('prepare_shaders.py', 'shader_census.py', 'pack_shader_cache.py')]
         # not the compile key: a rebuild for the mods' code cheats keeps the prepared shaders
-        return fingerprint('prepare-2', ctx.keys['extract'], runtime_key(ctx), layout.xlate, xlate_id,
-                           layout.shader_answers, *tools)
+        return fingerprint('prepare-3', ctx.keys['extract'], runtime_key(ctx), layout.xlate, xlate_id,
+                           layout.shader_answers, layout.lang, *tools)
 
     def current(self, ctx, record):
         dest = ctx.dest
         xlate = dest / ctx.layout.xlate.name
         return ((dest / 'shader-prepared.bin').is_file() and (dest / 'shader-cache' / 'shader-cache.pack').is_file()
-                and xlate.is_file() and file_sha256(xlate) == record.get('xlate_sha256'))
+                and xlate.is_file() and file_sha256(xlate) == record.get('xlate_sha256') and catalogs_current(ctx))
 
     def run(self, ctx):
         layout, rep, dest = ctx.layout, ctx.reporter, ctx.dest
@@ -922,6 +947,7 @@ class Prepare(Step):
                 raise InstallError('prepare.xlate_in_use', path=str(xlate.with_suffix('.id'))) from None
         else:
             remove(xlate.with_suffix('.id'))
+        copy_catalogs(ctx)
 
         skipped = [0]
 

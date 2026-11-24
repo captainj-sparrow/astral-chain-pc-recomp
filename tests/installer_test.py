@@ -107,6 +107,41 @@ class Bed:
 ALL = ['check', 'extract', 'lift', 'compile', 'prepare', 'cleanup']
 
 
+class UiCatalogTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.lang = root / 'lang'
+        self.lang.mkdir()
+        (self.lang / 'pt-BR.po').write_text('msgid ""\nmsgstr "pt-BR"\n', encoding='utf-8')
+        (self.lang / 'xx.po').write_text('msgid ""\nmsgstr "xx"\n', encoding='utf-8')
+        dest = root / 'dest'
+        dest.mkdir()
+        (dest / 'lang').mkdir()
+        (dest / 'lang' / 'user.po').write_text('msgid ""\nmsgstr "user"\n', encoding='utf-8')
+        layout = Layout(root=root, dev=True, release='1.0', python=Path('python'), tools=Path('tools'),
+                        recomp=Path('recomp'), llvm=Path('llvm'), deps=Path('deps'), runtime=Path('rt'),
+                        runtime_lib=Path('lib'), ninja=Path('ninja'), hactool=Path('hactool'), xlate=Path('xlate'),
+                        lang=self.lang)
+        self.ctx = SimpleNamespace(layout=layout, dest=dest)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_prepare_copies_catalogs_and_keeps_player_files(self):
+        self.assertFalse(steps.catalogs_current(self.ctx))
+        steps.copy_catalogs(self.ctx)
+        self.assertTrue(steps.catalogs_current(self.ctx))
+        self.assertEqual((self.ctx.dest / 'lang' / 'user.po').read_text(encoding='utf-8'),
+                         'msgid ""\nmsgstr "user"\n')
+        (self.lang / 'xx.po').write_text('msgid ""\nmsgstr "changed"\n', encoding='utf-8')
+        self.assertFalse(steps.catalogs_current(self.ctx))
+        steps.copy_catalogs(self.ctx)
+        self.assertEqual((self.ctx.dest / 'lang' / 'xx.po').read_text(encoding='utf-8'),
+                         'msgid ""\nmsgstr "changed"\n')
+        self.assertTrue(steps.catalogs_current(self.ctx))
+
+
 class RunnerTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -290,6 +325,10 @@ class IniTest(unittest.TestCase):
         out = ini.set_language(self.EXAMPLE, 'zh-CN')
         self.assertEqual(ini.get_language(out), 'zh-Hans')
         self.assertEqual(ini.get_language(ini.set_language(out, 'zh-TW')), 'zh-Hant')
+
+    def test_plain_portuguese_is_written_as_pt_br(self):
+        self.assertEqual(ini.canonical_language('pt'), 'pt-BR')
+        self.assertEqual(ini.get_language(ini.set_language(self.EXAMPLE, 'pt')), 'pt-BR')
 
     def test_write_keeps_user_lines(self):
         with tempfile.TemporaryDirectory() as d:
@@ -649,11 +688,11 @@ class AutoLanguageTest(unittest.TestCase):
     def test_the_system_language_maps_to_a_language_of_the_game(self):
         from installer.guilogic import game_language_for_langid, game_language_for_locale
         langids = {0x040c: 'fr', 0x0c0c: 'fr-CA', 0x0407: 'de', 0x0410: 'it', 0x0c0a: 'es', 0x080a: 'es-419',
-                   0x0413: 'nl', 0x0416: 'pt-BR', 0x0816: 'pt', 0x0419: 'ru', 0x0411: 'ja', 0x0409: 'en-US',
+                   0x0413: 'nl', 0x0416: 'pt-BR', 0x0816: 'pt-BR', 0x0419: 'ru', 0x0411: 'ja', 0x0409: 'en-US',
                    0x0809: 'en-GB', 0x0804: 'en-US', 0x0412: 'en-US', 0x041f: 'en-US'}
         self.assertEqual({k: game_language_for_langid(k) for k in langids}, langids)
         locales = {'fr_FR.UTF-8': 'fr', 'fr_CA.UTF-8': 'fr-CA', 'de_AT': 'de', 'es_ES.UTF-8': 'es', 'es_MX': 'es-419',
-                   'pt_BR.UTF-8': 'pt-BR', 'pt_PT': 'pt', 'en_GB.UTF-8': 'en-GB', 'en_US.UTF-8': 'en-US',
+                   'pt_BR.UTF-8': 'pt-BR', 'pt_PT': 'pt-BR', 'en_GB.UTF-8': 'en-GB', 'en_US.UTF-8': 'en-US',
                    'ja_JP.eucJP': 'ja', 'zh_CN.UTF-8': 'en-US', 'ko_KR': 'en-US', 'C': 'en-US', '': 'en-US',
                    'ru_RU@euro': 'ru', 'nl-NL': 'nl'}
         self.assertEqual({k: game_language_for_locale(k) for k in locales}, locales)

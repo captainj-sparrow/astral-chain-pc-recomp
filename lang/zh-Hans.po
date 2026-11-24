@@ -1,0 +1,2132 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: astral-chain-pc-recomp\n"
+"Language: zh-Hans\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"X-Astral-Language-Name: 简体中文\n"
+"X-Astral-Font-Lang: zh-Hans\n"
+
+#. English: "Text entry"
+msgid "UI_SWKBD_TITLE"
+msgstr "文字输入"
+
+#. English: "Enter a name"
+msgid "UI_SWKBD_PROMPT"
+msgstr "请输入名字"
+
+#. English: "Horse"
+msgid "UI_SWKBD_DEFAULT_NAME"
+msgstr "马儿"
+
+#. English: "OK"
+msgid "UI_SWKBD_OK"
+msgstr "确定"
+
+#. English: "Cancel"
+msgid "UI_SWKBD_CANCEL"
+msgstr "取消"
+
+#. English: "Controller: A = OK, B = Cancel"
+msgid "UI_SWKBD_PAD_HINT"
+msgstr "手柄：A 确定，B 取消"
+
+#. English: "Settings"
+msgid "UI_MENU_TITLE"
+msgstr "设置"
+
+#. English: "Screen"
+msgid "UI_MENU_TAB_SCREEN"
+msgstr "显示"
+
+#. English: "Game"
+msgid "UI_MENU_TAB_GAME"
+msgstr "游戏"
+
+#. English: "Mods"
+msgid "UI_MENU_TAB_MODS"
+msgstr "模组"
+
+#. English: "Sound"
+msgid "UI_MENU_TAB_SOUND"
+msgstr "声音"
+
+#. English: "Controls"
+msgid "UI_MENU_TAB_CONTROLS"
+msgstr "操作"
+
+#. English: "Menu"
+msgid "UI_MENU_TAB_MENU"
+msgstr "菜单"
+
+#. English: "Advanced"
+msgid "UI_MENU_TAB_ADVANCED"
+msgstr "高级"
+
+#. English: "Continue"
+msgid "UI_MENU_CONTINUE"
+msgstr "继续"
+
+#. English: "Quit game"
+msgid "UI_MENU_QUIT"
+msgstr "退出游戏"
+
+#. English: "On"
+msgid "UI_MENU_ON"
+msgstr "开"
+
+#. English: "Off"
+msgid "UI_MENU_OFF"
+msgstr "关"
+
+#. English: "Automatic"
+msgid "UI_MENU_AUTO"
+msgstr "自动"
+
+#. English: "default"
+msgid "UI_MENU_DEFAULT_MARK"
+msgstr "默认"
+
+#. English: "after restart"
+msgid "UI_MENU_AFTER_RESTART"
+msgstr "重启后生效"
+
+#. English: "set by environment variable"
+msgid "UI_MENU_SET_BY_ENV"
+msgstr "由环境变量设定"
+
+#. English: "could not save settings"
+msgid "UI_MENU_SAVE_FAILED"
+msgstr "无法保存设置"
+
+#. English: "Astral Chain Recomp %s, game %s"
+msgid "UI_MENU_VERSION"
+msgstr "Astral Chain Recomp %s，游戏 %s"
+
+#. English: "Fullscreen"
+msgid "UI_MENU_FULLSCREEN"
+msgstr "全屏"
+
+#. English: "Fills the screen with the game; F11 toggles it."
+msgid "UI_MENU_FULLSCREEN_DESC"
+msgstr "游戏铺满屏幕；按 F11 切换。"
+
+#. English: "Window size"
+msgid "UI_MENU_WINDOW_SIZE"
+msgstr "窗口大小"
+
+#. English: "Size of the game window when not fullscreen."
+msgid "UI_MENU_WINDOW_SIZE_DESC"
+msgstr "非全屏时游戏窗口的大小。"
+
+#. English: "Custom"
+msgid "UI_MENU_WINDOW_SIZE_CUSTOM"
+msgstr "自定义"
+
+#. English: "Presentation"
+msgid "UI_MENU_PRESENT"
+msgstr "呈现模式"
+
+#. English: "How finished frames reach the screen."
+msgid "UI_MENU_PRESENT_DESC"
+msgstr "渲染完成的帧如何显示到屏幕上。"
+
+#. English: "Mailbox"
+msgid "UI_MENU_PRESENT_MAILBOX"
+msgstr "Mailbox"
+
+#. English: "VSync"
+msgid "UI_MENU_PRESENT_VSYNC"
+msgstr "垂直同步"
+
+#. English: "Immediate"
+msgid "UI_MENU_PRESENT_IMMEDIATE"
+msgstr "立即"
+
+#. English: "in use: %s"
+msgid "UI_MENU_PRESENT_IN_USE"
+msgstr "使用中：%s"
+
+#. English: "Low latency"
+msgid "UI_MENU_LOW_LATENCY"
+msgstr "低延迟"
+
+#. English: "Starts each frame as late as it can still be shown on time, so the picture answers the controls sooner. Uses NVIDIA Reflex or AMD Anti-Lag 2 when the driver offers them, the port's own timing otherwise. Boost: with Reflex the GPU also keeps its clocks up; otherwise shorter waits, with a dropped frame now and then."
+msgid "UI_MENU_LOW_LATENCY_DESC"
+msgstr "让每一帧尽可能晚地开始，同时仍能按时显示，使画面更快响应操作。驱动提供时使用 NVIDIA Reflex 或 AMD Anti-Lag 2，否则使用移植版自带的计时。加强：使用 Reflex 时显卡还会保持高频率；其他情况下等待更短，偶尔会丢一帧。"
+
+#. English: "Off"
+msgid "UI_MENU_LOW_LATENCY_OFF"
+msgstr "关"
+
+#. English: "On"
+msgid "UI_MENU_LOW_LATENCY_ON"
+msgstr "开"
+
+#. English: "Boost"
+msgid "UI_MENU_LOW_LATENCY_BOOST"
+msgstr "加强"
+
+#. English: "built-in timing"
+msgid "UI_MENU_LOW_LATENCY_BUILTIN"
+msgstr "内置计时"
+
+#. English: "Graphics card"
+msgid "UI_MENU_GPU"
+msgstr "显卡"
+
+#. English: "The Vulkan device that draws the game."
+msgid "UI_MENU_GPU_DESC"
+msgstr "用于渲染游戏的 Vulkan 设备。"
+
+#. English: "Automatic"
+msgid "UI_MENU_GPU_AUTO"
+msgstr "自动"
+
+#. English: "Performance overlay"
+msgid "UI_MENU_PERF_OVERLAY"
+msgstr "性能浮层"
+
+#. English: "Frame rate in the top right corner. Full adds frame times with a graph, CPU, GPU and memory load, temperatures and the render thread's waits. F10 cycles the modes."
+msgid "UI_MENU_PERF_OVERLAY_DESC"
+msgstr "在右上角显示帧率。“完整”还会显示带图表的帧时间、CPU、GPU 和内存占用、温度，以及渲染线程的等待时间。按 F10 循环切换模式。"
+
+#. English: "Off"
+msgid "UI_MENU_PERF_OFF"
+msgstr "关"
+
+#. English: "FPS"
+msgid "UI_MENU_PERF_FPS"
+msgstr "FPS"
+
+#. English: "Full"
+msgid "UI_MENU_PERF_FULL"
+msgstr "完整"
+
+#. English: "%.0f fps"
+msgid "UI_PERF_LINE_FPS"
+msgstr "%.0f fps"
+
+#. English: "Picture"
+msgid "UI_MENU_GRAPHICS"
+msgstr "画面"
+
+#. English: "Game resolution"
+msgid "UI_MENU_OUTPUT_RES"
+msgstr "游戏分辨率"
+
+#. English: "The size the game draws its picture and interface in. 1280 x 720 is the lightest, for weaker GPUs. Above 1920 x 1080 the game needs more memory (about 240 MB more at 2560 x 1440, 790 MB at 3840 x 2160) and GPU time. Takes effect after a restart. Automatic takes the screen's size: up to 1920 x 1080, and up to 3840 x 2160 while an upscaler runs."
+msgid "UI_MENU_OUTPUT_RES_DESC"
+msgstr "游戏绘制画面和界面的尺寸。1280 × 720 负担最轻，适合较弱的 GPU。高于 1920 × 1080 时，游戏需要更多内存（2560 × 1440 约多 240 MB，3840 × 2160 约多 790 MB）和 GPU 时间。重启后生效。“自动”使用屏幕尺寸：最高 1920 × 1080；运行超分辨率时最高 3840 × 2160。"
+
+#. English: "Scaling to the window"
+msgid "UI_MENU_UPSCALER"
+msgstr "放大到窗口"
+
+#. English: "How the picture is scaled to the window. FSR keeps edges and detail sharper than bilinear, and sharpens the picture even when it already fits the window."
+msgid "UI_MENU_UPSCALER_DESC"
+msgstr "画面缩放到窗口的方式。FSR 比双线性更能保留边缘和细节，即使画面已与窗口同样大小也会锐化。"
+
+#. English: "AMD FSR 1"
+msgid "UI_MENU_UPSCALER_FSR"
+msgstr "AMD FSR 1"
+
+#. English: "Bilinear"
+msgid "UI_MENU_UPSCALER_BILINEAR"
+msgstr "双线性"
+
+#. English: "Field of view"
+msgid "UI_MENU_FOV"
+msgstr "视野"
+
+#. English: "How much of the world the camera shows, in percent of the game's own (50 degrees vertically in play). Cutscenes keep the game's own framing."
+msgid "UI_MENU_FOV_DESC"
+msgstr "镜头能看到多大范围，以游戏自身视野的百分比表示。游戏中垂直视角为 50 度；过场动画保持原有构图。"
+
+#. English: "Draw distance"
+msgid "UI_MENU_DRAW_DISTANCE"
+msgstr "绘制距离"
+
+#. English: "How far away objects keep their detailed model and small objects stay visible, in percent of the game's own. Higher shows less pop-in and draws more. Takes effect on what the game loads after the change, at the next loading screen."
+msgid "UI_MENU_DRAW_DISTANCE_DESC"
+msgstr "物体在多远处仍保持精细模型、小物体在多远处仍然可见，以游戏自身数值的百分比表示。数值越高，物体突然出现的情况越少，绘制量也越大。对更改之后游戏加载的内容生效，即从下一次加载画面开始。"
+
+#. English: "Texture filtering"
+msgid "UI_MENU_ANISO"
+msgstr "纹理过滤"
+
+#. English: "Anisotropic filtering of surface textures: ground, roads and walls seen at a shallow angle stay sharp into the distance instead of blurring. Game: the level the game asks for, as on the Switch. Auto: 16x with 3D render scale 1440p, twice the game's level at 2160p, the game's level otherwise."
+msgid "UI_MENU_ANISO_DESC"
+msgstr "表面纹理的各向异性过滤：以小角度看到的地面、道路和墙壁在远处依然清晰，而不会模糊。游戏：使用游戏请求的级别，与 Switch 上相同。自动：3D 渲染比例为 1440p 时为 16x，2160p 时为游戏级别的两倍，其他情况使用游戏的级别。"
+
+#. English: "Game"
+msgid "UI_MENU_ANISO_GAME"
+msgstr "游戏"
+
+#. English: "Auto"
+msgid "UI_MENU_ANISO_AUTO"
+msgstr "自动"
+
+#. English: "FSR sharpness"
+msgid "UI_MENU_SHARPNESS"
+msgstr "FSR 锐度"
+
+#. English: "Sharpening after FSR scaling; 0 turns it off."
+msgid "UI_MENU_SHARPNESS_DESC"
+msgstr "FSR 缩放后的锐化强度；0 为关闭。"
+
+#. English: "Colour"
+msgid "UI_MENU_COLOR"
+msgstr "色彩"
+
+#. English: "Colour profile"
+msgid "UI_MENU_COLOR_PRESET"
+msgstr "色彩配置"
+
+#. English: "Sets the four values below. Vivid: more contrast and saturation, shadows opened a little (made for OLED screens). Clarity: a little more contrast, saturation and brightness. Moving a value makes the profile Custom. The HUD changes with the picture; this menu does not."
+msgid "UI_MENU_COLOR_PRESET_DESC"
+msgstr "同时设置下面四项。鲜艳：对比度和饱和度更高，暗部略微提亮（为 OLED 屏幕调校）。清晰：对比度、饱和度和亮度都略高。改动任一项后，配置变为自定义。HUD 随画面一起变化，本菜单不随之变化。"
+
+#. English: "Game's own"
+msgid "UI_MENU_COLOR_DEFAULT"
+msgstr "游戏原样"
+
+#. English: "Vivid (OLED)"
+msgid "UI_MENU_COLOR_VIVID"
+msgstr "鲜艳（OLED）"
+
+#. English: "Clarity"
+msgid "UI_MENU_COLOR_CLARITY"
+msgstr "清晰"
+
+#. English: "Custom"
+msgid "UI_MENU_COLOR_CUSTOM"
+msgstr "自定义"
+
+#. English: "Brightness"
+msgid "UI_MENU_COLOR_BRIGHTNESS"
+msgstr "亮度"
+
+#. English: "Added to every colour; 0 leaves it."
+msgid "UI_MENU_COLOR_BRIGHTNESS_DESC"
+msgstr "叠加到每种颜色上；0 表示不调整。"
+
+#. English: "Contrast"
+msgid "UI_MENU_COLOR_CONTRAST"
+msgstr "对比度"
+
+#. English: "Spreads colours away from mid-grey (above 100 %) or towards it; 100 % leaves them."
+msgid "UI_MENU_COLOR_CONTRAST_DESC"
+msgstr "把颜色从中灰向外拉开（高于 100%）或向中灰收拢；100% 表示不调整。"
+
+#. English: "Saturation"
+msgid "UI_MENU_COLOR_SATURATION"
+msgstr "饱和度"
+
+#. English: "Colour strength against grey; 100 % leaves it."
+msgid "UI_MENU_COLOR_SATURATION_DESC"
+msgstr "颜色相对灰色的强度；100% 表示不调整。"
+
+#. English: "Gamma"
+msgid "UI_MENU_COLOR_GAMMA"
+msgstr "伽马"
+
+#. English: "Below 1 brightens dark and middle tones, above 1 darkens them; 1 leaves them."
+msgid "UI_MENU_COLOR_GAMMA_DESC"
+msgstr "小于 1 提亮暗部与中间调，大于 1 压暗；1 表示不调整。"
+
+#. English: "HDR"
+msgid "UI_MENU_HDR_GROUP"
+msgstr "HDR"
+
+#. English: "HDR output"
+msgid "UI_MENU_HDR"
+msgstr "HDR 输出"
+
+#. English: "Bright highlights on an HDR display. Needs HDR turned on in Windows (\"Use HDR\") or in a Wayland compositor with colour management; without it the picture stays SDR. Applies after a restart. The colour profile above is for SDR and is not used in HDR."
+msgid "UI_MENU_HDR_DESC"
+msgstr "在 HDR 显示器上呈现明亮的高光。需要在 Windows 中开启 HDR（“使用 HDR”），或使用带色彩管理的 Wayland 合成器；否则画面保持 SDR。重启后生效。上方的色彩配置用于 SDR，在 HDR 下不使用。"
+
+#. English: "Peak brightness"
+msgid "UI_MENU_HDR_PEAK"
+msgstr "峰值亮度"
+
+#. English: "Your display's peak in nits; the brightest highlights stop there."
+msgid "UI_MENU_HDR_PEAK_DESC"
+msgstr "显示器的峰值亮度（尼特）；最亮的高光止于此。"
+
+#. English: "Game brightness"
+msgid "UI_MENU_HDR_GAME"
+msgstr "游戏亮度"
+
+#. English: "Nits of the picture's white (paper white). 203 is the HDR reference; raise it in a bright room."
+msgid "UI_MENU_HDR_GAME_DESC"
+msgstr "画面白色（纸白）的尼特值。203 为 HDR 参考值；在明亮的房间里可调高。"
+
+#. English: "HUD and menu brightness"
+msgid "UI_MENU_HDR_UI"
+msgstr "HUD 和菜单亮度"
+
+#. English: "Nits of the HUD's and this menu's white."
+msgid "UI_MENU_HDR_UI_DESC"
+msgstr "HUD 和本菜单白色的尼特值。"
+
+#. English: "Highlight hue correction"
+msgid "UI_MENU_HDR_HUE"
+msgstr "高光色调校正"
+
+#. English: "Bright colours such as fire and sparks turn towards white as in the game's own SDR picture, matching the light they cast; 0 keeps them fully saturated."
+msgid "UI_MENU_HDR_HUE_DESC"
+msgstr "火焰、火花等明亮的颜色会像游戏自身的 SDR 画面那样趋向白色，与它们投射的光一致；0 则保持完全饱和。"
+
+#. English: "Shadow resolution"
+msgid "UI_MENU_SHADOW_SCALE"
+msgstr "阴影分辨率"
+
+#. English: "Draws the sun's shadow map this many times larger on each side than the game's 2048x2048: sharper shadow edges and leaf shadows, for more video memory (about 85 to 130 MiB at 2x, 340 to 520 MiB at 4x). Takes effect at the next start."
+msgid "UI_MENU_SHADOW_SCALE_DESC"
+msgstr "将太阳阴影贴图的每条边绘制为游戏 2048x2048 的若干倍：阴影边缘和树叶阴影更清晰，但占用更多显存（2x 约 85–130 MiB，4x 约 340–520 MiB）。下次启动时生效。"
+
+#. English: "Ambient occlusion"
+msgid "UI_MENU_AO"
+msgstr "环境光遮蔽"
+
+#. English: "Darkens creases, corners and the ground under characters and objects, where little of the surrounding light reaches. High + bounce light also adds the light the surfaces on screen send back to each other: a lit wall or floor brightens and tints what faces it, even from far away. Computed on the screen after the world is lit; the game has none of its own. Each level costs more GPU time than the one before; High + bounce light is demanding, so on a weak graphics card prefer High. Takes effect at once."
+msgid "UI_MENU_AO_DESC"
+msgstr "让褶皱、角落以及角色和物体下方的地面变暗，那里接收到的周围光线较少。在光照之后于屏幕空间计算；游戏本身没有此效果。“高 + 间接光照”还会加入屏幕上各表面相互反射的光：被照亮的墙壁或地面会照亮对面的物体并映上自己的颜色，即使相距很远。每提高一级都会占用更多 GPU 时间；“高 + 间接光照”负载较高，显卡较弱时请选择“高”。立即生效。"
+
+#. English: "Off"
+msgid "UI_MENU_AO_OFF"
+msgstr "关"
+
+#. English: "Low"
+msgid "UI_MENU_AO_LOW"
+msgstr "低"
+
+#. English: "High"
+msgid "UI_MENU_AO_HIGH"
+msgstr "高"
+
+#. English: "High + bounce light (demanding)"
+msgid "UI_MENU_AO_GI"
+msgstr "高 + 间接光照（高负载）"
+
+#. English: "Upscaler"
+msgid "UI_MENU_UPSCALING"
+msgstr "超分辨率"
+
+#. English: "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less shimmer, and with a mode below Native more frames per second. NVIDIA DLSS needs an NVIDIA RTX GPU and nvngx_dlss.dll next to astralchain.exe, Intel XeSS a recent GPU and libxess.dll next to astralchain.exe; AMD FSR 3 runs on any GPU, AMD FSR 4 on a Radeon RX 6000 or newer. Automatic takes DLSS where it can run and FSR 3 elsewhere. DLSS, XeSS and FSR 4 chosen here take effect after a restart. The HUD is not touched."
+msgid "UI_MENU_UPSCALING_DESC"
+msgstr "以时间性超分辨率取代游戏的抗锯齿：边缘更平滑、闪烁更少；选择低于“原生”的模式还能提高帧率。NVIDIA DLSS 需要 NVIDIA RTX 显卡，并将 nvngx_dlss.dll 放在 astralchain.exe 旁；Intel XeSS 需要较新的显卡，并将 libxess.dll 放在 astralchain.exe 旁；AMD FSR 3 可在任何显卡上运行，AMD FSR 4 需要 Radeon RX 6000 或更新的显卡。“自动”在可运行时使用 DLSS，否则使用 FSR 3。在此选择的 DLSS、XeSS 和 FSR 4 重启后生效。HUD 不受影响。"
+
+#. English: "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less shimmer, and with a mode below Native more frames per second. AMD FSR 3 runs on any GPU, AMD FSR 4 on a Radeon RX 6000 or newer; Automatic is FSR 3 here (NVIDIA DLSS and Intel XeSS are Windows only). FSR 4 chosen here takes effect after a restart. The HUD is not touched."
+msgid "UI_MENU_UPSCALING_DESC_OTHER"
+msgstr "以时间性超分辨率取代游戏的抗锯齿：边缘更平滑、闪烁更少；选择低于“原生”的模式还能提高帧率。AMD FSR 3 可在任何显卡上运行，AMD FSR 4 需要 Radeon RX 6000 或更新的显卡；此处“自动”即 FSR 3（NVIDIA DLSS 和 Intel XeSS 仅限 Windows）。在此选择的 FSR 4 重启后生效。HUD 不受影响。"
+
+#. English: "Off"
+msgid "UI_MENU_UPSCALING_OFF"
+msgstr "关闭"
+
+#. English: "Automatic"
+msgid "UI_MENU_UPSCALING_AUTO"
+msgstr "自动"
+
+#. English: "not available here"
+msgid "UI_MENU_UPSCALING_UNAVAILABLE"
+msgstr "此处不可用"
+
+#. English: "not available here: %s in use"
+msgid "UI_MENU_UPSCALING_INSTEAD"
+msgstr "此处不可用：使用 %s"
+
+#. English: "%s is missing: %s in use"
+msgid "UI_MENU_UPSCALING_MISSING"
+msgstr "缺少 %s：使用 %s"
+
+#. English: "%s until a restart"
+msgid "UI_MENU_UPSCALING_UNTIL"
+msgstr "重启前使用 %s"
+
+#. English: "Upscaler mode"
+msgid "UI_MENU_UPSCALING_QUALITY"
+msgstr "超分辨率模式"
+
+#. English: "The size the 3D scene is drawn at before the upscaler brings it to the game resolution (shown under the value). Native draws it at full size, the sharpest (DLAA under DLSS). Quality, Balanced, Performance and Ultra performance draw it at about 67, 58, 50 and 33 % for more frames per second; Ultra performance is meant for 3840 x 2160. Takes effect after a restart."
+msgid "UI_MENU_UPSCALING_QUALITY_DESC"
+msgstr "3D 场景在超分辨率放大到游戏分辨率之前的绘制尺寸（显示在数值下方）。“原生”以全尺寸绘制，画面最清晰（DLSS 下即 DLAA）。质量、平衡、性能和超级性能分别以约 67%、58%、50% 和 33% 绘制，以获得更高帧率；超级性能适用于 3840 × 2160。重启后生效。"
+
+#. English: "Native"
+msgid "UI_MENU_UPSCALING_NATIVE"
+msgstr "原生"
+
+#. English: "Quality"
+msgid "UI_MENU_DLSS_QUALITY"
+msgstr "质量"
+
+#. English: "Balanced"
+msgid "UI_MENU_DLSS_BALANCED"
+msgstr "平衡"
+
+#. English: "Performance"
+msgid "UI_MENU_DLSS_PERFORMANCE"
+msgstr "性能"
+
+#. English: "Ultra performance"
+msgid "UI_MENU_UPSCALING_ULTRA"
+msgstr "超级性能"
+
+#. English: "no upscaler"
+msgid "UI_MENU_UPSCALING_MODE_OFF"
+msgstr "未使用超分辨率"
+
+#. English: "Game anti-aliasing"
+msgid "UI_MENU_AA"
+msgstr "游戏抗锯齿"
+
+#. English: "The game's own anti-aliasing, SMAA, for when no upscaler runs. Off leaves the edges jagged."
+msgid "UI_MENU_AA_DESC"
+msgstr "游戏自带的抗锯齿 SMAA，用于未运行超分辨率时。关闭会使边缘出现锯齿。"
+
+#. English: "Off"
+msgid "UI_MENU_AA_OFF"
+msgstr "关闭"
+
+#. English: "the upscaler smooths the edges"
+msgid "UI_MENU_AA_BY_UPSCALER"
+msgstr "边缘由超分辨率平滑"
+
+#. English: "Automatic"
+msgid "UI_MENU_OUTPUT_RES_AUTO"
+msgstr "自动"
+
+#. English: ", %s after restart"
+msgid "UI_MENU_OUTPUT_RES_NEXT"
+msgstr "，重启后为 %s"
+
+#. English: "Frame rate"
+msgid "UI_MENU_FPS_LIMIT"
+msgstr "帧率"
+
+#. English: "60 FPS runs the game's 60 fps patch; 30 FPS switches it off. Read live."
+msgid "UI_MENU_FPS_LIMIT_DESC"
+msgstr "60 FPS 启用游戏的 60 帧补丁；30 FPS 关闭它。即时生效。"
+
+#. English: "30 FPS"
+msgid "UI_MENU_FPS_30"
+msgstr "30 FPS"
+
+#. English: "60 FPS"
+msgid "UI_MENU_FPS_60"
+msgstr "60 FPS"
+
+#. English: "Game speed follows the clock"
+msgid "UI_MENU_REALTIME"
+msgstr "游戏速度跟随时钟"
+
+#. English: "Steps the game by real time, so a slow frame does not slow the game down."
+msgid "UI_MENU_REALTIME_DESC"
+msgstr "按真实时间推进游戏，帧率低时游戏速度也不会变慢。"
+
+#. English: "Cloth on the clock"
+msgid "UI_MENU_CLOTH_REALTIME"
+msgstr "布料跟随时钟"
+
+#. English: "Steps cloth and hair by real time as well."
+msgid "UI_MENU_CLOTH_REALTIME_DESC"
+msgstr "布料和头发也按真实时间推进。"
+
+#. English: "High frame rate fixes"
+msgid "UI_MENU_HIGHFPS_FIX"
+msgstr "高帧率修正"
+
+#. English: "Corrects physics that misbehave above 30 frames per second, and objects that stay see-through or invisible above 60."
+msgid "UI_MENU_HIGHFPS_FIX_DESC"
+msgstr "修正帧率高于 30 时出现异常的物理效果，以及帧率高于 60 时一直半透明或不可见的物体。"
+
+#. English: "Game language"
+msgid "UI_MENU_GAME_LANG"
+msgstr "游戏语言"
+
+#. English: "Language of the game's text and voices."
+msgid "UI_MENU_GAME_LANG_DESC"
+msgstr "游戏文本和语音的语言。"
+
+#. English: "Automatic"
+msgid "UI_MENU_GAME_LANG_AUTO"
+msgstr "自动"
+
+#. English: "Console mode"
+msgid "UI_MENU_OPERATION_MODE"
+msgstr "主机模式"
+
+#. English: "Whether the game thinks it runs docked or handheld."
+msgid "UI_MENU_OPERATION_MODE_DESC"
+msgstr "游戏认为自己处于底座模式还是掌机模式。"
+
+#. English: "Docked"
+msgid "UI_MENU_MODE_DOCKED"
+msgstr "底座模式"
+
+#. English: "Handheld"
+msgid "UI_MENU_MODE_HANDHELD"
+msgstr "掌机模式"
+
+#. English: "Keep running out of focus"
+msgid "UI_MENU_ASSUME_FOCUS"
+msgstr "后台保持运行"
+
+#. English: "On (the default), the game keeps running while you are in another window, and the keyboard stays quiet until the window is in front again. Off, it pauses when its window loses focus, as on the Switch when Home is pressed; a load interrupted that way can stop for good."
+msgid "UI_MENU_ASSUME_FOCUS_DESC"
+msgstr "开启（默认）时，切到其他窗口游戏仍会继续运行，但键盘要等窗口回到前台才会响应。关闭时，窗口失去焦点即暂停，如同在 Switch 上按 Home 键；这样被打断的读取可能会永久卡住。"
+
+#. English: "HUD"
+msgid "UI_MENU_HUD"
+msgstr "HUD"
+
+#. English: "Off, the game's HUD is not drawn during play; the menus stay. F12 toggles it."
+msgid "UI_MENU_HUD_DESC"
+msgstr "关闭时，游玩过程中不绘制游戏的 HUD；菜单仍会显示。按 F12 切换。"
+
+#. English: "Installed mods"
+msgid "UI_MENU_MODS_INSTALLED"
+msgstr "已安装的模组"
+
+#. English: "No mods yet. Unpack a mod into the mods folder, one folder per mod with its romfs folder inside, and restart the game. TKMM can export its merged mods into a folder there too."
+msgid "UI_MENU_MODS_NONE"
+msgstr "还没有模组。把模组解压到 mods 文件夹，每个模组一个文件夹，里面放 romfs 文件夹，然后重启游戏。TKMM 也可以把合并后的模组导出到那里的一个文件夹。"
+
+#. English: "Open mods folder"
+msgid "UI_MENU_MODS_OPEN"
+msgstr "打开模组文件夹"
+
+#. English: "Shows the folder the game loads mods from. It is created if it is missing."
+msgid "UI_MENU_MODS_OPEN_DESC"
+msgstr "显示游戏加载模组的文件夹。不存在时会创建它。"
+
+#. English: "Game files it replaces: %u. New files it adds: %u."
+msgid "UI_MENU_MODS_ROW_DESC"
+msgstr "替换的游戏文件：%u。新增的文件：%u。"
+
+#. English: "%u of its files come from %s, which is higher in the list."
+msgid "UI_MENU_MODS_OVERRIDDEN"
+msgstr "它的 %u 个文件改用列表中更靠上的 %s 的文件。"
+
+#. English: "The top face button or Ctrl+Up moves it up, the left face button or Ctrl+Down moves it down. When two mods change the same file, the higher one wins. Changes apply after a restart."
+msgid "UI_MENU_MODS_MOVE_HINT"
+msgstr "上方按钮或 Ctrl+上 上移，左侧按钮或 Ctrl+下 下移。两个模组修改同一个文件时，以靠上的为准。更改在重启后生效。"
+
+#. English: "This folder has no romfs, exefs or cheats files."
+msgid "UI_MENU_MODS_EMPTY"
+msgstr "此文件夹中没有 romfs、exefs 或 cheats 文件。"
+
+#. English: "This mod brings its own game code (a subsdk plugin or a replaced main). The port cannot load code modules, so the whole mod stays off."
+msgid "UI_MENU_MODS_SUBSDK"
+msgstr "此模组带有自己的游戏代码（subsdk 插件或替换的 main）。移植版无法加载代码模块，因此整个模组保持关闭。"
+
+#. English: "This mod patches the game code (exefs). The game builds the patches in when it starts next (a rebuild of a few minutes); until then the whole mod stays off."
+msgid "UI_MENU_MODS_EXEFS_LATER"
+msgstr "此模组修改游戏代码（exefs）。游戏会在下次启动时把这些补丁构建进去（重新构建需要几分钟）；在此之前整个模组保持关闭。"
+
+#. English: "The folder name contains |, which the mod list uses between names. Rename the folder."
+msgid "UI_MENU_MODS_BAD_NAME"
+msgstr "文件夹名称含有 |，模组列表用它分隔名称。请重命名该文件夹。"
+
+#. English: "This mod patches the game code (exefs) in a way the port cannot apply, so the whole mod stays off. %s"
+msgid "UI_MENU_MODS_EXEFS_UNSUPPORTED"
+msgstr "此模组修改游戏代码（exefs）的方式本移植无法应用，因此整个模组保持关闭。%s"
+
+#. English: "Its code patches (exefs) are made for another game version."
+msgid "UI_MENU_MODS_EXEFS_OTHER"
+msgstr "它的代码补丁（exefs）是为其他游戏版本制作的。"
+
+#. English: "Code patches in use: %d files."
+msgid "UI_MENU_MODS_EXEFS_ON"
+msgstr "正在使用的代码补丁：%d 个文件。"
+
+#. English: "Code patches in use: %d files. They replace the port's own patch %s, which stays off while this mod is on."
+msgid "UI_MENU_MODS_REPLACES_BUILTIN"
+msgstr "正在使用的代码补丁：%d 个文件。它们取代本移植自带的补丁 %s，此模组开启时该补丁保持关闭。"
+
+#. English: "%u of its files are made for another game version and are left out. Look for a version of this mod made for your game version."
+msgid "UI_MENU_MODS_OTHER_VERSION"
+msgstr "它有 %u 个文件是为其他游戏版本制作的，已被跳过。请寻找适用于你的游戏版本的此模组。"
+
+#. English: "not used"
+msgid "UI_MENU_MODS_UNUSED"
+msgstr "未使用"
+
+#. English: "Cheats: %d."
+msgid "UI_MENU_MODS_CHEATS"
+msgstr "金手指：%d 个。"
+
+#. English: "Cheats for this game version are read at start from cheats\\%s in this mod."
+msgid "UI_MENU_MODS_CHEATS_FILE"
+msgstr "此游戏版本的金手指在启动时从此模组的 cheats\\%s 读取。"
+
+#. English: "Volume"
+msgid "UI_MENU_VOLUME"
+msgstr "音量"
+
+#. English: "Master volume of the game."
+msgid "UI_MENU_VOLUME_DESC"
+msgstr "游戏的主音量。"
+
+#. English: "Audio output"
+msgid "UI_MENU_AUDIO_OUTPUT"
+msgstr "音频输出"
+
+#. English: "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output. Elsewhere the 5.1 mix is folded down to stereo."
+msgid "UI_MENU_AUDIO_OUTPUT_DESC"
+msgstr "游戏混音的声道。5.1 会把中置（人声）和环绕声输出到各自的声道，需要 5.1 或 7.1 输出。否则 5.1 混音会缩混为立体声。"
+
+#. English: "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output, or a headset with spatial sound on: Windows Sonic for Headphones, Dolby Atmos for Headphones or DTS Headphone:X, in the device's properties in the Windows sound settings. Elsewhere the 5.1 mix is folded down to stereo."
+msgid "UI_MENU_AUDIO_OUTPUT_DESC_WIN"
+msgstr "游戏混音的声道。5.1 会把中置（人声）和环绕声输出到各自的声道，需要 5.1 或 7.1 输出，或开启了空间音效的耳机：Windows Sonic for Headphones、Dolby Atmos for Headphones 或 DTS Headphone:X，在 Windows 声音设置的设备属性中开启。否则 5.1 混音会缩混为立体声。"
+
+#. English: "Stereo"
+msgid "UI_MENU_AUDIO_STEREO"
+msgstr "立体声"
+
+#. English: "5.1"
+msgid "UI_MENU_AUDIO_51"
+msgstr "5.1"
+
+#. English: "%s: Windows spatial sound is on and turns 5.1 into surround on headphones."
+msgid "UI_MENU_AUDIO_TAKES_51_SPATIAL"
+msgstr "%s：已开启 Windows 空间音效，会把 5.1 转为耳机环绕声。"
+
+#. English: "%s: %d channels, 5.1 goes out as it is."
+msgid "UI_MENU_AUDIO_TAKES_51"
+msgstr "%s：%d 个声道，5.1 原样输出。"
+
+#. English: "%s: %d channels, no 5.1: a 5.1 mix is folded down to stereo."
+msgid "UI_MENU_AUDIO_FOLDS_51"
+msgstr "%s：%d 个声道，不支持 5.1：5.1 混音会缩混为立体声。"
+
+#. English: "With headphones, turn on Windows Sonic for Headphones (or Dolby Atmos, DTS Headphone:X) in the device's properties."
+msgid "UI_MENU_AUDIO_SONIC_HINT"
+msgstr "使用耳机时，请在设备属性中开启 Windows Sonic for Headphones（或 Dolby Atmos、DTS Headphone:X）。"
+
+#. English: "The game sends %d channels."
+msgid "UI_MENU_AUDIO_SENDING"
+msgstr "游戏正在输出 %d 个声道。"
+
+#. English: "No audio output found."
+msgid "UI_MENU_AUDIO_NO_DEVICE"
+msgstr "未找到音频输出。"
+
+#. English: "Choose 5.1 above and restart the game to set each speaker."
+msgid "UI_MENU_AUDIO_MIX_HINT"
+msgstr "在上方选择 5.1 并重启游戏后，即可调整每个扬声器。"
+
+#. English: "Speakers and headphones"
+msgid "UI_MENU_AUDIO_GROUP_OUTPUT"
+msgstr "扬声器与耳机"
+
+#. English: "Speaker mix"
+msgid "UI_MENU_AUDIO_GROUP_MIX"
+msgstr "扬声器混音"
+
+#. English: "Closes the game and starts it again with the new audio output. Progress since your last save is lost."
+msgid "UI_MENU_AUDIO_RESTART_DESC"
+msgstr "关闭游戏并以新的音频输出重新启动。上次存档之后的进度将会丢失。"
+
+#. English: "Test speakers"
+msgid "UI_MENU_AUDIO_TEST"
+msgstr "测试扬声器"
+
+#. English: "Plays a noise on each speaker in turn, as an A/V receiver does: check that every speaker works and sits where the diagram shows it. The game's sound is muted meanwhile. Press again to stop."
+msgid "UI_MENU_AUDIO_TEST_DESC"
+msgstr "像功放一样依次在每个扬声器播放噪声：确认每个扬声器都能发声，且位置与示意图一致。测试期间游戏声音会静音。再按一次停止。"
+
+#. English: "Start"
+msgid "UI_MENU_AUDIO_TEST_START"
+msgstr "开始"
+
+#. English: "press to stop"
+msgid "UI_MENU_AUDIO_TEST_STOP"
+msgstr "按下停止"
+
+#. English: "Mix"
+msgid "UI_MENU_AUDIO_PRESET"
+msgstr "混音"
+
+#. English: "Ready-made mixes. Balanced: the recommended mix. Clear voices: the dialogue in front, softer surrounds. Immersive: stronger surrounds, and the bass to the subwoofer. Moving any speaker below makes it Custom."
+msgid "UI_MENU_AUDIO_PRESET_DESC"
+msgstr "预设混音。均衡：推荐的混音。清晰人声：对白在前，环绕声更柔和。沉浸：环绕声更强，低音送往低音炮。调整下方任意扬声器会变为自定义。"
+
+#. English: "Balanced"
+msgid "UI_MENU_AUDIO_PRESET_BALANCED"
+msgstr "均衡"
+
+#. English: "Clear voices"
+msgid "UI_MENU_AUDIO_PRESET_VOICES"
+msgstr "清晰人声"
+
+#. English: "Immersive"
+msgid "UI_MENU_AUDIO_PRESET_IMMERSIVE"
+msgstr "沉浸"
+
+#. English: "Custom"
+msgid "UI_MENU_AUDIO_PRESET_CUSTOM"
+msgstr "自定义"
+
+#. English: "Front left"
+msgid "UI_MENU_AUDIO_FRONT_LEFT"
+msgstr "左前"
+
+#. English: "Front right"
+msgid "UI_MENU_AUDIO_FRONT_RIGHT"
+msgstr "右前"
+
+#. English: "Centre (voices)"
+msgid "UI_MENU_AUDIO_CENTER"
+msgstr "中置（人声）"
+
+#. English: "Surround left"
+msgid "UI_MENU_AUDIO_SURROUND_LEFT"
+msgstr "左环绕"
+
+#. English: "Surround right"
+msgid "UI_MENU_AUDIO_SURROUND_RIGHT"
+msgstr "右环绕"
+
+#. English: "Subwoofer"
+msgid "UI_MENU_AUDIO_SUBWOOFER"
+msgstr "低音炮"
+
+#. English: "Level of this front speaker. The fronts carry mostly the music, which the game mixes in stereo, and the sounds in front of you; lowering them lowers the music most. For the music alone, use the game's own music volume."
+msgid "UI_MENU_AUDIO_FRONT_DESC"
+msgstr "此前置扬声器的音量。前置主要承载游戏以立体声混音的音乐，以及你前方的声音；调低它们主要会降低音乐。若只想调整音乐，请使用游戏自身的音乐音量。"
+
+#. English: "Level of the centre speaker, where the voices and the interface sounds are. Lower it if voices or beeps are too loud; -2 dB keeps them near their level in stereo."
+msgid "UI_MENU_AUDIO_CENTER_DESC"
+msgstr "中置扬声器的音量，人声和界面音效都在这里。人声或提示音太响时可调低；-2 dB 可使其接近立体声下的音量。"
+
+#. English: "Level of this surround speaker. The surrounds carry the ambience, the reverb and the sounds beside and behind you."
+msgid "UI_MENU_AUDIO_SURROUND_DESC"
+msgstr "此环绕扬声器的音量。环绕承载环境声、混响以及你身旁和身后的声音。"
+
+#. English: "Level of the subwoofer. The game sends it nothing of its own: turn on Bass to subwoofer to give it the low end of the other speakers."
+msgid "UI_MENU_AUDIO_SUBWOOFER_DESC"
+msgstr "低音炮的音量。游戏本身不向它发送声音：开启“低音送往低音炮”即可把其他扬声器的低频送给它。"
+
+#. English: "Bass to subwoofer"
+msgid "UI_MENU_AUDIO_BASS"
+msgstr "低音送往低音炮"
+
+#. English: "Sends the bass (below 120 Hz) of the other five speakers to the subwoofer. Leave it off with headphones, or when your receiver already manages the bass."
+msgid "UI_MENU_AUDIO_BASS_DESC"
+msgstr "把其他五个扬声器的低音（120 Hz 以下）送往低音炮。使用耳机，或功放已自行管理低音时请保持关闭。"
+
+#. English: "Left"
+msgid "UI_MENU_SPK_LEFT"
+msgstr "左"
+
+#. English: "Right"
+msgid "UI_MENU_SPK_RIGHT"
+msgstr "右"
+
+#. English: "Centre"
+msgid "UI_MENU_SPK_CENTER"
+msgstr "中置"
+
+#. English: "Surround L"
+msgid "UI_MENU_SPK_SURROUND_LEFT"
+msgstr "左环绕"
+
+#. English: "Surround R"
+msgid "UI_MENU_SPK_SURROUND_RIGHT"
+msgstr "右环绕"
+
+#. English: "Sub"
+msgid "UI_MENU_SPK_SUB"
+msgstr "低音炮"
+
+#. English: "You"
+msgid "UI_MENU_SPK_YOU"
+msgstr "你"
+
+#. English: "Motion controls"
+msgid "UI_MENU_MOTION"
+msgstr "体感操作"
+
+#. English: "Aiming with the controller's gyroscope."
+msgid "UI_MENU_MOTION_DESC"
+msgstr "用手柄的陀螺仪瞄准。"
+
+#. English: "Vibration strength"
+msgid "UI_MENU_RUMBLE_STRENGTH"
+msgstr "振动强度"
+
+#. English: "How strong the controller vibrates."
+msgid "UI_MENU_RUMBLE_STRENGTH_DESC"
+msgstr "手柄振动的强弱。"
+
+#. English: "Vibration curve"
+msgid "UI_MENU_RUMBLE_CURVE"
+msgstr "振动曲线"
+
+#. English: "Lower values make weak vibration stronger."
+msgid "UI_MENU_RUMBLE_CURVE_DESC"
+msgstr "数值越低，弱振动越强。"
+
+#. English: "Trigger vibration (Xbox)"
+msgid "UI_MENU_RUMBLE_TRIGGERS"
+msgstr "扳机振动（Xbox）"
+
+#. English: "Vibrates the triggers of an Xbox controller too."
+msgid "UI_MENU_RUMBLE_TRIGGERS_DESC"
+msgstr "Xbox 手柄的扳机也会振动。"
+
+#. English: "Button layout"
+msgid "UI_MENU_PAD_LAYOUT"
+msgstr "按键布局"
+
+#. English: "Which button is A. Nintendo: the right one, as on a Switch. Xbox: the bottom one, as labelled on an Xbox controller. PlayStation: the bottom one as labelled (cross) and the rest by position, to match the PlayStation button mod. Automatic picks Nintendo for controllers with Nintendo labels, PlayStation for PlayStation controllers and Xbox for the others. Which controller the game's prompts show is set under Button prompts."
+msgid "UI_MENU_PAD_LAYOUT_DESC"
+msgstr "哪个按键是 A。Nintendo：右侧按键，与 Switch 相同。Xbox：下方按键，与 Xbox 手柄上的标注一致。PlayStation：下方按键按标注（叉键），其余按键按位置，以匹配 PlayStation 按键模组。自动：带 Nintendo 标注的手柄使用 Nintendo 布局，PlayStation 手柄使用 PlayStation 布局，其他手柄使用 Xbox 布局。游戏图标显示哪个手柄见“按键提示”。"
+
+#. English: "Automatic"
+msgid "UI_MENU_PAD_LAYOUT_AUTO"
+msgstr "自动"
+
+#. English: "Nintendo (A right)"
+msgid "UI_MENU_PAD_LAYOUT_NINTENDO"
+msgstr "Nintendo（A 在右）"
+
+#. English: "Xbox (A bottom)"
+msgid "UI_MENU_PAD_LAYOUT_XBOX"
+msgstr "Xbox（A 在下）"
+
+#. English: "PlayStation (A bottom)"
+msgid "UI_MENU_PAD_LAYOUT_PLAYSTATION"
+msgstr "PlayStation（A 在下）"
+
+#. English: "in use: %s"
+msgid "UI_MENU_PAD_LAYOUT_IN_USE"
+msgstr "使用中：%s"
+
+#. English: "Button prompts"
+msgid "UI_MENU_PROMPTS"
+msgstr "按键提示"
+
+#. English: "Which controller's buttons the game's prompts show. Automatic follows the controller in use (the Xbox or PlayStation mod when built, else Nintendo). Nintendo: the game's own. Xbox and PlayStation: button mods drawn for one layout each (a loaded mod forces its layout: Xbox for the Xbox mod, PlayStation for the PlayStation mod). The game reads its prompts at start, so they change after a restart."
+msgid "UI_MENU_PROMPTS_DESC"
+msgstr "游戏的按键提示显示哪种手柄的按键。自动跟随所用手柄（已构建时用 Xbox 或 PlayStation 模组，否则用 Nintendo）。Nintendo：游戏原有的提示。Xbox 和 PlayStation：按键模组，每种按一种布局绘制（已加载的模组会强制其布局：Xbox 模组用 Xbox 布局，PlayStation 模组用 PlayStation 布局）。游戏在启动时读取按键提示，因此重启后才会改变。"
+
+#. English: "Automatic"
+msgid "UI_MENU_PROMPTS_AUTO"
+msgstr "自动"
+
+#. English: "Nintendo"
+msgid "UI_MENU_PROMPTS_NINTENDO"
+msgstr "Nintendo"
+
+#. English: "Xbox"
+msgid "UI_MENU_PROMPTS_XBOX"
+msgstr "Xbox"
+
+#. English: "PlayStation"
+msgid "UI_MENU_PROMPTS_PLAYSTATION"
+msgstr "PlayStation"
+
+#. English: "prompt files missing: run the setup again"
+msgid "UI_MENU_PROMPTS_MISSING"
+msgstr "缺少按键提示文件：请重新运行安装程序"
+
+#. English: "prompt files damaged: run the setup again"
+msgid "UI_MENU_PROMPTS_FAILED"
+msgstr "按键提示文件已损坏：请重新运行安装程序"
+
+#. English: "prompts change after restart"
+msgid "UI_MENU_PROMPTS_RESTART"
+msgstr "按键提示重启后生效"
+
+#. English: "off at a game resolution not 16:9"
+msgid "UI_MENU_PROMPTS_OFF_SHAPE"
+msgstr "游戏分辨率不是 16:9 时关闭"
+
+#. English: "off: a RomFS mod replaces their files"
+msgid "UI_MENU_PROMPTS_OFF_MODS"
+msgstr "已关闭：RomFS 模组替换了它们的文件"
+
+#. English: "off while AC_ROMFS_PATCHES is set"
+msgid "UI_MENU_PROMPTS_OFF_PATCHES"
+msgstr "设置了 AC_ROMFS_PATCHES 时关闭"
+
+#. English: "Restart now"
+msgid "UI_MENU_RESTART"
+msgstr "立即重启"
+
+#. English: "Closes the game and starts it again with the new prompts. Progress since your last save is lost."
+msgid "UI_MENU_RESTART_DESC"
+msgstr "关闭游戏并以新的按键提示重新启动。上次存档之后的进度将会丢失。"
+
+#. English: "Restart the game now? Progress since your last save is lost."
+msgid "UI_MENU_RESTART_CONFIRM"
+msgstr "现在重启游戏？上次存档之后的进度将会丢失。"
+
+#. English: "Restart"
+msgid "UI_MENU_RESTART_YES"
+msgstr "重启"
+
+#. English: "The game is saving: Restart is possible in a moment."
+msgid "UI_MENU_RESTART_SAVING"
+msgstr "游戏正在存档：稍后即可重启。"
+
+#. English: "Left stick dead zone"
+msgid "UI_MENU_LSTICK_DEADZONE"
+msgstr "左摇杆死区"
+
+#. English: "Right stick dead zone"
+msgid "UI_MENU_RSTICK_DEADZONE"
+msgstr "右摇杆死区"
+
+#. English: "How far a gamepad stick moves before the game sees it. Raise it if the character or the camera moves on its own: let go of the stick, read \"stick now\" and set the dead zone a few percent above it."
+msgid "UI_MENU_STICK_DEADZONE_DESC"
+msgstr "手柄摇杆要推动多远游戏才会响应。如果角色或视角会自己移动，请调高此值：松开摇杆，查看“当前摇杆”，把死区设得比它高几个百分点。"
+
+#. English: "stick now: %.0f %%"
+msgid "UI_MENU_STICK_DEADZONE_NOW"
+msgstr "当前摇杆：%.0f %%"
+
+#. English: "Stick camera speed"
+msgid "UI_MENU_STICK_SENS"
+msgstr "摇杆镜头速度"
+
+#. English: "Multiplies the game's own right-stick camera speed, top speed included, at each of the game's five camera sensitivities. The mouse keeps its own setting."
+msgid "UI_MENU_STICK_SENS_DESC"
+msgstr "在游戏的五档镜头灵敏度下，按倍数调整右摇杆的镜头转动速度（包括最高速度）。鼠标使用自己的设置。"
+
+#. English: "Mouse camera sensitivity"
+msgid "UI_MENU_MOUSE_SENS"
+msgstr "鼠标视角灵敏度"
+
+#. English: "How fast the mouse turns the camera."
+msgid "UI_MENU_MOUSE_SENS_DESC"
+msgstr "鼠标转动视角的速度。"
+
+#. English: "Walk key"
+msgid "UI_MENU_WALK_KEY"
+msgstr "步行键"
+
+#. English: "Hold it to tilt the keyboard's sticks part of the way, so the keyboard walks instead of runs. The walk scale sets how far. A controller and the mouse are not affected."
+msgid "UI_MENU_WALK_KEY_DESC"
+msgstr "按住时键盘模拟的摇杆只推到一部分，使键盘操作走路而不是奔跑。推动幅度由步行幅度决定。手柄和鼠标不受影响。"
+
+#. English: "also %s"
+msgid "UI_MENU_WALK_KEY_TAKEN"
+msgstr "同时为 %s"
+
+#. English: "Walk scale"
+msgid "UI_MENU_WALK_SCALE"
+msgstr "步行幅度"
+
+#. English: "The tilt the keyboard's sticks get while the walk key is held. Half is a walk, the full tilt a run."
+msgid "UI_MENU_WALK_SCALE_DESC"
+msgstr "按住步行键时键盘摇杆的推动幅度。一半为走路，推满为奔跑。"
+
+#. English: "Select a cell and press A or Enter, then the key, mouse button or controller button. Delete or X clears a cell. A key in use moves here; a controller button swaps with the one it replaces."
+msgid "UI_BINDS_HELP"
+msgstr "选中一个格子后按 A 或 Enter，再按键、鼠标键或手柄按键。Delete 或 X 清除格子。已占用的按键会移到这里；手柄按键与它替换的那个对调。"
+
+#. English: "Key 1"
+msgid "UI_BINDS_COL_KEY1"
+msgstr "按键 1"
+
+#. English: "Key 2"
+msgid "UI_BINDS_COL_KEY2"
+msgstr "按键 2"
+
+#. English: "Controller"
+msgid "UI_BINDS_COL_PAD"
+msgstr "手柄"
+
+#. English: "Buttons"
+msgid "UI_BINDS_GROUP_BUTTONS"
+msgstr "按键"
+
+#. English: "Movement"
+msgid "UI_BINDS_GROUP_MOVE"
+msgstr "移动"
+
+#. English: "Camera"
+msgid "UI_BINDS_GROUP_CAMERA"
+msgstr "视角"
+
+#. English: "Press a key or mouse button for %s"
+msgid "UI_BINDS_PRESS_KEY"
+msgstr "请为“%s”按下一个键或鼠标键"
+
+#. English: "Press a controller button for %s"
+msgid "UI_BINDS_PRESS_PAD"
+msgstr "请为“%s”按下一个手柄按键"
+
+#. English: "Esc cancels, or wait %d s"
+msgid "UI_BINDS_CANCEL_HINT"
+msgstr "Esc 取消，或等待 %d 秒"
+
+#. English: "%s was taken from %s"
+msgid "UI_BINDS_TAKEN"
+msgstr "%s 已从 %s 移走"
+
+#. English: "%s swapped with %s"
+msgid "UI_BINDS_SWAPPED"
+msgstr "%s 已与 %s 对调"
+
+#. English: "Reset all buttons"
+msgid "UI_BINDS_RESET"
+msgstr "重置所有按键"
+
+#. English: "Back to the default keys and controller buttons. The button layout above applies again: remapped controller buttons stay where you put them until this reset."
+msgid "UI_BINDS_RESET_DESC"
+msgstr "恢复默认的键盘和手柄按键。上方的按键布局会再次生效：重映射过的手柄按键会一直保留到此次重置。"
+
+#. English: "A"
+msgid "UI_BIND_A"
+msgstr "A"
+
+#. English: "B"
+msgid "UI_BIND_B"
+msgstr "B"
+
+#. English: "X"
+msgid "UI_BIND_X"
+msgstr "X"
+
+#. English: "Y"
+msgid "UI_BIND_Y"
+msgstr "Y"
+
+#. English: "Left stick click"
+msgid "UI_BIND_LCLICK"
+msgstr "左摇杆按下"
+
+#. English: "Right stick click"
+msgid "UI_BIND_RCLICK"
+msgstr "右摇杆按下"
+
+#. English: "L"
+msgid "UI_BIND_L"
+msgstr "L"
+
+#. English: "R"
+msgid "UI_BIND_R"
+msgstr "R"
+
+#. English: "ZL"
+msgid "UI_BIND_ZL"
+msgstr "ZL"
+
+#. English: "ZR"
+msgid "UI_BIND_ZR"
+msgstr "ZR"
+
+#. English: "Plus"
+msgid "UI_BIND_PLUS"
+msgstr "+ 键"
+
+#. English: "Minus"
+msgid "UI_BIND_MINUS"
+msgstr "- 键"
+
+#. English: "D-pad left"
+msgid "UI_BIND_LEFT"
+msgstr "十字键左"
+
+#. English: "D-pad up"
+msgid "UI_BIND_UP"
+msgstr "十字键上"
+
+#. English: "D-pad right"
+msgid "UI_BIND_RIGHT"
+msgstr "十字键右"
+
+#. English: "D-pad down"
+msgid "UI_BIND_DOWN"
+msgstr "十字键下"
+
+#. English: "Move left"
+msgid "UI_BIND_LSTICK_LEFT"
+msgstr "向左移动"
+
+#. English: "Move forward"
+msgid "UI_BIND_LSTICK_UP"
+msgstr "向前移动"
+
+#. English: "Move right"
+msgid "UI_BIND_LSTICK_RIGHT"
+msgstr "向右移动"
+
+#. English: "Move back"
+msgid "UI_BIND_LSTICK_DOWN"
+msgstr "向后移动"
+
+#. English: "Camera left"
+msgid "UI_BIND_RSTICK_LEFT"
+msgstr "视角左转"
+
+#. English: "Camera up"
+msgid "UI_BIND_RSTICK_UP"
+msgstr "视角上抬"
+
+#. English: "Camera right"
+msgid "UI_BIND_RSTICK_RIGHT"
+msgstr "视角右转"
+
+#. English: "Camera down"
+msgid "UI_BIND_RSTICK_DOWN"
+msgstr "视角下压"
+
+#. English: "Interact, pick up, talk."
+msgid "UI_BIND_DESC_A"
+msgstr "互动、拾取、对话。"
+
+#. English: "Run, cancel, go back."
+msgid "UI_BIND_DESC_B"
+msgstr "奔跑、取消、返回。"
+
+#. English: "Jump."
+msgid "UI_BIND_DESC_X"
+msgstr "跳跃。"
+
+#. English: "Attack."
+msgid "UI_BIND_DESC_Y"
+msgstr "攻击。"
+
+#. English: "Crouch."
+msgid "UI_BIND_DESC_LCLICK"
+msgstr "蹲下。"
+
+#. English: "First-person view."
+msgid "UI_BIND_DESC_RCLICK"
+msgstr "第一人称视角。"
+
+#. English: "Abilities."
+msgid "UI_BIND_DESC_L"
+msgstr "能力。"
+
+#. English: "Throw a weapon."
+msgid "UI_BIND_DESC_R"
+msgstr "投掷武器。"
+
+#. English: "Shield, lock on."
+msgid "UI_BIND_DESC_ZL"
+msgstr "举盾、锁定。"
+
+#. English: "Bow."
+msgid "UI_BIND_DESC_ZR"
+msgstr "弓箭。"
+
+#. English: "Menu, inventory."
+msgid "UI_BIND_DESC_PLUS"
+msgstr "菜单、背包。"
+
+#. English: "Map."
+msgid "UI_BIND_DESC_MINUS"
+msgstr "地图。"
+
+#. English: "Quick-select."
+msgid "UI_BIND_DESC_DPAD"
+msgstr "快捷选择。"
+
+#. English: "Moves Link like the left stick. The controller's left stick always works too."
+msgid "UI_BIND_DESC_MOVE"
+msgstr "像左摇杆一样移动林克。手柄的左摇杆始终可用。"
+
+#. English: "Turns the camera like the right stick. The mouse and the controller's right stick always work too."
+msgid "UI_BIND_DESC_CAMERA"
+msgstr "像右摇杆一样转动视角。鼠标和手柄的右摇杆始终可用。"
+
+#. English: "Space"
+msgid "UI_KEY_SPACE"
+msgstr "空格"
+
+#. English: "Tab"
+msgid "UI_KEY_TAB"
+msgstr "Tab"
+
+#. English: "Left Shift"
+msgid "UI_KEY_LSHIFT"
+msgstr "左 Shift"
+
+#. English: "Left Ctrl"
+msgid "UI_KEY_LCTRL"
+msgstr "左 Ctrl"
+
+#. English: "Up arrow"
+msgid "UI_KEY_UP"
+msgstr "上方向键"
+
+#. English: "Down arrow"
+msgid "UI_KEY_DOWN"
+msgstr "下方向键"
+
+#. English: "Left arrow"
+msgid "UI_KEY_LEFT"
+msgstr "左方向键"
+
+#. English: "Right arrow"
+msgid "UI_KEY_RIGHT"
+msgstr "右方向键"
+
+#. English: "Left mouse"
+msgid "UI_KEY_MOUSE_L"
+msgstr "鼠标左键"
+
+#. English: "Right mouse"
+msgid "UI_KEY_MOUSE_R"
+msgstr "鼠标右键"
+
+#. English: "Middle mouse"
+msgid "UI_KEY_MOUSE_M"
+msgstr "鼠标中键"
+
+#. English: "Mouse 4"
+msgid "UI_KEY_MOUSE_X1"
+msgstr "鼠标侧键 4"
+
+#. English: "Mouse 5"
+msgid "UI_KEY_MOUSE_X2"
+msgstr "鼠标侧键 5"
+
+#. English: "Enter"
+msgid "UI_KEY_ENTER"
+msgstr "回车"
+
+#. English: "Backspace"
+msgid "UI_KEY_BACKSPACE"
+msgstr "退格"
+
+#. English: "Right Shift"
+msgid "UI_KEY_RSHIFT"
+msgstr "右 Shift"
+
+#. English: "Right Ctrl"
+msgid "UI_KEY_RCTRL"
+msgstr "右 Ctrl"
+
+#. English: "Alt"
+msgid "UI_KEY_LALT"
+msgstr "Alt"
+
+#. English: "Caps Lock"
+msgid "UI_KEY_CAPSLOCK"
+msgstr "Caps Lock"
+
+#. English: "Insert"
+msgid "UI_KEY_INSERT"
+msgstr "Insert"
+
+#. English: "Delete"
+msgid "UI_KEY_DELETE"
+msgstr "Delete"
+
+#. English: "Home"
+msgid "UI_KEY_HOME"
+msgstr "Home"
+
+#. English: "End"
+msgid "UI_KEY_END"
+msgstr "End"
+
+#. English: "Page Up"
+msgid "UI_KEY_PAGEUP"
+msgstr "Page Up"
+
+#. English: "Page Down"
+msgid "UI_KEY_PAGEDOWN"
+msgstr "Page Down"
+
+#. English: "Num %s"
+msgid "UI_KEY_NUM_FMT"
+msgstr "小键盘 %s"
+
+#. English: "Bottom button"
+msgid "UI_PAD_SOUTH"
+msgstr "下方按键"
+
+#. English: "Right button"
+msgid "UI_PAD_EAST"
+msgstr "右侧按键"
+
+#. English: "Left button"
+msgid "UI_PAD_WEST"
+msgstr "左侧按键"
+
+#. English: "Top button"
+msgid "UI_PAD_NORTH"
+msgstr "上方按键"
+
+#. English: "Left stick"
+msgid "UI_PAD_LSTICK"
+msgstr "左摇杆"
+
+#. English: "Right stick"
+msgid "UI_PAD_RSTICK"
+msgstr "右摇杆"
+
+#. English: "Left bumper"
+msgid "UI_PAD_L"
+msgstr "左肩键"
+
+#. English: "Right bumper"
+msgid "UI_PAD_R"
+msgstr "右肩键"
+
+#. English: "Start"
+msgid "UI_PAD_START"
+msgstr "Start"
+
+#. English: "Back"
+msgid "UI_PAD_BACK"
+msgstr "Back"
+
+#. English: "D-pad left"
+msgid "UI_PAD_DPAD_LEFT"
+msgstr "十字键左"
+
+#. English: "D-pad up"
+msgid "UI_PAD_DPAD_UP"
+msgstr "十字键上"
+
+#. English: "D-pad right"
+msgid "UI_PAD_DPAD_RIGHT"
+msgstr "十字键右"
+
+#. English: "D-pad down"
+msgid "UI_PAD_DPAD_DOWN"
+msgstr "十字键下"
+
+#. English: "Left trigger"
+msgid "UI_PAD_ZL"
+msgstr "左扳机"
+
+#. English: "Right trigger"
+msgid "UI_PAD_ZR"
+msgstr "右扳机"
+
+#. English: "Left back button"
+msgid "UI_PAD_LPADDLE1"
+msgstr "左背键"
+
+#. English: "Right back button"
+msgid "UI_PAD_RPADDLE1"
+msgstr "右背键"
+
+#. English: "Left back button 2"
+msgid "UI_PAD_LPADDLE2"
+msgstr "左背键 2"
+
+#. English: "Right back button 2"
+msgid "UI_PAD_RPADDLE2"
+msgstr "右背键 2"
+
+#. English: "Cross"
+msgid "UI_PAD_CROSS"
+msgstr "叉键"
+
+#. English: "Circle"
+msgid "UI_PAD_CIRCLE"
+msgstr "圆圈键"
+
+#. English: "Square"
+msgid "UI_PAD_SQUARE"
+msgstr "方块键"
+
+#. English: "Triangle"
+msgid "UI_PAD_TRIANGLE"
+msgstr "三角键"
+
+#. English: "Menu language"
+msgid "UI_MENU_MENU_LANG"
+msgstr "菜单语言"
+
+#. English: "Language of this menu and the overlay."
+msgid "UI_MENU_MENU_LANG_DESC"
+msgstr "本菜单和性能浮层的语言。"
+
+#. English: "Automatic (from Windows)"
+msgid "UI_MENU_MENU_LANG_AUTO"
+msgstr "自动（跟随 Windows）"
+
+#. English: "English"
+msgid "UI_MENU_LANGNAME_EN"
+msgstr "English"
+
+#. English: "日本語"
+msgid "UI_MENU_LANGNAME_JA"
+msgstr "日本語"
+
+#. English: "Français"
+msgid "UI_MENU_LANGNAME_FR"
+msgstr "Français"
+
+#. English: "Deutsch"
+msgid "UI_MENU_LANGNAME_DE"
+msgstr "Deutsch"
+
+#. English: "Italiano"
+msgid "UI_MENU_LANGNAME_IT"
+msgstr "Italiano"
+
+#. English: "Español"
+msgid "UI_MENU_LANGNAME_ES"
+msgstr "Español"
+
+#. English: "Nederlands"
+msgid "UI_MENU_LANGNAME_NL"
+msgstr "Nederlands"
+
+#. English: "Русский"
+msgid "UI_MENU_LANGNAME_RU"
+msgstr "Русский"
+
+#. English: "简体中文"
+msgid "UI_MENU_LANGNAME_ZH_HANS"
+msgstr "简体中文"
+
+#. English: "繁體中文"
+msgid "UI_MENU_LANGNAME_ZH_HANT"
+msgstr "繁體中文"
+
+#. English: "한국어"
+msgid "UI_MENU_LANGNAME_KO"
+msgstr "한국어"
+
+#. English: "Português (Brasil)"
+msgid "UI_MENU_LANGNAME_PT_BR"
+msgstr "Português (Brasil)"
+
+#. English: "These settings are for testing and troubleshooting. Change them only when you know why."
+msgid "UI_MENU_ADV_WARNING"
+msgstr "这些设置用于测试和排查问题，请在了解原因后再修改。"
+
+#. English: "Scheduling"
+msgid "UI_MENU_GROUP_SCHED"
+msgstr "调度"
+
+#. English: "Shaders and pipelines"
+msgid "UI_MENU_GROUP_SHADERS"
+msgstr "着色器和管线"
+
+#. English: "Textures and memory"
+msgid "UI_MENU_GROUP_TEXMEM"
+msgstr "纹理和内存"
+
+#. English: "Render fixes"
+msgid "UI_MENU_GROUP_FIXES"
+msgstr "渲染修正"
+
+#. English: "Vulkan"
+msgid "UI_MENU_GROUP_VULKAN"
+msgstr "Vulkan"
+
+#. English: "Diagnostics"
+msgid "UI_MENU_GROUP_DIAG"
+msgstr "诊断"
+
+#. English: "Virtual core preemption"
+msgid "UI_MENU_ASYNC_PREEMPT"
+msgstr "虚拟核心抢占"
+
+#. English: "Lets a game thread interrupt another one on the same virtual core."
+msgid "UI_MENU_ASYNC_PREEMPT_DESC"
+msgstr "允许同一虚拟核心上的一个游戏线程打断另一个。"
+
+#. English: "Off"
+msgid "UI_MENU_PREEMPT_OFF"
+msgstr "关"
+
+#. English: "On"
+msgid "UI_MENU_PREEMPT_ON"
+msgstr "开"
+
+#. English: "Inheritance only"
+msgid "UI_MENU_PREEMPT_INHERIT"
+msgstr "仅继承"
+
+#. English: "GPU frame prep on its own thread"
+msgid "UI_MENU_REPLAY_ASYNC"
+msgstr "GPU 帧准备独立线程"
+
+#. English: "Prepares frames for the GPU on a separate thread instead of the game thread. Adds up to one frame of latency."
+msgid "UI_MENU_REPLAY_ASYNC_DESC"
+msgstr "在单独的线程而不是游戏线程上为 GPU 准备帧。最多增加一帧延迟。"
+
+#. English: "1 ms Windows timer"
+msgid "UI_MENU_TIMER_1MS"
+msgstr "1 ms Windows 计时器"
+
+#. English: "Raises the system timer resolution to 1 ms for steadier frame pacing."
+msgid "UI_MENU_TIMER_1MS_DESC"
+msgstr "将系统计时器精度提高到 1 ms，使帧间隔更平稳。"
+
+#. English: "Waiting draw handling"
+msgid "UI_MENU_PIPE_WAIT"
+msgstr "等待中绘制的处理"
+
+#. English: "Default keeps the current scheduling with a reserved worker for waiting draws; Old (draw) uses the previous scheduling."
+msgid "UI_MENU_PIPE_WAIT_DESC"
+msgstr "默认保留当前调度，并为等待中的绘制预留一个工作线程；旧版（绘制）沿用先前的调度。"
+
+#. English: "Default"
+msgid "UI_MENU_PIPE_WAIT_DEFAULT"
+msgstr "默认"
+
+#. English: "Old (draw)"
+msgid "UI_MENU_PIPE_WAIT_DRAW"
+msgstr "旧版（绘制）"
+
+#. English: "Draws skipped while a pipeline builds"
+msgid "UI_MENU_PIPE_SKIP"
+msgstr "构建管线时跳过的绘制"
+
+#. English: "Which draws are dropped instead of waiting for their pipeline."
+msgid "UI_MENU_PIPE_SKIP_DESC"
+msgstr "哪些绘制会被直接丢弃，而不是等待其管线构建完成。"
+
+#. English: "Strict"
+msgid "UI_MENU_PIPE_SKIP_STRICT"
+msgstr "严格"
+
+#. English: "Any"
+msgid "UI_MENU_PIPE_SKIP_ANY"
+msgstr "任意"
+
+#. English: "Fullscreen passes"
+msgid "UI_MENU_PIPE_SKIP_FULLSCREEN"
+msgstr "全屏通道"
+
+#. English: "Stage library prebuild"
+msgid "UI_MENU_LIB_PREBUILD"
+msgstr "阶段库预构建"
+
+#. English: "Builds shader stage libraries ahead of time in the background."
+msgid "UI_MENU_LIB_PREBUILD_DESC"
+msgstr "在后台提前构建着色器阶段库。"
+
+#. English: "Stage library prebuild threads"
+msgid "UI_MENU_LIB_PREBUILD_THREADS"
+msgstr "阶段库预构建线程数"
+
+#. English: "Threads used for the prebuild; Automatic picks a number from your CPU."
+msgid "UI_MENU_LIB_PREBUILD_THREADS_DESC"
+msgstr "预构建使用的线程数；自动会根据你的 CPU 选择。"
+
+#. English: "Pipeline prebuild"
+msgid "UI_MENU_PIPE_PREBUILD"
+msgstr "管线预构建"
+
+#. English: "Builds known pipelines ahead of time."
+msgid "UI_MENU_PIPE_PREBUILD_DESC"
+msgstr "提前构建已知的管线。"
+
+#. English: "Translator prewarm"
+msgid "UI_MENU_PREWARM_XLATE"
+msgstr "着色器转译预热"
+
+#. English: "Threads that translate known shaders at start; Automatic takes half the CPU threads, at most 16."
+msgid "UI_MENU_PREWARM_XLATE_DESC"
+msgstr "启动时转译已知着色器的线程数；自动取 CPU 线程数的一半，最多 16。"
+
+#. English: "Graphics pipeline library"
+msgid "UI_MENU_GPL"
+msgstr "图形管线库"
+
+#. English: "Uses the Vulkan pipeline library extension; turn off if your driver misbehaves with it."
+msgid "UI_MENU_GPL_DESC"
+msgstr "使用 Vulkan 管线库扩展；驱动对此有问题时请关闭。"
+
+#. English: "ASTC texture decoding"
+msgid "UI_MENU_ASTC"
+msgstr "ASTC 纹理解码"
+
+#. English: "Where compressed ASTC textures are decoded."
+msgid "UI_MENU_ASTC_DESC"
+msgstr "压缩的 ASTC 纹理在哪里解码。"
+
+#. English: "Automatic"
+msgid "UI_MENU_ASTC_AUTO"
+msgstr "自动"
+
+#. English: "GPU shader"
+msgid "UI_MENU_ASTC_GPU"
+msgstr "GPU 着色器"
+
+#. English: "Native"
+msgid "UI_MENU_ASTC_NATIVE"
+msgstr "原生"
+
+#. English: "CPU"
+msgid "UI_MENU_ASTC_CPU"
+msgstr "CPU"
+
+#. English: "GPU memory mode"
+msgid "UI_MENU_MEMORY"
+msgstr "GPU 内存模式"
+
+#. English: "How game memory is shared with the GPU."
+msgid "UI_MENU_MEMORY_DESC"
+msgstr "游戏内存如何与 GPU 共享。"
+
+#. English: "Automatic"
+msgid "UI_MENU_MEMORY_AUTO"
+msgstr "自动"
+
+#. English: "Import"
+msgid "UI_MENU_MEMORY_IMPORT"
+msgstr "导入"
+
+#. English: "Mirror"
+msgid "UI_MENU_MEMORY_MIRROR"
+msgstr "镜像"
+
+#. English: "Verify"
+msgid "UI_MENU_MEMORY_VERIFY"
+msgstr "校验"
+
+#. English: "Texture aliasing"
+msgid "UI_MENU_TEX_ALIAS"
+msgstr "纹理别名"
+
+#. English: "A new texture created over a live texture's memory starts with that content instead of empty."
+msgid "UI_MENU_TEX_ALIAS_DESC"
+msgstr "在仍在使用的纹理内存上新建纹理时，新纹理沿用原有内容，而不是从空白开始。"
+
+#. English: "Texture memory limit"
+msgid "UI_MENU_TEX_VRAM_PRESSURE"
+msgstr "纹理显存上限"
+
+#. English: "Percent of video memory above which textures the game released are dropped (they come back from storage when used again). 0 keeps them."
+msgid "UI_MENU_TEX_VRAM_PRESSURE_DESC"
+msgstr "显存占用超过这个百分比后，游戏已释放的纹理会被丢弃，再次用到时从存储重新加载。0 表示不丢弃。"
+
+#. English: "Compress ASTC to BC"
+msgid "UI_MENU_ASTC_BC"
+msgstr "ASTC 压缩为 BC"
+
+#. English: "With the GPU decoder: re-encodes decoded ASTC textures to BC1 when the alpha scan proves them opaque, BC3 otherwise — a quarter to an eighth of the video memory. For GPUs with 4 GB or less; textures look slightly blockier."
+msgid "UI_MENU_ASTC_BC_DESC"
+msgstr "配合 GPU 解码器使用：不透明的 ASTC 纹理重新编码为 BC1，其余编码为 BC3，显存占用为原来的八分之一到四分之一。适用于 4 GB 及以下的显卡；纹理会出现轻微色块。"
+
+#. English: "LOD guard"
+msgid "UI_MENU_LOD_GUARD"
+msgstr "LOD 保护"
+
+#. English: "Prevents objects flashing in the wrong place or a flat far field for a frame, by waiting for the game to finish rewriting level-of-detail data before the GPU reads it."
+msgid "UI_MENU_LOD_GUARD_DESC"
+msgstr "等待游戏改写完细节层次数据后再让 GPU 读取，避免物体错位闪现，或远景有一帧变平。"
+
+#. English: "Constant buffer fix"
+msgid "UI_MENU_FIX_C0"
+msgstr "常量缓冲区修正"
+
+#. English: "Fills the driver-reserved constant bank c0 (storage sizes, dispatch size, point size, base instance) instead of reading zeros."
+msgid "UI_MENU_FIX_C0_DESC"
+msgstr "填充驱动保留的常量组 c0（存储缓冲区大小、派发大小、点大小、基础实例），而不是读取零值。"
+
+#. English: "Zero new GPU memory"
+msgid "UI_MENU_FIX_ZERO"
+msgstr "清零新的 GPU 内存"
+
+#. English: "New GPU memory pools start zero-filled, as Switch memory does."
+msgid "UI_MENU_FIX_ZERO_DESC"
+msgstr "新的 GPU 内存池初始内容为零，与 Switch 内存一致。"
+
+#. English: "Skip repeated binds"
+msgid "UI_MENU_BIND_SKIP"
+msgstr "跳过重复绑定"
+
+#. English: "Optimisation: skips bindings that did not change."
+msgid "UI_MENU_BIND_SKIP_DESC"
+msgstr "优化：跳过没有变化的绑定。"
+
+#. English: "Shader memo"
+msgid "UI_MENU_SHADER_MEMO"
+msgstr "着色器查找缓存"
+
+#. English: "Optimisation: remembers shader lookups."
+msgid "UI_MENU_SHADER_MEMO_DESC"
+msgstr "优化：记住着色器的查找结果。"
+
+#. English: "Pipeline memo"
+msgid "UI_MENU_PIPE_MEMO"
+msgstr "管线缓存"
+
+#. English: "Optimisation: reuses the previous draw's pipeline when its state repeats."
+msgid "UI_MENU_PIPE_MEMO_DESC"
+msgstr "优化：状态重复时复用上一次绘制的管线。"
+
+#. English: "Texture binding memo"
+msgid "UI_MENU_TEX_MEMO"
+msgstr "纹理绑定缓存"
+
+#. English: "Optimisation: remembers texture descriptors between draws."
+msgid "UI_MENU_TEX_MEMO_DESC"
+msgstr "优化：在多次绘制之间记住纹理描述符。"
+
+#. English: "Descriptor templates"
+msgid "UI_MENU_DESC_TEMPLATE"
+msgstr "描述符模板"
+
+#. English: "Optimisation: updates descriptors in bulk."
+msgid "UI_MENU_DESC_TEMPLATE_DESC"
+msgstr "优化：批量更新描述符。"
+
+#. English: "Skip repeated push constants"
+msgid "UI_MENU_PUSH_SKIP"
+msgstr "跳过重复推送常量"
+
+#. English: "Optimisation: skips push constants that did not change."
+msgid "UI_MENU_PUSH_SKIP_DESC"
+msgstr "优化：跳过没有变化的推送常量。"
+
+#. English: "Early GPU submission"
+msgid "UI_MENU_SPLIT_DRAWS"
+msgstr "提前提交 GPU 工作"
+
+#. English: "Submits GPU work in parts every N draws between passes so the GPU starts earlier; 0 turns it off."
+msgid "UI_MENU_SPLIT_DRAWS_DESC"
+msgstr "在渲染通道之间每隔 N 次绘制分批提交 GPU 工作，让 GPU 更早开始；0 为关闭。"
+
+#. English: "Validation layer"
+msgid "UI_MENU_VK_VALIDATION"
+msgstr "验证层"
+
+#. English: "Checks every Vulkan call and slows the game down a lot."
+msgid "UI_MENU_VK_VALIDATION_DESC"
+msgstr "检查每一次 Vulkan 调用，会大幅拖慢游戏。"
+
+#. English: "The validation layer is not installed."
+msgid "UI_MENU_VK_VALIDATION_MISSING"
+msgstr "未安装验证层。"
+
+#. English: "Dynamic vertex state"
+msgid "UI_MENU_VK_DYN_VERTEX"
+msgstr "动态顶点状态"
+
+#. English: "Forces dynamic vertex input on or off; the default depends on the GPU."
+msgid "UI_MENU_VK_DYN_VERTEX_DESC"
+msgstr "强制开关动态顶点输入；默认值取决于显卡。"
+
+#. English: "Dynamic alpha to coverage"
+msgid "UI_MENU_VK_DYN_A2C"
+msgstr "动态 Alpha 覆盖"
+
+#. English: "Forces dynamic alpha to coverage on or off. Default: off on AMD's driver for RDNA 2 and older, which draws characters black with it, on elsewhere."
+msgid "UI_MENU_VK_DYN_A2C_DESC"
+msgstr "强制开关动态 Alpha 覆盖。默认：AMD RDNA 2 及更早的驱动上为关闭，开启会导致人物变黑；其他显卡上为开启。"
+
+#. English: "Pin subgroup size"
+msgid "UI_MENU_VK_SUBGROUP_PIN"
+msgstr "固定子群大小"
+
+#. English: "Fixes the shader subgroup size."
+msgid "UI_MENU_VK_SUBGROUP_PIN_DESC"
+msgstr "固定着色器的子群大小。"
+
+#. English: "Performance log"
+msgid "UI_MENU_TRACE"
+msgstr "性能日志"
+
+#. English: "Writes frame timings to a file."
+msgid "UI_MENU_TRACE_DESC"
+msgstr "把每帧耗时写入文件。"
+
+#. English: "Flight recorder"
+msgid "UI_MENU_FLIGHT"
+msgstr "飞行记录仪"
+
+#. English: "Keeps a short history and saves it when a frame freezes."
+msgid "UI_MENU_FLIGHT_DESC"
+msgstr "保留一小段历史记录，在画面卡住时保存。"
+
+#. English: "Freeze threshold (ms)"
+msgid "UI_MENU_FLIGHT_SPIKE_MS"
+msgstr "卡顿阈值（ms）"
+
+#. English: "Frame time that counts as a freeze."
+msgid "UI_MENU_FLIGHT_SPIKE_MS_DESC"
+msgstr "算作卡顿的帧时间。"
+
+#. English: "Input recording"
+msgid "UI_MENU_INPUT_RECORD"
+msgstr "输入录制"
+
+#. English: "Writes your inputs to a file for bug reports."
+msgid "UI_MENU_INPUT_RECORD_DESC"
+msgstr "把你的输入写入文件，用于反馈问题。"
+
+#. English: "Open log folder"
+msgid "UI_MENU_OPEN_LOG"
+msgstr "打开日志文件夹"
+
+#. English: "Shows the folder with the log files."
+msgid "UI_MENU_OPEN_LOG_DESC"
+msgstr "显示存放日志文件的文件夹。"
+
+#. English: "Copy system info"
+msgid "UI_MENU_COPY_INFO"
+msgstr "复制系统信息"
+
+#. English: "Copies GPU, driver, CPU, RAM and changed settings to the clipboard."
+msgid "UI_MENU_COPY_INFO_DESC"
+msgstr "把显卡、驱动、CPU、内存和改动过的设置复制到剪贴板。"
+
+#. English: "Copied"
+msgid "UI_MENU_COPY_INFO_DONE"
+msgstr "已复制"
+
+#. English: "did not work"
+msgid "UI_MENU_ACTION_FAILED"
+msgstr "操作失败"
+
+#. English: "Reset all settings to defaults"
+msgid "UI_MENU_RESET"
+msgstr "将所有设置恢复为默认值"
+
+#. English: "Applies to every tab."
+msgid "UI_MENU_RESET_DESC"
+msgstr "对所有标签页生效。"
+
+#. English: "Reset every setting to its default?"
+msgid "UI_MENU_RESET_CONFIRM"
+msgstr "要将所有设置恢复为默认值吗？"
+
+#. English: "Reset"
+msgid "UI_MENU_RESET_YES"
+msgstr "重置"
+
+#. English: "Cancel"
+msgid "UI_MENU_RESET_NO"
+msgstr "取消"
+
+#. English: "%.0f FPS"
+msgid "UI_MENU_OV_FPS"
+msgstr "%.0f FPS"
+
+#. English: "%.1f ms"
+msgid "UI_MENU_OV_FRAME_MS"
+msgstr "%.1f ms"
+
+#. English: "game %.0f%%"
+msgid "UI_MENU_OV_GAME_PCT"
+msgstr "游戏 %.0f%%"
+
+#. English: "max %.1f ms"
+msgid "UI_MENU_OV_MAX_MS"
+msgstr "最长 %.1f ms"
+
+#. English: "GPU"
+msgid "UI_MENU_OV_GPU"
+msgstr "GPU"
+
+#. English: "CPU"
+msgid "UI_MENU_OV_CPU"
+msgstr "CPU"
+
+#. English: "RAM"
+msgid "UI_MENU_OV_RAM"
+msgstr "内存"
+
+#. English: "VRAM"
+msgid "UI_MENU_OV_VRAM"
+msgstr "显存"
+
+#. English: "Temperature"
+msgid "UI_MENU_OV_TEMP"
+msgstr "温度"
+
+#. English: "Power"
+msgid "UI_MENU_OV_POWER"
+msgstr "功耗"
+
+#. English: "Clock"
+msgid "UI_MENU_OV_CLOCK"
+msgstr "频率"
+
+#. English: "-"
+msgid "UI_MENU_OV_NONE"
+msgstr "-"
+
+#. English: "GPU frame prep"
+msgid "UI_MENU_OV_REPLAY"
+msgstr "GPU 帧准备"
+
+#. English: "GPU busy per frame"
+msgid "UI_MENU_OV_GPU_TIME"
+msgstr "每帧 GPU 忙碌时间"
+
+#. English: "Pipeline waits"
+msgid "UI_MENU_OV_PIPE_WAIT"
+msgstr "管线等待"
+
+#. English: "Shader waits"
+msgid "UI_MENU_OV_SHADER_WAIT"
+msgstr "着色器等待"
+
+#. English: "Texture uploads"
+msgid "UI_MENU_OV_TEX_UPLOADS"
+msgstr "纹理上传"
+
+#. English: "%.0f%%"
+msgid "UI_MENU_OV_FMT_PCT"
+msgstr "%.0f%%"
+
+#. English: "%.0f °C"
+msgid "UI_MENU_OV_FMT_TEMP"
+msgstr "%.0f °C"
+
+#. English: "%.0f W"
+msgid "UI_MENU_OV_FMT_POWER"
+msgstr "%.0f W"
+
+#. English: "%.0f MHz"
+msgid "UI_MENU_OV_FMT_MHZ"
+msgstr "%.0f MHz"
+
+#. English: "%.1f GB"
+msgid "UI_MENU_OV_FMT_GB"
+msgstr "%.1f GB"
+
+#. English: "/ %.1f GB"
+msgid "UI_MENU_OV_FMT_GB_OF"
+msgstr "/ %.1f GB"
+
+#. English: "game %.1f GB"
+msgid "UI_MENU_OV_GAME_GB"
+msgstr "游戏 %.1f GB"
+
+#. English: "%.2f ms"
+msgid "UI_MENU_OV_FMT_MS"
+msgstr "%.2f ms"
+
+#. English: "%.1f per frame"
+msgid "UI_MENU_OV_PER_FRAME"
+msgstr "每帧 %.1f"
+
+#. English: "Window"
+msgid "UI_MENU_OV_WINDOW"
+msgstr "窗口"
+
+#. English: "Game image"
+msgid "UI_MENU_OV_OUTPUT"
+msgstr "游戏画面"
+
+#. English: "3D scene"
+msgid "UI_MENU_OV_SCENE"
+msgstr "3D 场景"
+
+#. English: "Scaling"
+msgid "UI_MENU_OV_SCALING"
+msgstr "缩放"
+
+#. English: "Frame limit"
+msgid "UI_MENU_OV_LIMIT"
+msgstr "帧率上限"
+
+#. English: "Presentation"
+msgid "UI_MENU_OV_PRESENT"
+msgstr "呈现模式"
+
+#. English: "Texture compression"
+msgid "UI_MENU_OV_TEX"
+msgstr "纹理压缩"
+
+#. English: "OS"
+msgid "UI_MENU_OV_OS"
+msgstr "操作系统"
+
+#. English: "%ux%u"
+msgid "UI_MENU_OV_FMT_SIZE"
+msgstr "%ux%u"
+
+#. English: "%ux%u, %.0f%%"
+msgid "UI_MENU_OV_FMT_SCENE"
+msgstr "%ux%u，%.0f%%"
+
+#. English: "AMD FSR 1, sharpness %d%%"
+msgid "UI_MENU_OV_FMT_FSR"
+msgstr "AMD FSR 1，锐度 %d%%"
+
+#. English: "area average, sharpness %d%%"
+msgid "UI_MENU_OV_FMT_AREA"
+msgstr "面积平均，锐度 %d%%"
+
+#. English: "RCAS before the HUD, sharpness %d%%"
+msgid "UI_MENU_OV_FMT_PRESHARP"
+msgstr "在 HUD 之前 RCAS，锐度 %d%%"
+
+#. English: "none (1:1)"
+msgid "UI_MENU_OV_SCALE_NONE"
+msgstr "无（1:1）"
+
+#. English: "bilinear"
+msgid "UI_MENU_OV_SCALE_BILINEAR"
+msgstr "双线性"
+
+#. English: "Cheats"
+msgid "UI_MENU_TAB_CHEATS"
+msgstr "金手指"
+
+#. English: "No cheats for this game version. A mod's cheats are an Atmosphere cheat file in its cheats folder, named after the game's build: mods\\<mod>\\cheats\\%s. Restart the game to read them. For cheats that change the game's code, the game rebuilds itself at start (a few minutes)."
+msgid "UI_MENU_CHEATS_NONE"
+msgstr "此游戏版本没有金手指。模组的金手指是它的 cheats 文件夹中以游戏构建命名的 Atmosphere 金手指文件：mods\\<模组>\\cheats\\%s。重启游戏后才会读取。对于修改游戏代码的金手指，游戏会在启动时自行重新构建（几分钟）。"
+
+#. English: "%s: %d cheats"
+msgid "UI_MENU_CHEATS_MOD"
+msgstr "%s：%d 个金手指"
+
+#. English: "Rebuild the game now"
+msgid "UI_MENU_CHEATS_REBUILD"
+msgstr "立即重新构建游戏"
+
+#. English: "Some cheats change the game's code and are not built into it: they are new or edited, or their last rebuild failed or was cancelled. Closes the game; the setup builds them in (a few minutes) and starts the game again. Progress since your last save is lost."
+msgid "UI_MENU_CHEATS_REBUILD_DESC"
+msgstr "有些金手指会修改游戏代码，但尚未构建进游戏：它们是新增或修改的，或上次重新构建失败或被取消。将关闭游戏；安装程序会把它们构建进去（几分钟）并重新启动游戏。上次存档之后的进度会丢失。"
+
+#. English: "Changes the game's code. Switches at once."
+msgid "UI_MENU_CHEAT_CODE_DESC"
+msgstr "修改游戏代码。立即开关。"
+
+#. English: "Changes the game's code while you hold %s. Switches at once."
+msgid "UI_MENU_CHEAT_KEY_DESC"
+msgstr "按住 %s 时修改游戏代码。立即开关。"
+
+#. English: "Writes the game's memory every frame while it is on."
+msgid "UI_MENU_CHEAT_DATA_DESC"
+msgstr "开启时每帧写入游戏内存。"
+
+#. English: "always on"
+msgid "UI_MENU_CHEAT_MASTER"
+msgstr "始终开启"
+
+#. English: "The file's master code: it is always on."
+msgid "UI_MENU_CHEAT_MASTER_DESC"
+msgstr "文件的主代码：始终开启。"
+
+#. English: "not needed"
+msgid "UI_MENU_CHEAT_RESTORE"
+msgstr "无需使用"
+
+#. English: "It only writes the game's own code back. Switching a cheat off already does that."
+msgid "UI_MENU_CHEAT_RESTORE_DESC"
+msgstr "它只会写回游戏原本的代码。关闭金手指时已经会这样做。"
+
+#. English: "after the rebuild"
+msgid "UI_MENU_CHEAT_REBUILD"
+msgstr "重新构建后"
+
+#. English: "This cheat changes the game's code and is new or edited since the game was built. The game builds it in when it starts next (a few minutes), or use Rebuild the game now."
+msgid "UI_MENU_CHEAT_REBUILD_DESC"
+msgstr "此金手指修改游戏代码，并且是在游戏构建后新增或修改的。游戏会在下次启动时把它构建进去（几分钟），也可以使用“立即重新构建游戏”。"
+
+#. English: "not supported"
+msgid "UI_MENU_CHEAT_UNSUPPORTED"
+msgstr "不支持"
+
+#. English: "This cheat cannot be used with this version of the game:"
+msgid "UI_MENU_CHEAT_UNSUPPORTED_DESC"
+msgstr "此金手指不能用于此游戏版本："
+
