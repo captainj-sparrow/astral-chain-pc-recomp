@@ -143,12 +143,13 @@ MacNativeGames cannot run on x86-64 as is: its CPU path executes ARM64 code nati
   built: the pieced frames on the host, which would need a host stream per guest stream.
 - Settings and menu: every key with its default is in one table (`cfg.c`), read from `astralchain.ini` and `AC_*`
   variables and written back when the in-game menu changes it. The menu and the performance overlay are Dear ImGui,
-  drawn into the swapchain image (`runtime/ui/`). Their text comes from `lang/*.mo` catalogs, keyed by the stable ids in
-  `ui_text.h` and loaded at startup (`ui_text.c`); English is built in as the final fallback, so no `en.mo` is shipped,
-  and `pt` uses the `pt-BR` catalog. A new compiled language needs no rebuild. `tools/ui_text_catalogs.py` generates the
-  `.po` catalogs and `messages.pot` from the previous compiled rows, checks their ids, metadata, formats and lengths,
-  and compiles deterministic `.mo` files the runtime reads; each entry carries the English source in a gettext extracted
-  comment. `build_game.py` and the release builders run it automatically. Fonts named by a catalog's
+  drawn into the swapchain image (`runtime/ui/`). Their text comes from `lang/*.mo` catalogs compiled from entries whose
+  `msgctxt` is the stable id in `ui_text.h` and whose `msgid` is the English source. English is built in as the final
+  fallback, so no `en.mo` is shipped, and `pt` uses the `pt-BR` catalog. A new compiled language needs no rebuild.
+  `tools/ui_text_catalogs.py` checks the `lang/*.po` sources against `messages.pot` generated from the compiled English,
+  validates contexts, English sources, metadata, formats and lengths, and compiles deterministic `.mo` files the runtime
+  reads. The `.mo` files are local build outputs. `build_game.py` and the release builders run it automatically. Fonts
+  named by a catalog's
   `X-Astral-Font-Lang` header come from a system font (`plat_font_path`) merged into the font atlas.
 - OS calls the host makes go through `runtime/platform/` (`platform.h`, `win32.c`), so a Linux or macOS host adds one file instead of touching the rest. The split is not finished: `tools/check_platform.py` lists the Win32 uses left in the other files.
 

@@ -1,5 +1,5 @@
-// Text shown by the host (ui_text.h), loaded from lang/*.mo into rows keyed by stable UiTextId. A missing entry falls
-// back to the built-in English row.
+// Text shown by the host (ui_text.h), loaded from compiled lang/*.mo catalogs whose PO entries use msgctxt for the
+// stable id and msgid for the English source. A missing entry falls back to the built-in English row.
 #include <ctype.h>
 #include <stdatomic.h>
 #include <stdlib.h>
@@ -499,9 +499,14 @@ static Row rows[MAX_ROWS];
 static int row_count;
 static int initialized;
 
-static int id_for_key(const char *key) {
-    for (int i = 0; i < (int)UI_TEXT_COUNT; i++)
-        if (keys[i] && !strcmp(keys[i], key)) return i;
+static int id_for_mo_key(const char *key) {
+    const char *sep = strchr(key, '\x04');
+    if (!sep) return -1;
+    for (int i = 0; i < (int)UI_TEXT_COUNT; i++) {
+        if (!keys[i] || !text_en[i]) continue;
+        size_t n = strlen(keys[i]);
+        if ((size_t)(sep - key) == n && !memcmp(key, keys[i], n) && !strcmp(sep + 1, text_en[i])) return i;
+    }
     return -1;
 }
 
@@ -675,7 +680,7 @@ static int parse_catalog(const char *path, const char *stem, Row *row) {
             continue;
         }
         if (!*key) goto fail;
-        int id = id_for_key(key);
+        int id = id_for_mo_key(key);
         if (id < 0) continue;
         if (row->text[id]) goto fail;
         if (!text_ok((UiTextId)id, text)) continue;
