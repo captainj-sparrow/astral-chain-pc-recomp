@@ -1,16 +1,17 @@
-"""Generate and check the external .po catalogs of runtime/ui_text.c.
+"""Generate and check the external catalogs of runtime/ui_text.c.
 
     python tools/ui_text_catalogs.py
     python tools/ui_text_catalogs.py --check
     python tools/ui_text_catalogs.py --root /path/to/checkout
 
-The first form rebuilds runtime/ui_text_keys.inc, lang/messages.pot and lang/*.po from the compiled English fallback in
-runtime/ui_text.c and the translations already in lang/. Every entry carries the English source in a gettext extracted
-comment. English is built in, so no en.po is written; pt uses pt-BR. The second validates the committed files against
-the enum in runtime/ui_text.h and needs no C rows.
+The first form rebuilds runtime/ui_text_keys.inc, lang/messages.pot, lang/*.po and lang/*.mo from the compiled English
+fallback in runtime/ui_text.c and the translations already in lang/. Every entry carries the English source in a
+gettext extracted comment. English is built in, so no en.po is written; pt uses pt-BR. The second validates the
+committed files against the enum in runtime/ui_text.h and needs no C rows.
 """
 import argparse
 import re
+import struct
 import sys
 from pathlib import Path
 
@@ -53,6 +54,7 @@ LANGUAGE_NAME_IDS = {
     'zh-Hant': 'UI_MENU_LANGNAME_ZH_HANT', 'ko': 'UI_MENU_LANGNAME_KO', 'pt-BR': 'UI_MENU_LANGNAME_PT_BR',
 }
 FORMAT = re.compile(r'%[0-9]*(?:\.[0-9]+)?[sdiufxX%]')
+MO_MAGIC = 0x950412DE
 
 
 def strip_comments(text):
@@ -461,7 +463,57 @@ def write_if_changed(path, text):
     return True
 
 
-def validate(keys, paths):
+def write_bytes_if_changed(path, data):
+    if path.is_file() and path.read_bytes() == data:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    return True
+
+
+def render_mo(header, entries):
+    pairs = [('', header)] + sorted(entries.items(), key=lambda item: item[0].encode('utf-8'))
+    count = len(pairs)
+    orig_table = 28
+    trans_table = orig_table + 8 * count
+    strings = trans_table + 8 * count
+    table = bytearray()
+    blob = bytearray()
+    for msgid, _ in pairs:
+        value = msgid.encode('utf-8')
+        table += struct.pack('<II', len(value), strings + len(blob))
+        blob += value + b'\0'
+    for _, msgstr in pairs:
+        value = msgstr.encode('utf-8')
+        table += struct.pack('<II', len(value), strings + len(blob))
+        blob += value + b'\0'
+    head = struct.pack('<7I', MO_MAGIC, 0, count, orig_table, trans_table, 0, strings)
+    return head + bytes(table) + bytes(blob)
+
+
+def compile_catalogs(paths):
+    changed = False
+    expected = {f'{lang}.mo' for lang in CATALOG_LANGS}
+    for path in sorted(paths.lang.glob('*.mo')):
+        if path.name not in expected:
+            path.unlink()
+            changed = True
+    for lang in CATALOG_LANGS:
+        po = paths.lang / f'{lang}.po'
+        mo = paths.lang / f'{lang}.mo'
+        if not po.is_file():
+            if mo.is_file():
+                mo.unlink()
+                changed = True
+            continue
+        header, entries, errors = parse_po(po.read_text(encoding='utf-8'))
+        if errors:
+            raise ValueError(f'{po.name}: {errors[0]}')
+        changed = write_bytes_if_changed(mo, render_mo(header, entries)) or changed
+    return changed
+
+
+def validate(keys, paths, check_mo=True):
     errors = []
     keys_file = render_keys(keys)
     if not paths.keys.is_file() or paths.keys.read_text(encoding='utf-8') != keys_file:
@@ -470,9 +522,13 @@ def validate(keys, paths):
     files = sorted(p.name for p in paths.lang.glob('*.po')) if paths.lang.is_dir() else []
     if set(files) != {f'{lang}.po' for lang in CATALOG_LANGS}:
         errors.append(f'lang/ has unexpected catalogs: {files}')
+    mo_files = sorted(p.name for p in paths.lang.glob('*.mo')) if paths.lang.is_dir() else []
+    if check_mo and set(mo_files) != {f'{lang}.mo' for lang in CATALOG_LANGS}:
+        errors.append(f'lang/ has unexpected compiled catalogs: {mo_files}')
 
     catalogs = {}
     comments = {}
+    compiled = {}
     for name in files:
         text = (paths.lang / name).read_text(encoding='utf-8')
         header, entries, parse_errors = parse_po(text)
@@ -494,6 +550,13 @@ def validate(keys, paths):
         unknown = sorted(set(entries) - set(keys))
         errors.extend(f'{name}: unknown msgid {k}' for k in unknown)
         catalogs[lang] = (meta, entries)
+        compiled[lang] = render_mo(header, entries)
+
+    if check_mo:
+        for lang in sorted(compiled):
+            path = paths.lang / f'{lang}.mo'
+            if not path.is_file() or path.read_bytes() != compiled[lang]:
+                errors.append(f'{lang}.mo is missing or out of date')
 
     english = {k: v for k, v in compiled_catalogs(paths)['en'].items() if k in set(keys)}
     if set(english) != set(keys):
@@ -577,6 +640,13 @@ def refresh(root=None):
     paths = paths_for(root)
     keys = enum_keys(paths)
     generate(keys, paths)
+    errors = validate(keys, paths, check_mo=False)
+    if errors:
+        for error in errors:
+            print(error)
+        return 1
+    if compile_catalogs(paths):
+        print(f'wrote {len(CATALOG_LANGS)} compiled catalogs in lang/*.mo')
     return report(keys, paths)
 
 
@@ -585,10 +655,10 @@ def main():
     parser.add_argument('--check', action='store_true', help='validate the committed files without regenerating them')
     parser.add_argument('--root', type=Path, help='checkout root (default: the repository of this script)')
     args = parser.parse_args()
+    if not args.check:
+        return refresh(args.root)
     paths = paths_for(args.root)
     keys = enum_keys(paths)
-    if not args.check:
-        generate(keys, paths)
     return report(keys, paths)
 
 

@@ -1,4 +1,4 @@
-// Text shown by the host (ui_text.h), loaded from lang/*.po into rows keyed by stable UiTextId. A missing entry falls
+// Text shown by the host (ui_text.h), loaded from lang/*.mo into rows keyed by stable UiTextId. A missing entry falls
 // back to the built-in English row.
 #include <ctype.h>
 #include <stdatomic.h>
@@ -478,7 +478,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
 
 typedef struct { char lang[16], name[64], font[16]; const char **text; } Row;
 
-enum { MAX_ROWS = 32, MAX_KEY = 128, MAX_HEADER = 4096, MAX_PO = 1 << 20 };
+enum { MAX_ROWS = 32, MAX_CATALOG = 1 << 20 };
 
 static const char *const keys[UI_TEXT_COUNT] = {
 #include "ui_text_keys.inc"
@@ -577,174 +577,23 @@ static int text_ok(UiTextId id, const char *value) {
     return 1;
 }
 
-typedef struct {
-    const char *p, *end;
-    char key[MAX_KEY], header[MAX_HEADER];
-    size_t header_n;
-    char *value;
-    int has_key, has_value, fuzzy, bad;
-} Po;
+enum { MO_MAGIC = 0x950412DE };
 
-static void po_skip_space(Po *p) {
-    while (p->p < p->end && isspace((unsigned char)*p->p)) p->p++;
+static uint32_t mo_u32(const uint8_t *p, int little) {
+    if (little)
+        return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | (uint32_t)p[3];
 }
 
-static char *po_string(Po *p) {
-    po_skip_space(p);
-    if (p->p >= p->end || *p->p != '"') {
-        p->bad = 1;
-        return NULL;
-    }
-    p->p++;
-    size_t cap = 128, n = 0;
-    char *out = malloc(cap);
-    if (!out) {
-        p->bad = 1;
-        return NULL;
-    }
-    out[0] = 0;
-    while (p->p < p->end && *p->p != '"') {
-        char c = *p->p++;
-        if (c == '\\') {
-            if (p->p >= p->end) {
-                p->bad = 1;
-                break;
-            }
-            c = *p->p++;
-            if (c == 'n') c = '\n';
-            else if (c == 't') c = '\t';
-            else if (c == 'r') c = '\r';
-            else if (c != '"' && c != '\\') {
-                p->bad = 1;
-                break;
-            }
-        }
-        if (n + 2 > cap) {
-            cap *= 2;
-            char *bigger = realloc(out, cap);
-            if (!bigger) {
-                p->bad = 1;
-                break;
-            }
-            out = bigger;
-        }
-        out[n++] = c;
-        out[n] = 0;
-    }
-    if (p->p >= p->end || *p->p != '"') p->bad = 1;
-    else p->p++;
-    return out;
+static int mo_string(const uint8_t *data, size_t size, uint32_t len, uint32_t off, const char **out) {
+    size_t start = off, n = len;
+    if (start > size || n > size - start || start + n >= size) return 0;
+    if (memchr(data + start, 0, n) || data[start + n]) return 0;
+    *out = (const char *)(data + start);
+    return 1;
 }
 
-static char *po_strings(Po *p) {
-    size_t cap = 128, n = 0;
-    char *out = malloc(cap);
-    if (!out) {
-        p->bad = 1;
-        return NULL;
-    }
-    out[0] = 0;
-    int got = 0;
-    for (;;) {
-        po_skip_space(p);
-        if (p->p >= p->end || *p->p != '"') break;
-        got = 1;
-        char *part = po_string(p);
-        if (!part) break;
-        size_t len = strlen(part);
-        while (n + len >= cap) {
-            cap *= 2;
-            char *bigger = realloc(out, cap);
-            if (!bigger) {
-                p->bad = 1;
-                free(part);
-                return out;
-            }
-            out = bigger;
-        }
-        memcpy(out + n, part, len + 1);
-        n += len;
-        free(part);
-    }
-    if (!got) p->bad = 1;
-    return out;
-}
-
-static void po_finish(Po *p, Row *row) {
-    if (!p->bad && !p->fuzzy && p->has_key && p->value) {
-        if (!p->key[0]) {
-            size_t n = strlen(p->value);
-            if (n >= sizeof p->header) p->bad = 1;
-            else memcpy(p->header, p->value, n + 1);
-        } else if (!p->fuzzy) {
-            int id = id_for_key(p->key);
-            if (id >= 0 && text_ok((UiTextId)id, p->value)) {
-                row->text[id] = p->value;
-                p->value = NULL;
-            }
-        }
-    }
-    free(p->value);
-    p->value = NULL;
-    p->has_key = 0;
-    p->has_value = 0;
-    p->fuzzy = 0;
-}
-
-static void po_line(Po *p) {
-    while (p->p < p->end && *p->p && *p->p != '\n') p->p++;
-    if (p->p < p->end) p->p++;
-}
-
-static void po_parse(Po *p, Row *row) {
-    while (p->p < p->end) {
-        po_skip_space(p);
-        if (p->p >= p->end) break;
-        if (*p->p == '#') {
-            if (!strncmp(p->p, "#,", 2)) {
-                const char *line = p->p;
-                const char *e = line;
-                while (e < p->end && *e != '\n') e++;
-                for (const char *c = line; c + 5 <= e; c++)
-                    if (!memcmp(c, "fuzzy", 5)) p->fuzzy = 1;
-            }
-            po_line(p);
-            continue;
-        }
-        if (*p->p == '~') {
-            po_line(p);
-            continue;
-        }
-        if (!strncmp(p->p, "msgid_plural", 12) || !strncmp(p->p, "msgstr[", 7) || !strncmp(p->p, "msgctxt", 7)) {
-            p->bad = 1;
-            po_line(p);
-            continue;
-        }
-        if (!strncmp(p->p, "msgid ", 6)) {
-            if (p->has_key) po_finish(p, row);
-            p->p += 6;
-            char *value = po_strings(p);
-            if (!value || strlen(value) >= sizeof p->key) p->bad = 1;
-            else {
-                strcpy(p->key, value);
-                p->has_key = 1;
-            }
-            free(value);
-        } else if (!strncmp(p->p, "msgstr ", 7)) {
-            if (!p->has_key) p->bad = 1;
-            p->p += 7;
-            free(p->value);
-            p->value = po_strings(p);
-            p->has_value = 1;
-        } else {
-            p->bad = 1;
-            po_line(p);
-        }
-    }
-    if (p->has_key) po_finish(p, row);
-}
-
-static int po_header_value(const char *header, const char *name, char *out, size_t cap) {
+static int header_value(const char *header, const char *name, char *out, size_t cap) {
     size_t n = strlen(name);
     for (const char *p = header; *p;) {
         const char *e = strchr(p, '\n');
@@ -782,26 +631,58 @@ static void free_row_text(Row *row) {
 }
 
 static int parse_catalog(const char *path, const char *stem, Row *row) {
-    uint64_t size = 0;
-    uint8_t *data = plat_file_read(path, &size);
-    if (!data || !size || size > MAX_PO) {
+    uint64_t file_size = 0;
+    uint8_t *data = plat_file_read(path, &file_size);
+    if (!data || file_size < 28 || file_size > MAX_CATALOG) {
         free(data);
         return 0;
     }
-    Po po = {.p = (const char *)data, .end = (const char *)data + size};
-    po_parse(&po, row);
-    if (po.bad || !po.header[0]) {
-        free_row_text(row);
-        free(data);
-        return 0;
+    size_t size = (size_t)file_size;
+    int little = !memcmp(data, "\xde\x12\x04\x95", 4);
+    if (!little && memcmp(data, "\x95\x04\x12\xde", 4)) goto fail;
+    if (mo_u32(data + 4, little) != 0) goto fail;
+    uint32_t count = mo_u32(data + 8, little);
+    uint32_t orig = mo_u32(data + 12, little), trans = mo_u32(data + 16, little);
+    uint32_t hash_count = mo_u32(data + 20, little), hash_off = mo_u32(data + 24, little);
+    if (!count || count > UI_TEXT_COUNT + 1) goto fail;
+    if ((uint64_t)orig + 8ull * count > size || (uint64_t)trans + 8ull * count > size) goto fail;
+    if (hash_count && (uint64_t)hash_off + 4ull * hash_count > size) goto fail;
+
+    const char *header = NULL;
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t key_len = mo_u32(data + orig + 8ull * i, little);
+        uint32_t key_off = mo_u32(data + orig + 8ull * i + 4, little);
+        uint32_t text_len = mo_u32(data + trans + 8ull * i, little);
+        uint32_t text_off = mo_u32(data + trans + 8ull * i + 4, little);
+        const char *key, *text;
+        if (!mo_string(data, size, key_len, key_off, &key) ||
+            !mo_string(data, size, text_len, text_off, &text))
+            goto fail;
+        if (!i) {
+            if (*key) goto fail;
+            header = text;
+            continue;
+        }
+        if (!*key) goto fail;
+        int id = id_for_key(key);
+        if (id < 0) continue;
+        if (row->text[id]) goto fail;
+        if (!text_ok((UiTextId)id, text)) continue;
+        size_t len = strlen(text);
+        char *copy = malloc(len + 1);
+        if (!copy) goto fail;
+        memcpy(copy, text, len + 1);
+        row->text[id] = copy;
     }
+    if (!header || !*header) goto fail;
+
     char lang[16], name[64], charset[256], font[16];
-    int ok = po_header_value(po.header, "Language", lang, sizeof lang) &&
-             po_header_value(po.header, "X-Astral-Language-Name", name, sizeof name) && *name &&
-             po_header_value(po.header, "Content-Type", charset, sizeof charset) && has_utf8(charset) &&
+    int ok = header_value(header, "Language", lang, sizeof lang) &&
+             header_value(header, "X-Astral-Language-Name", name, sizeof name) && *name &&
+             header_value(header, "Content-Type", charset, sizeof charset) && has_utf8(charset) &&
              !strcmp(lang, stem);
     font[0] = 0;
-    if (ok && po_header_value(po.header, "X-Astral-Font-Lang", font, sizeof font) && !valid_tag(font)) ok = 0;
+    if (ok && header_value(header, "X-Astral-Font-Lang", font, sizeof font) && !valid_tag(font)) ok = 0;
     if (ok) {
         snprintf(row->lang, sizeof row->lang, "%s", lang);
         snprintf(row->name, sizeof row->name, "%s", name);
@@ -813,13 +694,17 @@ static int parse_catalog(const char *path, const char *stem, Row *row) {
         return 0;
     }
     return 1;
+fail:
+    free(data);
+    free_row_text(row);
+    return 0;
 }
 
 typedef struct { char dir[PLAT_PATH_MAX * 2]; } LoadCtx;
 
 static int load_catalog(const char *name, void *ctx) {
     size_t n = strlen(name);
-    if (n < 3 || strcmp(name + n - 3, ".po") || n - 3 >= 16) return 1;
+    if (n < 3 || strcmp(name + n - 3, ".mo") || n - 3 >= 16) return 1;
     char stem[16];
     memcpy(stem, name, n - 3);
     stem[n - 3] = 0;
@@ -869,7 +754,7 @@ void ui_text_reload(void) {
     LoadCtx ctx = {0};
     const char *dir = catalog_dir();
     snprintf(ctx.dir, sizeof ctx.dir, "%s", dir);
-    if (plat_dir_exists(dir)) plat_file_list(dir, ".po", load_catalog, &ctx);
+    if (plat_dir_exists(dir)) plat_file_list(dir, ".mo", load_catalog, &ctx);
     qsort(rows + 1, (size_t)(row_count - 1), sizeof *rows, row_compare);
     rt_log("ui text: %d catalogs from %s", row_count, dir);
 }

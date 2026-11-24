@@ -493,7 +493,7 @@ def build_sources(out, profdata):
     # romfs-patches-xbox/playstation overlays at install time); the release check skips them by directory name.
     copy_tree(ROOT / 'controller-ui', out / 'controller-ui', lambda r: False)
     copy_tree(ROOT / 'installer', out / 'installer', lambda r: '__pycache__' in r or r.startswith('launcher/'))
-    copy_tree(ROOT / 'lang', out / 'lang', lambda r: False)
+    copy_tree(ROOT / 'lang', out / 'lang', lambda r: not (r.endswith('.mo') or r == 'messages.pot'))
     shutil.copy2(ROOT / 'astralchain.ini.example', out / 'astralchain.ini.example')
     # RecompLauncher reads it at the top of the unpacked release, or at the AppDir root of the AppImage
     write_manifest(out)

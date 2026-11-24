@@ -111,7 +111,7 @@ def replace_file(src, dst):
 
 
 def catalog_files(layout):
-    return sorted(layout.lang.glob('*.po')) if layout.lang.is_dir() else []
+    return sorted(layout.lang.glob('*.mo')) if layout.lang.is_dir() else []
 
 
 def catalogs_current(ctx):

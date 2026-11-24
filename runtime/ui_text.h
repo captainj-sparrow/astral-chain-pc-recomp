@@ -1,4 +1,4 @@
-// Text the host shows the player (runtime/ui_text.c): catalogs keyed by stable ids and loaded from lang/*.po. The
+// Text the host shows the player (runtime/ui_text.c): catalogs keyed by stable ids and loaded from lang/*.mo. The
 // software keyboard reads them in the game's language (ui_text); the menu and overlay read them in the menu language.
 #pragma once
 

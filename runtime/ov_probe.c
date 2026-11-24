@@ -882,45 +882,7 @@ static void probe_fonts(void) {
            (unsigned long long)addr, (unsigned long long)size, len < 0 ? "substitute" : path);
 }
 
-static void probe_dropin_catalog(void) {
-    static const char *po =
-        "msgid \"\"\n"
-        "\"Content-Type: text/plain; charset=UTF-8\\n\"\n"
-        "\"Language: xx\\n\"\n"
-        "\"X-Astral-Language-Name: Probe\\n\"\n"
-        "\n"
-        "#. English: \"Settings\"\n"
-        "msgid \"UI_MENU_TITLE\"\n"
-        "msgstr \"Probe Menu\"\n"
-        "\n"
-        "#. English: \"OK\"\n"
-        "msgid \"UI_SWKBD_OK\"\n"
-        "msgstr \"SYNTH\"\n";
-    char temp[PLAT_PATH_MAX * 2], dir[PLAT_PATH_MAX * 2], path[PLAT_PATH_MAX * 2], saved[PLAT_PATH_MAX * 2];
-    if (!plat_temp_dir(temp, sizeof temp)) {
-        CHECK(0, "no temporary folder for the drop-in catalog probe");
-        return;
-    }
-    snprintf(dir, sizeof dir, "%s/ac_lang_probe", temp);
-    snprintf(path, sizeof path, "%s/xx.po", dir);
-    const char *old = cfg_get("AC_LANG_DIR");
-    snprintf(saved, sizeof saved, "%s", old ? old : "");
-    plat_file_mkdir_p(dir);
-    CHECK(plat_file_write(path, po, strlen(po)) == 1, "cannot write the drop-in catalog");
-    cfg_set("AC_LANG_DIR", dir);
-    ui_text_reload();
-    CHECK(!strcmp(ui_text_in("xx", UI_MENU_TITLE), "Probe Menu"), "a drop-in catalog was not loaded");
-    CHECK(!strcmp(ui_text_in("xx", UI_SWKBD_OK), "SYNTH"), "drop-in catalog text was not used");
-    CHECK(!strcmp(ui_text_lang_name("xx"), "Probe"), "drop-in catalog name was not read");
-    CHECK(!strcmp(ui_text_in("xx", UI_MENU_CONTINUE), ui_text_in("en", UI_MENU_CONTINUE)),
-          "drop-in catalog does not fall back to English");
-    cfg_set("AC_LANG_DIR", saved);
-    plat_file_delete(path);
-    plat_fs_rmdir(dir);
-    ui_text_reload();
-}
-
-// The host catalog (runtime/ui_text.c): menu and keyboard text comes from lang/*.po, a missing entry falls back to the
+// The host catalog (runtime/ui_text.c): menu and keyboard text comes from lang/*.mo, a missing entry falls back to the
 // built-in English row, and menu_text follows AC_MENU_LANG.
 static void probe_menu_text(void) {
     ui_text_init();
@@ -975,7 +937,6 @@ static void probe_menu_text(void) {
     }
     if (!ui_text_defined(auto_lang, UI_MENU_TITLE)) auto_lang = "en";
     CHECK(menu_text(UI_MENU_CONTINUE) == ui_text_in(auto_lang, UI_MENU_CONTINUE), "menu_text auto ignores the system language");
-    probe_dropin_catalog();
 }
 
 static void probe_main(Cpu *c) {

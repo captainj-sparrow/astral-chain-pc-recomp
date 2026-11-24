@@ -113,11 +113,12 @@ class UiCatalogTest(unittest.TestCase):
         root = Path(self.tmp.name)
         self.lang = root / 'lang'
         self.lang.mkdir()
-        (self.lang / 'pt-BR.po').write_text('msgid ""\nmsgstr "pt-BR"\n', encoding='utf-8')
-        (self.lang / 'xx.po').write_text('msgid ""\nmsgstr "xx"\n', encoding='utf-8')
+        (self.lang / 'pt-BR.mo').write_bytes(b'pt-BR')
+        (self.lang / 'xx.mo').write_bytes(b'xx')
         dest = root / 'dest'
         dest.mkdir()
         (dest / 'lang').mkdir()
+        (dest / 'lang' / 'user.mo').write_bytes(b'user')
         (dest / 'lang' / 'user.po').write_text('msgid ""\nmsgstr "user"\n', encoding='utf-8')
         layout = Layout(root=root, dev=True, release='1.0', python=Path('python'), tools=Path('tools'),
                         recomp=Path('recomp'), llvm=Path('llvm'), deps=Path('deps'), runtime=Path('rt'),
@@ -132,13 +133,13 @@ class UiCatalogTest(unittest.TestCase):
         self.assertFalse(steps.catalogs_current(self.ctx))
         steps.copy_catalogs(self.ctx)
         self.assertTrue(steps.catalogs_current(self.ctx))
+        self.assertEqual((self.ctx.dest / 'lang' / 'user.mo').read_bytes(), b'user')
         self.assertEqual((self.ctx.dest / 'lang' / 'user.po').read_text(encoding='utf-8'),
                          'msgid ""\nmsgstr "user"\n')
-        (self.lang / 'xx.po').write_text('msgid ""\nmsgstr "changed"\n', encoding='utf-8')
+        (self.lang / 'xx.mo').write_bytes(b'changed')
         self.assertFalse(steps.catalogs_current(self.ctx))
         steps.copy_catalogs(self.ctx)
-        self.assertEqual((self.ctx.dest / 'lang' / 'xx.po').read_text(encoding='utf-8'),
-                         'msgid ""\nmsgstr "changed"\n')
+        self.assertEqual((self.ctx.dest / 'lang' / 'xx.mo').read_bytes(), b'changed')
         self.assertTrue(steps.catalogs_current(self.ctx))
 
 
