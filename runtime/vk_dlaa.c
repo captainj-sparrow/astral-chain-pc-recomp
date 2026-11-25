@@ -4,9 +4,9 @@
 // AC_ANTI_ALIASING leaves the game's own SMAA on or off. This file finds the scene in Astral Chain's frame, jitters its
 // draws, makes the motion vectors (the camera's, then what moves on its own over them) and runs the backend: at the
 // scene's own size on its light target before the bloom, or from a smaller scene to the game resolution at the game's
-// scaling pass; the sections below say how. All of it is portable Vulkan except loading NGX, which is Windows-only
-// (core_load); XeSS's library is Windows-only as well (vk_xess.c), while FSR 3's passes are compiled in and run
-// everywhere.
+// scaling pass; the sections below say how. All of it is portable Vulkan except loading NGX (core_load: the driver's
+// _nvngx.dll on Windows, its libnvidia-ngx.so.1 on Linux); XeSS's library is Windows-only (vk_xess.c), while FSR 3's
+// passes are compiled in and run everywhere.
 //
 // NGX is loaded at run time from the driver's NGX core (_nvngx.dll), which sits beside NVIDIA's Vulkan driver: once
 // the instance exists that driver is in the process and its module gives the folder (core_load). The registry key older
@@ -14,15 +14,21 @@
 // (nvngx_dlss.dll) is loaded by NGX from the folder of
 // astralchain.exe. No NVIDIA SDK code or header is compiled in: the few NGX types used are declared here from the SDK's
 // documented ABI, the way the Metroid Dread recomp's dlss.c reaches the core (read for behaviour only).
-// The core's parameter object is a C++ class whose virtual functions are called through the MSVC vtable: the Set
-// overloads in slots 0-7 and the Get overloads in 8-15, each group in reverse declaration order. vtable_ok checks that
+// The core's parameter object is a C++ class whose virtual functions are called through its vtable: the Set overloads
+// in slots 0-7 and the Get overloads in 8-15. MSVC lays each group out in reverse declaration order; the Itanium C++
+// ABI of Linux keeps the declaration order (u64, float, double, u32, int, D3D11, D3D12, void *). vtable_ok checks the
 // layout with a set-then-get round trip before anything relies on it.
+// On Linux the DLSS model is NVIDIA's libnvidia-ngx-dlss.so.<version> from the DLSS SDK, beside the executable.
 //
 // XeSS's context, kernels and initialisation, its work images and FSR 4's context are made for the run's sizes while
 // the game starts, not in the first frame with a 3D scene; DLSS's feature only with a test knob, until that has run on
 // NVIDIA hardware. See "the pre-warm" below (vk_dlaa_warm), with its measurements and AC_UPSCALER_PREWARM.
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <dlfcn.h>
+#include <limits.h>
+#include <unistd.h>
 #endif
 #include <math.h>
 #include <stdio.h>
@@ -98,7 +104,11 @@ typedef NgxResult (*GetI)(const NgxParam *, const char *, int *);
 typedef NgxResult (*GetU)(const NgxParam *, const char *, unsigned *);
 typedef NgxResult (*GetF)(const NgxParam *, const char *, float *);
 typedef NgxResult (*GetP)(const NgxParam *, const char *, void **);
+#ifdef _WIN32
 enum { S_P = 0, S_D12, S_D11, S_I, S_U32, S_D, S_F, S_U64, G_P, G_D12, G_D11, G_I, G_U32, G_D, G_F, G_U64 };
+#else
+enum { S_U64 = 0, S_F, S_D, S_U32, S_I, S_D11, S_D12, S_P, G_U64, G_F, G_D, G_U32, G_I, G_D11, G_D12, G_P };
+#endif
 static void p_seti(NgxParam *p, const char *n, int v) { ((SetI)p->vt->slot[S_I])(p, n, v); }
 static void p_setu(NgxParam *p, const char *n, unsigned v) { ((SetU)p->vt->slot[S_U32])(p, n, v); }
 static void p_setf(NgxParam *p, const char *n, float v) { ((SetF)p->vt->slot[S_F])(p, n, v); }
@@ -127,8 +137,30 @@ static int core_load(void) {
     if (N.tried) return N.loaded;
     N.tried = 1;
 #ifndef _WIN32
-    rt_log("dlaa: NGX is loaded on Windows only: DLAA off");
-    return 0;
+    // The driver installs its NGX core with its Vulkan library (libnvidia-ngx.so.1, on the loader's path)
+    N.core = dlopen("libnvidia-ngx.so.1", RTLD_NOW | RTLD_LOCAL);
+    if (!N.core) {
+        rt_log("dlaa: no NGX core (libnvidia-ngx.so.1: %s): DLAA off", dlerror());
+        return 0;
+    }
+#define FN(f, name) N.f = (void *)dlsym(N.core, name)
+    FN(init, "NVSDK_NGX_VULKAN_Init_Ext2");
+    FN(req_ext, "NVSDK_NGX_VULKAN_RequiredExtensions");
+    FN(caps, "NVSDK_NGX_VULKAN_GetCapabilityParameters");
+    FN(alloc_params, "NVSDK_NGX_VULKAN_AllocateParameters");
+    FN(destroy_params, "NVSDK_NGX_VULKAN_DestroyParameters");
+    FN(create, "NVSDK_NGX_VULKAN_CreateFeature");
+    FN(evaluate, "NVSDK_NGX_VULKAN_EvaluateFeature");
+    FN(release, "NVSDK_NGX_VULKAN_ReleaseFeature");
+    FN(shutdown, "NVSDK_NGX_VULKAN_Shutdown1");
+#undef FN
+    if (!N.init || !N.req_ext || !N.caps || !N.alloc_params || !N.create || !N.evaluate || !N.release) {
+        rt_log("dlaa: the NGX core libnvidia-ngx.so.1 lacks Vulkan entry points: DLAA off");
+        return 0;
+    }
+    N.loaded = 1;
+    rt_log("dlaa: NGX core libnvidia-ngx.so.1");
+    return 1;
 #else
     wchar_t path[MAX_PATH * 2 + 32] = {0};
     HMODULE icd = GetModuleHandleW(L"nvoglv64.dll");
@@ -196,7 +228,6 @@ void vk_dlaa_device_exts(const VkExtensionProperties *have, uint32_t nhave, cons
     }
 }
 
-__attribute__((unused))   // called from vk_dlaa_init on Windows only
 static int vtable_ok(void) {
     NgxParam *p = NULL;
     if (!NGX_OK(N.alloc_params(&p)) || !p) return 0;
@@ -218,15 +249,38 @@ static int vtable_ok(void) {
 void vk_dlaa_init(void) {
     vk_fsr4_init();   // its library, when the setting is fsr4 at start
     if (!vk_dlaa_wanted() || !core_load()) return;
-#ifdef _WIN32   // core_load loads nothing elsewhere
+#ifdef _WIN32
     wchar_t wdir[MAX_PATH];
     DWORD len = GetModuleFileNameW(NULL, wdir, MAX_PATH);
     while (len && wdir[len - 1] != L'\\') len--;
     wdir[len] = 0;
+    const void *info = NULL;   // NGX finds nvngx_dlss.dll in the executable's folder on its own
+#else
+    // NGX takes wide paths here too; the folder is the data path and the one place it looks for the DLSS model
+    // (NVSDK_NGX_FeatureCommonInfo: its PathListInfo, then InternalData and LoggingInfo, left empty)
+    char exe[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", exe, sizeof exe - 1);
+    if (len <= 0) return;
+    exe[len] = 0;
+    char *cut = strrchr(exe, '/');
+    if (cut) cut[1] = 0;
+    static wchar_t wdir[PATH_MAX];
+    if (mbstowcs(wdir, exe, PATH_MAX - 1) == (size_t)-1) return;
+    static const wchar_t *paths[1];
+    paths[0] = wdir;
+    static struct {
+        struct { const wchar_t *const *path; unsigned length; } path_list;
+        void *internal;
+        struct { void *callback; int min_level; _Bool disable_other_sinks; } logging;
+    } common;
+    common.path_list.path = paths;
+    common.path_list.length = 1;
+    const void *info = &common;
+#endif
     // 231313132: the application id NVIDIA's DLSS samples use for builds without an NVIDIA-issued id
     const VkCtx *c = vk_ctx();
     NgxResult r = N.init(231313132ull, wdir, c->instance, c->phys, c->device, vkGetInstanceProcAddr,
-                         vkGetDeviceProcAddr, NGX_VERSION_API, NULL);
+                         vkGetDeviceProcAddr, NGX_VERSION_API, info);
     if (!NGX_OK(r)) {
         rt_log("dlaa: NGX init failed (%08x): DLAA off", (unsigned)r);
         return;
@@ -240,9 +294,13 @@ void vk_dlaa_init(void) {
         p_geti(caps, "SuperSampling.NeedsUpdatedDriver", &driver);
     }
     N.available = avail != 0;
-    rt_log("dlaa: NGX up; DLSS %s%s", avail ? "available" : "NOT available (is nvngx_dlss.dll next to astralchain.exe?)",
-           driver ? "; the driver needs an update" : "");
+#ifdef _WIN32
+    const char *model = "nvngx_dlss.dll next to astralchain.exe";
+#else
+    const char *model = "libnvidia-ngx-dlss.so.<version> next to astralchain";
 #endif
+    rt_log("dlaa: NGX up; DLSS %s%s%s%s", avail ? "available" : "NOT available (is ", avail ? "" : model,
+           avail ? "" : "?)", driver ? "; the driver needs an update" : "");
 }
 
 // ---------------------------------------------------------------- where the upscaler runs in Astral Chain's frame

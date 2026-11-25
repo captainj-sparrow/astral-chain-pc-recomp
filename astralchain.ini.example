@@ -266,14 +266,15 @@
 
 # The 3D scene's temporal upscaler, in place of the game's anti-aliasing: off (the default), auto (DLSS where it can
 # run, FSR 3 elsewhere), dlss (NVIDIA DLSS: NVIDIA RTX GPUs, with nvngx_dlss.dll from NVIDIA's DLSS SDK next to
-# astralchain.exe), xess (Intel XeSS: most GPUs of the last years, with libxess.dll next to astralchain.exe, which the
+# astralchain.exe; on Linux the SDK's libnvidia-ngx-dlss.so.<version> next to astralchain, run through the NVIDIA
+# driver's libnvidia-ngx.so.1), xess (Intel XeSS: most GPUs of the last years, with libxess.dll next to astralchain.exe, which the
 # installer puts there, and the Microsoft Visual C++ runtime), fsr3 (AMD FSR 3: any GPU, built in) or fsr4 (AMD FSR 4,
 # the machine-learning upscaler: AMD Radeon RX 6000 series or newer, and Ryzen processors with RDNA 2 or newer
 # graphics; the installer puts AMD's amd_fidelityfx_loader_vk.dll and amd_fidelityfx_upscaler_vk.dll next to
 # astralchain.exe, on Linux with libffx_vk_linux.so, which runs them there, and the menu offers it on those GPUs only;
 # AMD's library picks the model for the GPU, the full network on a Radeon RX 7000 or 9000, FSR 4 Lite on integrated
 # graphics; where FSR 4 cannot run, a file of it missing or a GPU AMD's library does not take, the log and the menu
-# say why and FSR 3 runs in its place). dlss and xess are Windows only. They give smoother edges and less shimmer, for
+# say why and FSR 3 runs in its place). xess is Windows only. They give smoother edges and less shimmer, for
 # some GPU time at the native mode (XeSS and FSR 3 about 5 to 6 ms a frame at 2560x1440 on an Arc 140T); FSR 4's time
 # follows the size it writes (a Ryzen Z1 Extreme's Radeon 780M: a whole frame takes about 10 ms of GPU time with FSR 4
 # Lite writing 1920x1080 and 31 ms writing 3840x2160, each from a scene a third to a half that size); the HUD is not

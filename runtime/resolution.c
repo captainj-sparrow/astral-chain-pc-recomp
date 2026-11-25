@@ -32,6 +32,9 @@
 // Astral Chain 1.0.1 has no output set: there the res set reads AC_OUTPUT_RES from the patch page at the game's render
 // size sites and grows the game's render-target budget with it (res_pick below); none of the HeapDef growth above
 // applies.
+#ifndef _WIN32
+#include <dirent.h>
+#endif
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -312,6 +315,21 @@ static int beside_exe(const char *name) {
     snprintf(path, sizeof path, "%.*s/%s", (int)(last - exe), exe, name);
     return plat_file_exists(path);
 }
+#else
+// Linux: NVIDIA's DLSS model is libnvidia-ngx-dlss.so.<version>, so any file of that name beside the executable
+static int dlss_model_beside_exe(void) {
+    char exe[1024];
+    if (!plat_exe_path(exe, sizeof exe)) return 0;
+    char *last = plat_last_sep(exe);
+    if (!last) return 0;
+    *last = 0;
+    DIR *d = opendir(exe);
+    if (!d) return 0;
+    int found = 0;
+    for (struct dirent *e; !found && (e = readdir(d));) found = !strncmp(e->d_name, "libnvidia-ngx-dlss.so", 21);
+    closedir(d);
+    return found;
+}
 #endif
 
 static int upscaler_at_start(void) {
@@ -321,6 +339,8 @@ static int upscaler_at_start(void) {
 #ifdef _WIN32
     if (!strcmp(up, "dlss")) return beside_exe("nvngx_dlss.dll");
     if (!strcmp(up, "xess")) return beside_exe("libxess.dll");
+#else
+    if (!strcmp(up, "dlss")) return dlss_model_beside_exe();
 #endif
     return 0;
 }

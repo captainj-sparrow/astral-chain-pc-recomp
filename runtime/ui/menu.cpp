@@ -571,10 +571,10 @@ static void rows_upscaling(void) {
     const char *names[] = {menu_text(UI_MENU_UPSCALING_OFF), menu_text(UI_MENU_UPSCALING_AUTO), "NVIDIA DLSS",
                            "Intel XeSS", "AMD FSR 3", "AMD FSR 4"};
     const UiTextId desc = UI_MENU_UPSCALING_DESC;
-#else
-    static const char *const vals[] = {"off", "auto", "fsr3", "fsr4"};
-    const char *names[] = {menu_text(UI_MENU_UPSCALING_OFF), menu_text(UI_MENU_UPSCALING_AUTO), "AMD FSR 3",
-                           "AMD FSR 4"};
+#else   // DLSS through the driver's libnvidia-ngx.so.1 (vk_dlaa.c); XeSS is Windows only
+    static const char *const vals[] = {"off", "auto", "dlss", "fsr3", "fsr4"};
+    const char *names[] = {menu_text(UI_MENU_UPSCALING_OFF), menu_text(UI_MENU_UPSCALING_AUTO), "NVIDIA DLSS",
+                           "AMD FSR 3", "AMD FSR 4"};
     const UiTextId desc = UI_MENU_UPSCALING_DESC_OTHER;
 #endif
     enum { N = sizeof vals / sizeof *vals };

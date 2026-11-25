@@ -131,10 +131,11 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                                "RX 6000 or newer. Automatic takes DLSS where it can run and FSR 3 elsewhere. DLSS, XeSS "
                                "and FSR 4 chosen here take effect after a restart. The HUD is not touched.",
     [UI_MENU_UPSCALING_DESC_OTHER] = "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less "
-                                     "shimmer, and with a mode below Native more frames per second. AMD FSR 3 runs on "
-                                     "any GPU, AMD FSR 4 on a Radeon RX 6000 or newer; Automatic is FSR 3 here (NVIDIA "
-                                     "DLSS and Intel XeSS are Windows only). FSR 4 chosen here takes effect after a "
-                                     "restart. The HUD is not touched.",
+                                     "shimmer, and with a mode below Native more frames per second. NVIDIA DLSS needs "
+                                     "an NVIDIA RTX GPU and libnvidia-ngx-dlss.so next to astralchain, AMD FSR 3 runs "
+                                     "on any GPU, AMD FSR 4 on a Radeon RX 6000 or newer; Automatic takes DLSS where it "
+                                     "can run and FSR 3 elsewhere (Intel XeSS is Windows only). DLSS and FSR 4 chosen "
+                                     "here take effect after a restart. The HUD is not touched.",
     [UI_MENU_UPSCALING_OFF] = "Off", [UI_MENU_UPSCALING_AUTO] = "Automatic",
     [UI_MENU_UPSCALING_UNAVAILABLE] = "not available here",
     [UI_MENU_UPSCALING_INSTEAD] = "not available here: %s in use",

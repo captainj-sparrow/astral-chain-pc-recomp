@@ -27,7 +27,8 @@ Report problems as issues, following [CONTRIBUTING.md](CONTRIBUTING.md).
 - [Flat 60FPS on Steam Deck](https://steamdeckhq.com/news/astral-chains-pc-port-60-fps-on-steam-deck/)
 - HDR output (HDR10), with separate brightness for the game and the HUD
 - Temporal upscaling and anti-aliasing for the 3D scene up to 4K, from native (DLAA / Native AA) to Ultra Performance: NVIDIA
-  DLSS on RTX cards (with `nvngx_dlss.dll` next to `astralchain.exe`), Intel XeSS on most recent GPUs, AMD FSR 3 on any
+  DLSS on RTX cards (with `nvngx_dlss.dll` next to `astralchain.exe`, on Linux `libnvidia-ngx-dlss.so.<version>` next
+  to `astralchain`), Intel XeSS on most recent GPUs, AMD FSR 3 on any
   GPU, AMD FSR 4 on AMD Radeon RX 6000 series or newer (Windows and Linux);
 - Anisotropic texture filtering up to 16x, for sharp ground into the distance
 - Low latency mode: NVIDIA Reflex or AMD Anti-Lag 2 where the driver offers them, the port's own frame timing on any
