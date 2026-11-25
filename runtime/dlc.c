@@ -890,8 +890,8 @@ static int quest_dat(const Quest *q, const Pkz *z, Buf *out, Arena *a) {
             uint8_t *copy = arena_get(a, f[k].size + 1);
             memcpy(copy, f[k].data, f[k].size);
             f[k].data = copy;
-            const char *tag = strstr(f[k].name, from);
-            if (tag) memcpy((char *)tag, to, strlen(to));
+            char *tag = strstr(f[k].name, from);
+            if (tag) memcpy(tag, to, strlen(to));
         }
         free(raw);
     }
