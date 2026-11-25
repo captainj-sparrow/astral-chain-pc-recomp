@@ -104,6 +104,8 @@ static PFN_vkLatencySleepNV p_sleep;
 static PFN_vkSetLatencyMarkerNV p_marker;
 static PFN_vkGetLatencyTimingsNV p_timings;
 static PFN_vkAntiLagUpdateAMD p_antilag;
+static int g_oob_ok;                  // Reflex knows the out-of-band present queue (vk_oob_present_queue)
+int vk_lowlat_oob_ok(void) { return g_backend != LL_REFLEX || g_oob_ok; }
 static VkSemaphore g_sem;             // Reflex: the timeline semaphore its sleep signals
 static uint64_t g_sem_val;
 
@@ -473,6 +475,20 @@ void vk_lowlat_init(VkCtx *c) {
         VkSemaphoreCreateInfo si = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, .pNext = &ti};
         if (p_set_mode && p_sleep && p_marker && vkCreateSemaphore(c->device, &si, NULL, &g_sem) == VK_SUCCESS)
             g_backend = LL_REFLEX;
+        // Frame generation (vk_dlssg.c) presents its frames from a queue of their own (vk_device.c), which Reflex is
+        // told to leave out: with them on the game's queue, the driver's sleep, which follows the presents, slept most
+        // of a period in every other frame (13 to 14 ms in half the frames at 60 fps with 4x, RTX 5090, driver 615.78),
+        // and the frames reached the present in pairs.
+        VkQueue oob = vk_oob_present_queue();
+        PFN_vkQueueNotifyOutOfBandNV notify =
+            (PFN_vkQueueNotifyOutOfBandNV)vkGetDeviceProcAddr(c->device, "vkQueueNotifyOutOfBandNV");
+        if (g_backend == LL_REFLEX && oob && notify) {
+            VkOutOfBandQueueTypeInfoNV qt = {.sType = VK_STRUCTURE_TYPE_OUT_OF_BAND_QUEUE_TYPE_INFO_NV,
+                                             .queueType = VK_OUT_OF_BAND_QUEUE_TYPE_PRESENT_NV};
+            notify(oob, &qt);
+            g_oob_ok = 1;
+            rt_log("lowlat: frame generation's frames are presented from an out-of-band queue");
+        }
     }
     if (mode && g_backend == LL_NONE && c->has_amd_anti_lag) {
         p_antilag = (PFN_vkAntiLagUpdateAMD)vkGetDeviceProcAddr(c->device, "vkAntiLagUpdateAMD");
@@ -491,6 +507,7 @@ void vk_lowlat_release(VkCtx *c) {
     g_sem = VK_NULL_HANDLE;
     g_backend = LL_NONE;
     g_on = 0;
+    g_oob_ok = 0;
     p_set_mode = NULL, p_sleep = NULL, p_marker = NULL, p_timings = NULL, p_antilag = NULL;
     plat_mutex_lock(&sc_lock);
     g_sc = VK_NULL_HANDLE;

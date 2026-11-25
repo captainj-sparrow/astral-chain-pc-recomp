@@ -112,6 +112,15 @@ void vk_present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w, in
 // vk_present_image split in two: vk_present_blit submits the blit and leaves the present waiting, vk_present_flip
 // queues it. The next blit or a swapchain rebuild queues a waiting present first.
 void vk_present_blit(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4]);
+// The present thread, before a vk_present_blit: fn runs once at the start of that blit's command buffer, before
+// anything reads src, records into it and returns the image the blit shows in src's place (of src's format, size
+// and layout); NULL clears it (vk_dlssg.c: frame generation's evaluations).
+void vk_present_pre_record(VkImage (*fn)(VkCommandBuffer cb, VkImage src));
+// The present thread, before a vk_present_blit: its present goes out on the out-of-band queue (vk_oob_present_queue,
+// when the device has one), which NVIDIA Reflex leaves out of its latency tracking: frame generation's frames.
+void vk_present_out_of_band(int on);
+VkQueue vk_oob_present_queue(void);   // vk_device.c: a second graphics queue for those presents, or VK_NULL_HANDLE
+int vk_lowlat_oob_ok(void);           // vk_lowlat.c: not Reflex, or Reflex was told about that queue
 // FSR 1 on the present (vk_fsr.c): records EASU (+ RCAS) of src's crop rectangle {x, y, w, h} into the rectangle out
 // {x, y, w, h} of dst, a swapchain image in TRANSFER_DST; src is in GENERAL and fmt its format. 1 = FSR recorded, 2 =
 // the crop is larger than out and was reduced by an area average (+ RCAS), 0 = nothing recorded (the setting says
@@ -456,8 +465,10 @@ static inline int vk_tex_level(const VkTexImage *t, uint32_t lv) { return lv < t
 int vk_tex_mip_skip(void);                         // AC_TEX_MIP_SKIP: the larger side from which level 0 is left out; 0 off
 // The window texture the backend presents (vk_backend.c): *scene and *format become the float scene (its size or
 // smaller) a draw into it sampled since its last present, when the swapchain is HDR10; else *scene is VK_NULL_HANDLE.
-// vk_hdr_set_scene: the present thread hands that scene to the vk_hdr_encode of the blit that follows.
-void vk_hdr_present_source(const VkTexImage *win, VkImage *scene, VkFormat *format);
+// vk_hdr_set_scene: the present thread hands that scene to the vk_hdr_encode of the blit that follows. fg (may be
+// NULL): the same scene whatever the swapchain, for frame generation (vk_dlssg.c), while it wants one.
+typedef struct VkFgScene { VkImage image; VkFormat format; uint32_t w, h; } VkFgScene;
+void vk_hdr_present_source(const VkTexImage *win, VkImage *scene, VkFormat *format, VkFgScene *fg);
 void vk_hdr_set_scene(VkImage scene, VkFormat fmt);
 void vk_hdr_image_gone(VkImage image);
 const VkTexImage *vk_texture_get(const tex_t *t);   // created and made current; NULL for BUFFER or unmapped formats

@@ -1,0 +1,346 @@
+// NVIDIA DLSS Frame Generation (AC_FRAME_GENERATION = off, auto, 2x, 3x, 4x; astralchain.ini frame_generation, live
+// once NGX was loaded at start): NGX's frame generation feature (NVSDK_NGX_Feature_FrameGeneration) makes one to
+// three frames between two of the game's, and the present thread shows them between the game's presents.
+//
+// The inputs, per game frame (vk_backend.c present_image, on the replay thread, the frame's images still holding it):
+// - the picture the game presents, with its HUD: its window texture (RGBA8);
+// - the same picture without the HUD: the float scene the game's last pass (SMAA's blend) copied into the window
+//   texture before the HUD was drawn over it, which vk_hdr.c finds for HDR output (vk_hdr_draw) and here without it;
+//   NGX compares the two to tell the HUD from the scene, so the HUD is not moved along with the scene;
+// - the scene depth and the motion vectors of the temporal upscaler (vk_dlaa.c vk_dlaa_fg_inputs: render pixels, the
+//   camera's and the objects' own), the camera's matrices and the jitter. So frame generation needs a temporal
+//   upscaler running (DLSS, FSR 3, FSR 4, in any mode): without one the frame has no motion vectors and is shown alone.
+// NGX keeps the previous frame itself and makes the frames between it and this one, each in its own evaluation
+// (MultiFrameIndex 1..MultiFrameCount), recorded by the present thread at the start of the command buffer of the blit
+// that shows the first of them (gfx_present.c vk_present_pre_record): that submission comes before the next frame's
+// work (vk_present_drain), so the depth, the motion vectors and the scene still hold this frame there. The same
+// command buffer copies the window texture, so the game frame can be shown last, after the game drew into the window
+// texture again.
+//
+// Pacing (vk_backend.c present_main): the game frame due at its display time T is shown n/(n+1) of a frame period
+// later, and the n generated frames before it at even steps from T on; a frame without generated frames (no motion
+// vectors, a new history) is shown at the same delayed time, so the game's frames keep even intervals when frame
+// generation starts and stops. The delay is what frame generation costs in latency: 8.3 ms at 60 fps with 2x, 12.5 ms
+// with 4x.
+//
+// Not with HDR output (yet): its present composes the PQ picture from the window texture and the float scene, which
+// the generated frames do not have. With AC_HDR=1 and an HDR10 swapchain, frame generation stays off and the log and
+// the menu say so.
+#include "vk_dlssg.h"
+
+#include <stdio.h>
+#include <string.h>
+
+#include "cfg.h"
+#include "gfx.h"
+#include "host.h"
+#include "vk_dlaa.h"
+#include "platform/platform.h"
+
+#define MAX_GEN 5   // generated frames per game frame: NGX's MultiFrameCountMax on the RTX 50 series
+
+typedef struct { VkImage img; VmaAllocation mem; VkImageView view; } Img;
+
+static struct {
+    // replay thread
+    int last_on;              // the previous frame had what frame generation needs
+    // present thread
+    void *feat;               // NGX's feature, for:
+    uint32_t w, h, rw, rh;    // the picture's size and the scene's
+    VkFormat fmt;
+    Img gen[MAX_GEN], hud, real;
+    int fmt_ok;               // -1 not checked
+    int armed, made, n;       // this job: the hook is set, generated frames made, asked for
+    int evaluated;            // this job: NGX evaluated the frame (its history now ends with it)
+    int prev_shown;           // the previous job showed frame generation's frames: its history follows on
+    VkFgFrame fr;             // this job's inputs
+    VkImage win;              // and its window texture, of pw x ph
+    uint32_t pw, ph;
+    // any thread
+    volatile int32_t failed;  // a call failed: off for the run
+    volatile int32_t shown;   // the multiplier last shown, 0 none
+    uint64_t shown_ns;        // when (plat_now_ns)
+} G = {.fmt_ok = -1};
+
+// The setting: 0 off, 1 auto, else the multiplier (2..4).
+static int setting(void) {
+    const char *v = cfg_value("AC_FRAME_GENERATION");
+    if (!v || !*v || !strcmp(v, "off")) return 0;
+    if (!strcmp(v, "auto")) return 1;
+    int m = v[0] - '0';
+    return m >= 2 && m <= 6 && v[1] == 'x' && !v[2] ? m : 0;
+}
+
+int vk_dlssg_max_multiplier(void) {
+    unsigned max = 0;
+    if (!vk_ngx_fg_caps(&max) || !max) return 0;
+    return max >= MAX_GEN ? MAX_GEN + 1 : (int)max + 1;
+}
+
+void vk_dlssg_init(void) {
+    int s = setting();
+    if (!s) return;
+    int m = vk_dlssg_max_multiplier();
+#ifdef _WIN32
+    const char *model = "nvngx_dlssg.dll next to astralchain.exe";
+#else
+    const char *model = "libnvidia-ngx-dlssg.so.<version> next to astralchain";
+#endif
+    if (!m) rt_log("dlssg: frame generation is set but NGX does not offer it here (an NVIDIA RTX 40 or newer GPU, a "
+                   "recent driver and %s): off", model);
+    else rt_log("dlssg: frame generation %s, up to %dx here; it needs a temporal upscaler running (upscaling)",
+                s == 1 ? "auto" : cfg_value("AC_FRAME_GENERATION"), m);
+}
+
+int vk_dlssg_set_at_start(void) {
+    static int on = -1;
+    if (on < 0) on = setting() != 0;
+    return on;
+}
+
+int vk_dlssg_scene_wanted(void) {
+    unsigned max;
+    return setting() && !plat_cas32(&G.failed, 0, 0) && vk_ngx_fg_caps(&max);
+}
+
+void vk_dlssg_collect(VkFgFrame *f) {
+    f->on = 0;
+    if (!vk_dlssg_scene_wanted()) {
+        G.last_on = 0;
+        return;
+    }
+    if (vk_hdr_active()) {
+        static int logged;
+        if (!logged) logged = 1, rt_log("dlssg: frame generation does not run with HDR output yet: off");
+        G.last_on = 0;
+        return;
+    }
+    if (!vk_lowlat_oob_ok()) {   // Reflex without frame generation's own present queue (set after the start)
+        static int logged;
+        if (!logged)
+            logged = 1, rt_log("dlssg: NVIDIA Reflex runs without frame generation's present queue (vk_device.c): "
+                               "frame generation waits for a restart");
+        G.last_on = 0;
+        return;
+    }
+    f->on = f->depth && f->mv && f->hudless && f->rw && f->rh && f->hw && f->hh;
+    if (f->on && !G.last_on) f->reset = 1;   // after frames without it: the history NGX holds is from another moment
+    G.last_on = f->on;
+}
+
+// ---------------------------------------------------------------- the present thread
+
+static int format_ok(VkFormat f) {
+    if (f != VK_FORMAT_R8G8B8A8_UNORM && f != VK_FORMAT_B8G8R8A8_UNORM) return 0;
+    if (G.fmt_ok < 0 || G.fmt != f) {
+        VkFormatProperties fp;
+        vkGetPhysicalDeviceFormatProperties(vk_ctx()->phys, f, &fp);
+        VkFormatFeatureFlags need = VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                                    VK_FORMAT_FEATURE_BLIT_DST_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+        G.fmt_ok = (fp.optimalTilingFeatures & need) == need;
+        if (!G.fmt_ok) rt_log("dlssg: the window texture's format %d cannot be a storage image here: off", (int)f);
+    }
+    return G.fmt_ok;
+}
+
+static void img_free(Img *i) {
+    const VkCtx *c = vk_ctx();
+    if (i->view) vkDestroyImageView(c->device, i->view, NULL);
+    if (i->img) vmaDestroyImage(c->vma, i->img, i->mem);
+    memset(i, 0, sizeof *i);
+}
+
+static int img_make(VkCommandBuffer cb, Img *i, uint32_t w, uint32_t h, VkFormat f) {
+    const VkCtx *c = vk_ctx();
+    VkImageCreateInfo ii = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D, .format = f,
+                            .extent = {w, h, 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
+                            .tiling = VK_IMAGE_TILING_OPTIMAL,
+                            .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                                     VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
+    VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+    if (vmaCreateImage(c->vma, &ii, &ai, &i->img, &i->mem, NULL) != VK_SUCCESS) return i->img = VK_NULL_HANDLE, 0;
+    VkImageViewCreateInfo vi = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = i->img,
+                                .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = f,
+                                .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+    if (vkCreateImageView(c->device, &vi, NULL, &i->view) != VK_SUCCESS) {
+        img_free(i);
+        return 0;
+    }
+    VkImageMemoryBarrier2 b = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                               .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+                               .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                               .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
+                               .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED, .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+                               .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                               .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .image = i->img,
+                               .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+    VkDependencyInfo di = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 1,
+                           .pImageMemoryBarriers = &b};
+    vkCmdPipelineBarrier2(cb, &di);
+    return 1;
+}
+
+// Everything goes: the GPU may still read the images and NGX's feature (a resize, the release), so the device is
+// waited for first. Rare: a change of the game resolution or the scene's size.
+static void free_all(int wait) {
+    if (wait && (G.feat || G.real.img)) {
+        vk_queue_lock();   // vkDeviceWaitIdle needs every queue externally synchronised
+        vkDeviceWaitIdle(vk_ctx()->device);
+        vk_queue_unlock();
+    }
+    if (G.feat) vk_ngx_fg_release(G.feat);
+    G.feat = NULL;
+    for (int i = 0; i < MAX_GEN; i++) img_free(&G.gen[i]);
+    img_free(&G.hud), img_free(&G.real);
+    G.w = G.h = G.rw = G.rh = 0;
+}
+
+static void barrier(VkCommandBuffer cb) {
+    VkMemoryBarrier2 mb = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+                           .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                           .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                           .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                           .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT};
+    VkDependencyInfo di = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .memoryBarrierCount = 1, .pMemoryBarriers = &mb};
+    vkCmdPipelineBarrier2(cb, &di);
+}
+
+static void fail(const char *what) {
+    rt_log("dlssg: %s failed: frame generation off for this run", what);
+    plat_xchg32(&G.failed, 1);
+}
+
+// The images and the feature for this job's sizes, made in cb when missing. 1: ready; *fresh: a new feature (its
+// history starts with this frame).
+static int ensure(VkCommandBuffer cb, int *fresh) {
+    const VkFgFrame *f = &G.fr;
+    *fresh = 0;
+    if (G.real.img && (G.w != G.pw || G.h != G.ph || G.rw != f->rw || G.rh != f->rh)) free_all(1);
+    if (!G.real.img) {
+        G.w = G.pw, G.h = G.ph, G.rw = f->rw, G.rh = f->rh;
+        if (!img_make(cb, &G.real, G.w, G.h, G.fmt) || !img_make(cb, &G.hud, G.w, G.h, G.fmt)) {
+            free_all(0);
+            fail("image creation");
+            return 0;
+        }
+    }
+    for (int i = 0; i < G.n; i++)
+        if (!G.gen[i].img && !img_make(cb, &G.gen[i], G.w, G.h, G.fmt)) {
+            free_all(0);
+            fail("image creation");
+            return 0;
+        }
+    if (!G.feat) {
+        barrier(cb);   // the new images' layouts before NGX records anything
+        if (!vk_ngx_fg_create(cb, G.w, G.h, G.fmt, G.rw, G.rh, &G.feat)) {
+            fail("NGX's feature creation");
+            return 0;
+        }
+        *fresh = 1;
+    }
+    return 1;
+}
+
+// vk_present_pre_record's hook: at the start of the blit's command buffer, before anything reads src. Returns the
+// image the blit shows: the first generated frame, or src when none was made.
+static VkImage record(VkCommandBuffer cb, VkImage src) {
+    if (!G.armed || src != G.win) return src;
+    G.armed = 0;
+    int fresh = 0;
+    if (!ensure(cb, &fresh)) return src;
+    const VkFgFrame *f = &G.fr;
+    barrier(cb);   // the game's writes to the window texture, its scene, depth and motion vectors
+    // the HUD-less scene in the picture's format and size (a blit converts the float and scales a smaller scene of the
+    // picture's shape), and the picture itself, kept for its own present after the generated ones
+    VkImageBlit b = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                     .srcOffsets = {{0, 0, 0}, {(int32_t)f->hw, (int32_t)f->hh, 1}},
+                     .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                     .dstOffsets = {{0, 0, 0}, {(int32_t)G.w, (int32_t)G.h, 1}}};
+    vkCmdBlitImage(cb, f->hudless, VK_IMAGE_LAYOUT_GENERAL, G.hud.img, VK_IMAGE_LAYOUT_GENERAL, 1, &b, VK_FILTER_LINEAR);
+    VkImageCopy cp = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                      .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .extent = {G.w, G.h, 1}};
+    vkCmdCopyImage(cb, src, VK_IMAGE_LAYOUT_GENERAL, G.real.img, VK_IMAGE_LAYOUT_GENERAL, 1, &cp);
+    barrier(cb);
+    int reset = f->reset || fresh || !G.prev_shown;
+    for (int k = 1; k <= G.n; k++) {
+        VkFgEval e = {.back = G.real.img, .back_view = G.real.view, .hudless = G.hud.img, .hudless_view = G.hud.view,
+                      .out = G.gen[k - 1].img, .out_view = G.gen[k - 1].view, .format = G.fmt, .w = G.w, .h = G.h,
+                      .f = f, .count = (uint32_t)G.n, .index = (uint32_t)k, .reset = reset && k == 1};
+        int r = vk_ngx_fg_evaluate(cb, G.feat, &e);
+        if (!r || ((unsigned)r & 0xFFF00000u) == 0xBAD00000u) {   // NVSDK_NGX_Result: 1 success, 0xBAD0xxxx failures
+            char what[64];
+            snprintf(what, sizeof what, "NGX's evaluation (%08x)", (unsigned)r);
+            fail(what);
+            return src;
+        }
+    }
+    barrier(cb);
+    G.evaluated = 1;
+    // a new history gives no frame between the last one and this: only the game's frame is shown, at its delayed time
+    if (reset) return G.real.img;
+    G.made = G.n;
+    return G.gen[0].img;
+}
+
+int vk_dlssg_begin(const VkFgFrame *f, VkImage win, VkFormat fmt, uint32_t w, uint32_t h, uint64_t period_ns) {
+    G.armed = 0, G.made = 0, G.evaluated = 0;
+    int s = f->on && !plat_cas32(&G.failed, 0, 0) ? setting() : 0;
+    int max = s ? vk_dlssg_max_multiplier() : 0;
+    if (!s || !max || !format_ok(fmt)) {
+        G.prev_shown = 0;
+        vk_present_pre_record(NULL);
+        return 0;
+    }
+    int m = s;
+    if (s == 1) {   // auto: as many frames as the display shows in a game frame
+        double hz = gfx_window_refresh_hz(), slots = hz > 0 ? hz * (double)period_ns / 1e9 : 2.0;
+        m = (int)(slots + 0.25);
+    }
+    if (m > max) m = max;
+    if (m < 2) {
+        G.prev_shown = 0;
+        vk_present_pre_record(NULL);
+        return 0;
+    }
+    G.fr = *f, G.win = win, G.fmt = fmt, G.n = m - 1, G.pw = w, G.ph = h;
+    G.armed = 1;
+    vk_present_pre_record(record);
+    return G.n;
+}
+
+int vk_dlssg_end(void) {
+    vk_present_pre_record(NULL);
+    int made = G.armed ? -1 : G.made;   // still armed: the blit did not record (no swapchain image)
+    G.armed = 0;
+    G.prev_shown = G.evaluated;
+    if (made > 0) {
+        plat_xchg32(&G.shown, made + 1);
+        __atomic_store_n(&G.shown_ns, plat_now_ns(), __ATOMIC_RELAXED);
+    }
+    return made;
+}
+
+VkImage vk_dlssg_image(int k) { return k <= 0 ? G.real.img : k <= G.n ? G.gen[k - 1].img : VK_NULL_HANDLE; }
+VkFormat vk_dlssg_format(void) { return G.fmt; }
+
+void vk_dlssg_release(void) { free_all(0); }
+
+// ---------------------------------------------------------------- the menu and the overlay
+const char *vk_dlssg_running(void) {
+    static const char *const names[] = {"", "", "2x", "3x", "4x", "5x", "6x"};
+    int m = plat_cas32(&G.shown, 0, 0);
+    uint64_t at = __atomic_load_n(&G.shown_ns, __ATOMIC_RELAXED);
+    if (m < 2 || m > 6 || !at || plat_now_ns() - at > 250000000ull) return NULL;
+    return names[m];
+}
+
+int vk_dlssg_choice_state(void) {
+    if (!setting()) return 0;
+    if (!vk_dlaa_wanted()) return 1;   // NGX was not loaded at start
+    if (!vk_dlssg_max_multiplier() || plat_cas32(&G.failed, 0, 0)) return 2;
+    if (!vk_lowlat_oob_ok()) return 1;   // Reflex without frame generation's present queue: made at the next start
+    if (vk_hdr_active()) return 4;
+    if (!vk_dlaa_running()) return 3;
+    return 0;
+}

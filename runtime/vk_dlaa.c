@@ -40,6 +40,7 @@
 #include "host.h"
 #include "vk.h"
 #include "vk_dlaa.h"
+#include "vk_dlssg.h"
 #include "vk_exec.h"
 #include "vk_rec.h"
 #include "vk_fsr3.h"
@@ -96,6 +97,8 @@ static struct {
     PFN_Shutdown shutdown;   // NVSDK_NGX_VULKAN_Shutdown1; NULL in a core without it
     int tried, loaded, available;
     int inited;              // NVSDK_NGX_VULKAN_Init_Ext2 succeeded: vk_dlaa_release shuts NGX down
+    int fg_available;        // FrameGeneration.Available (vk_dlssg.c)
+    unsigned fg_max;         // DLSSG.MultiFrameCountMax: frames it can generate per game frame
     int wanted;   // -1 not read yet
 } N = {.wanted = -1};
 
@@ -121,14 +124,15 @@ static int p_getu(const NgxParam *p, const char *n, unsigned *v) { return NGX_OK
 static int p_getf(const NgxParam *p, const char *n, float *v) { return NGX_OK(((GetF)p->vt->slot[G_F])(p, n, v)); }
 static int p_getp(const NgxParam *p, const char *n, void **v) { return NGX_OK(((GetP)p->vt->slot[G_P])(p, n, v)); }
 
-// NGX is brought up only when the upscaler at start may be DLSS (upscaling = dlss or auto): its device extensions can
-// only be asked for at device creation, and loading the driver's NGX core on every NVIDIA machine would cost start time
-// and change the device without DLSS. So DLSS chosen later applies after a restart; switched off, nothing of it runs.
+// NGX is brought up only when the upscaler at start may be DLSS (upscaling = dlss or auto) or frame generation is on
+// (vk_dlssg.c): its device extensions can only be asked for at device creation, and loading the driver's NGX core on
+// every NVIDIA machine would cost start time and change the device without DLSS. So DLSS or frame generation chosen
+// later applies after a restart; switched off, nothing of it runs.
 int vk_dlaa_wanted(void) {
     static int wanted = -1;
     if (wanted < 0) {
-        const char *up = cfg_upscaling();
-        wanted = !strcmp(up, "dlss") || !strcmp(up, "auto");
+        const char *up = cfg_upscaling(), *fg = cfg_value("AC_FRAME_GENERATION");
+        wanted = !strcmp(up, "dlss") || !strcmp(up, "auto") || (fg && *fg && strcmp(fg, "off"));
     }
     return wanted;
 }
@@ -291,12 +295,22 @@ void vk_dlaa_init(void) {
     N.inited = 1;
     if (!vtable_ok()) return;
     NgxParam *caps = NULL;
-    int avail = 0, driver = 0;
+    int avail = 0, driver = 0, fg = 0, fg_driver = 0;
+    unsigned fg_max = 0;
     if (NGX_OK(N.caps(&caps)) && caps) {
         p_geti(caps, "SuperSampling.Available", &avail);
         p_geti(caps, "SuperSampling.NeedsUpdatedDriver", &driver);
+        // frame generation (vk_dlssg.c): its model is libnvidia-ngx-dlssg.so.<version> / nvngx_dlssg.dll in the same
+        // folder; MultiFrameCountMax is 1 on the RTX 40 series, more on the RTX 50 series
+        p_geti(caps, "FrameGeneration.Available", &fg);
+        p_geti(caps, "FrameGeneration.NeedsUpdatedDriver", &fg_driver);
+        if (fg && !p_getu(caps, "DLSSG.MultiFrameCountMax", &fg_max)) fg_max = 1;
     }
     N.available = avail != 0;
+    N.fg_available = fg != 0 && fg_max >= 1;
+    N.fg_max = fg_max;
+    rt_log("dlaa: NGX frame generation %s (up to %u generated frames per game frame)%s",
+           N.fg_available ? "available" : "NOT available", fg_max, fg_driver ? "; the driver needs an update" : "");
 #ifdef _WIN32
     const char *model = "nvngx_dlss.dll next to astralchain.exe";
 #else
@@ -395,6 +409,15 @@ static struct {
     uint64_t last_eval_ns;       // plat_now_ns of the previous evaluation (DLSS's FrameTimeDeltaInMsec, FSR 3's dt)
     float proj[16];              // the last camera's projection (rows 4-7 of its block): FSR 3's near, far and fov
     int proj_ok;
+    // frame generation (vk_dlaa_fg_inputs, vk_dlssg.c): this frame's camera and what the upscaler read, kept by mv_pass
+    // and resolve until the game presents the frame
+    double fg_rep[16];           // this frame's reprojection (clip to last frame's clip), row-major for column vectors
+    float fg_view[16];           // this frame's view
+    int fg_rep_ok;               // mv_pass wrote camera motion this frame
+    int fg_reset;                // the upscaler started a new history this frame
+    VkImage fg_z;                // the scene depth resolve read, and its depth view
+    VkImageView fg_zv;
+    VkFormat fg_zf;
 } D = {.mv_ok = -1, .blit_ok = -1};
 
 VkImage vk_dlaa_swap_img;
@@ -709,6 +732,8 @@ static int mv_pass(VkExec *ex, const struct Size *e, VkImageView zv, float jx, f
     }
     const float *vw = cam, *pj = cam + 16, *vp = cam + 32;
     memcpy(D.proj, pj, sizeof D.proj), D.proj_ok = 1;
+    memcpy(D.fg_view, vw, sizeof D.fg_view);
+    D.fg_rep_ok = 0;
     // its y scale, a diagonal element and so the same in either matrix order; the jitter moves the viewport, not this
     double focal = isfinite(pj[5]) ? fabs((double)pj[5]) : 0;
     double cur_vp[16], ci[16], m[16];
@@ -756,6 +781,7 @@ static int mv_pass(VkExec *ex, const struct Size *e, VkImageView zv, float jx, f
     uint32_t ms = D.mvm_slot++ % MVM_SLOTS;
     float *blk = (float *)(D.mvm_map + (size_t)ms * D.mvm_stride);
     for (int i = 0; i < 16; i++) blk[i] = (float)m[i];
+    memcpy(D.fg_rep, m, sizeof D.fg_rep), D.fg_rep_ok = 1;
     vmaFlushAllocation(vk_ctx()->vma, D.mvm_mem, (VkDeviceSize)ms * D.mvm_stride, 64);   // a no-op on coherent memory
     VkDescriptorImageInfo zi = {D.mv_samp, zv, VK_IMAGE_LAYOUT_GENERAL};
     VkDescriptorImageInfo oi = {VK_NULL_HANDLE, e->mv_view, VK_IMAGE_LAYOUT_GENERAL};
@@ -972,6 +998,160 @@ static NgxResult dl_evaluate(VkCommandBuffer cb, const struct Size *e, VkImage c
     return N.evaluate(cb, e->feat, p, NULL);
 }
 
+// ---------------------------------------------------------------- frame generation's NGX calls (vk_dlssg.c)
+// NVSDK_NGX_Feature_FrameGeneration, made and evaluated through the same core as DLSS, from the present thread with a
+// parameter object of its own (the replay thread uses D.params meanwhile). The parameter names are those of the SDK's
+// nvsdk_ngx_defs_dlssg.h, its helper NGX_VK_CREATE_DLSSG / NGX_VK_EVALUATE_DLSSG sets them the same way.
+#define NGX_FEATURE_FRAMEGEN 11
+static NgxParam *fg_params;
+
+int vk_ngx_fg_caps(unsigned *max_count) {
+    *max_count = N.fg_max;
+    return N.inited && N.fg_available;
+}
+
+int vk_ngx_fg_create(VkCommandBuffer cb, uint32_t w, uint32_t h, VkFormat fmt, uint32_t rw, uint32_t rh, void **feat) {
+    *feat = NULL;
+    if (!N.inited || !N.fg_available) return 0;
+    if (!fg_params && (!NGX_OK(N.alloc_params(&fg_params)) || !fg_params)) {
+        fg_params = NULL;
+        rt_log("dlssg: NGX parameter allocation failed");
+        return 0;
+    }
+    NgxParam *p = fg_params;
+    p_setu(p, "CreationNodeMask", 1);
+    p_setu(p, "VisibilityNodeMask", 1);
+    p_setu(p, "Width", w);
+    p_setu(p, "Height", h);
+    p_setu(p, "DLSSG.Width", w);
+    p_setu(p, "DLSSG.Height", h);
+    p_setu(p, "DLSSG.BackbufferFormat", (unsigned)fmt);
+    (void)rw, (void)rh;   // the depth and motion vectors may be smaller: given per evaluation as their subrects
+    NgxHandle *f = NULL;
+    uint64_t t0 = plat_now_ns();
+    NgxResult r = N.create(cb, NGX_FEATURE_FRAMEGEN, p, &f);
+    if (!NGX_OK(r) || !f) {
+        rt_log("dlssg: frame generation feature creation at %ux%u (format %d) failed (%08x)", w, h, (int)fmt, (unsigned)r);
+        return 0;
+    }
+    rt_log("dlssg: frame generation feature created at %ux%u (format %d, scene %ux%u) in %.1f ms", w, h, (int)fmt, rw,
+           rh, (double)(plat_now_ns() - t0) / 1e6);
+    *feat = f;
+    return 1;
+}
+
+int vk_ngx_fg_evaluate(VkCommandBuffer cb, void *feat, const VkFgEval *e) {
+    NgxParam *p = fg_params;
+    const VkFgFrame *f = e->f;
+    if (!p || !feat) return 0;
+    NgxResourceVK rb = res_image(e->back_view, e->back, e->format, e->w, e->h, VK_IMAGE_ASPECT_COLOR_BIT, 0);
+    NgxResourceVK rh = res_image(e->hudless_view, e->hudless, e->format, e->w, e->h, VK_IMAGE_ASPECT_COLOR_BIT, 0);
+    NgxResourceVK ro = res_image(e->out_view, e->out, e->format, e->w, e->h, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+    NgxResourceVK rz = res_image(f->depth_view, f->depth, f->depth_format, f->rw, f->rh, VK_IMAGE_ASPECT_DEPTH_BIT, 0);
+    NgxResourceVK rm = res_image(f->mv_view, f->mv, VK_FORMAT_R16G16_SFLOAT, f->rw, f->rh, VK_IMAGE_ASPECT_COLOR_BIT, 0);
+    p_setp(p, "DLSSG.Backbuffer", &rb);
+    p_setp(p, "DLSSG.HUDLess", &rh);
+    p_setp(p, "DLSSG.Depth", &rz);
+    p_setp(p, "DLSSG.MVecs", &rm);
+    p_setp(p, "DLSSG.OutputInterpolated", &ro);
+    p_setp(p, "DLSSG.OutputReal", NULL);
+    p_setp(p, "DLSSG.UI", NULL);
+    p_setp(p, "DLSSG.UIAlpha", NULL);
+    p_setp(p, "DLSSG.BidirectionalDistortionField", NULL);
+    p_setp(p, "DLSSG.OutputDisableInterpolation", NULL);
+    p_setu(p, "DLSSG.MultiFrameCount", e->count);
+    p_setu(p, "DLSSG.MultiFrameIndex", e->index);
+    // NGX reads the matrices while the evaluation is recorded, which is now
+    static float lens[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+    p_setp(p, "DLSSG.CameraViewToClip", (void *)f->view_to_clip);
+    p_setp(p, "DLSSG.ClipToCameraView", (void *)f->clip_to_view);
+    p_setp(p, "DLSSG.ClipToLensClip", lens);
+    p_setp(p, "DLSSG.ClipToPrevClip", (void *)f->clip_to_prev);
+    p_setp(p, "DLSSG.PrevClipToClip", (void *)f->prev_to_clip);
+    p_setf(p, "DLSSG.JitterOffsetX", f->jitter[0]);
+    p_setf(p, "DLSSG.JitterOffsetY", f->jitter[1]);
+    // the vectors are in render pixels: these take them to the [-1, 1] range NGX normalises them to
+    p_setf(p, "DLSSG.MvecScaleX", 1.0f / (float)f->rw);
+    p_setf(p, "DLSSG.MvecScaleY", 1.0f / (float)f->rh);
+    p_setf(p, "DLSSG.CameraPinholeOffsetX", 0.0f);
+    p_setf(p, "DLSSG.CameraPinholeOffsetY", 0.0f);
+    p_setf(p, "DLSSG.CameraPosX", f->cam_pos[0]);
+    p_setf(p, "DLSSG.CameraPosY", f->cam_pos[1]);
+    p_setf(p, "DLSSG.CameraPosZ", f->cam_pos[2]);
+    p_setf(p, "DLSSG.CameraUpX", f->cam_up[0]);
+    p_setf(p, "DLSSG.CameraUpY", f->cam_up[1]);
+    p_setf(p, "DLSSG.CameraUpZ", f->cam_up[2]);
+    p_setf(p, "DLSSG.CameraRightX", f->cam_right[0]);
+    p_setf(p, "DLSSG.CameraRightY", f->cam_right[1]);
+    p_setf(p, "DLSSG.CameraRightZ", f->cam_right[2]);
+    p_setf(p, "DLSSG.CameraFwdX", f->cam_fwd[0]);
+    p_setf(p, "DLSSG.CameraFwdY", f->cam_fwd[1]);
+    p_setf(p, "DLSSG.CameraFwdZ", f->cam_fwd[2]);
+    p_setf(p, "DLSSG.CameraNear", f->near_z);
+    p_setf(p, "DLSSG.CameraFar", f->far_z);
+    p_setf(p, "DLSSG.CameraFOV", f->fov_y);
+    p_setf(p, "DLSSG.CameraAspectRatio", f->rh ? (float)f->rw / (float)f->rh : 16.0f / 9.0f);
+    p_setu(p, "DLSSG.ColorBuffersHDR", 0);   // the 8-bit picture the game presents, and its scene in that range
+    p_setu(p, "DLSSG.DepthInverted", 0);     // 0 near .. 1 far
+    p_setu(p, "DLSSG.CameraMotionIncluded", 1);
+    p_setu(p, "DLSSG.Reset", e->reset ? 1u : 0u);
+    p_setu(p, "DLSSG.AutomodeOverrideReset", 0);
+    p_setu(p, "DLSSG.NotRenderingGameFrames", 0);
+    p_setu(p, "DLSSG.OrthoProjection", 0);
+    p_setf(p, "DLSSG.MvecInvalidValue", 0.0f);
+    p_setu(p, "DLSSG.MvecDilated", 0);
+    p_setu(p, "DLSSG.MenuDetectionEnabled", 0);
+    const char *rect[][2] = {{"DLSSG.MVecsSubrect", "m"}, {"DLSSG.DepthSubrect", "z"},
+                             {"DLSSG.HUDLessSubrect", "c"}, {"DLSSG.InputBackbufferSubrect", "c"},
+                             {"DLSSG.OutputInterpolatedSubrect", "c"}};
+    for (int i = 0; i < 5; i++) {
+        char k[64];
+        uint32_t w = rect[i][1][0] == 'c' ? e->w : f->rw, h = rect[i][1][0] == 'c' ? e->h : f->rh;
+        snprintf(k, sizeof k, "%sBaseX", rect[i][0]), p_setu(p, k, 0);
+        snprintf(k, sizeof k, "%sBaseY", rect[i][0]), p_setu(p, k, 0);
+        snprintf(k, sizeof k, "%sWidth", rect[i][0]), p_setu(p, k, w);
+        snprintf(k, sizeof k, "%sHeight", rect[i][0]), p_setu(p, k, h);
+    }
+    return N.evaluate(cb, feat, p, NULL);
+}
+
+void vk_ngx_fg_release(void *feat) {
+    if (feat && N.release) N.release(feat);
+}
+
+// The 4x4 transpose of a row-major matrix for column vectors: the same map for row vectors, which NGX takes.
+static void fg_rowvec(const double m[16], float o[16]) {
+    for (int r = 0; r < 4; r++)
+        for (int c = 0; c < 4; c++) o[r * 4 + c] = (float)m[c * 4 + r];
+}
+
+int vk_dlaa_fg_inputs(VkFgFrame *f) {
+    struct Size *e = D.cur;
+    if (!dl_active() || !D.done || !D.resolved || !e || !D.fg_rep_ok || !D.fg_z || !D.proj_ok) return 0;
+    double pj[16], pi[16], ri[16];
+    for (int i = 0; i < 16; i++) pj[i] = D.proj[i];
+    if (!inv4(pj, pi) || !inv4(D.fg_rep, ri)) return 0;
+    fg_rowvec(pj, f->view_to_clip);
+    fg_rowvec(pi, f->clip_to_view);
+    fg_rowvec(D.fg_rep, f->clip_to_prev);
+    fg_rowvec(ri, f->prev_to_clip);
+    // the view's rows are the camera's right, up and back axes in the world; its position is -R^T t. A projection whose
+    // w is -z looks down -z (row 3, column 2 negative).
+    const float *v = D.fg_view;
+    float back = D.proj[14] < 0 ? -1.0f : 1.0f;
+    for (int k = 0; k < 3; k++) {
+        f->cam_right[k] = v[0 * 4 + k], f->cam_up[k] = v[1 * 4 + k], f->cam_fwd[k] = back * v[2 * 4 + k];
+        f->cam_pos[k] = -(v[0 * 4 + k] * v[0 * 4 + 3] + v[1 * 4 + k] * v[1 * 4 + 3] + v[2 * 4 + k] * v[2 * 4 + 3]);
+    }
+    camera_planes(&f->near_z, &f->far_z, &f->fov_y);
+    f->depth = D.fg_z, f->depth_view = D.fg_zv, f->depth_format = D.fg_zf;
+    f->mv = e->mv, f->mv_view = e->mv_view;
+    f->rw = e->w, f->rh = e->h;
+    f->jitter[0] = D.jit_used ? D.ux : 0.0f, f->jitter[1] = D.jit_used ? D.uy : 0.0f;
+    f->reset = D.fg_reset;
+    return 1;
+}
+
 // ---------------------------------------------------------------- sharpening before the HUD
 // One RCAS (vk_fsr.c vk_fsr_rcas, at sharpness) on the upscaler's picture, after the game's tonemap and grading, the
 // range RCAS is made for, and before the game draws its HUD, so the HUD stays as the game drew it. Only where the
@@ -1104,6 +1284,7 @@ static int resolve(VkExec *ex, const VkExecTarget *src) {
         if (!ok) return 0;        // off for the rest of the run (vk_xess.c); this frame keeps the unresolved scene
     }
     vk_mvprev_swap();   // the objects' blocks of this frame become last frame's for the next
+    D.fg_reset = D.reset, D.fg_z = z->image, D.fg_zv = zv, D.fg_zf = z->format;   // for frame generation
     D.reset = 0;
     D.last = e, e->used = D.evals + 1;
     full_barrier(cb);
@@ -1378,6 +1559,7 @@ static const char *running;
 int vk_dlaa_frame(void) {
     int sharpened = D.sharp_done;
     D.sharp_done = 0;
+    D.fg_rep_ok = 0, D.fg_z = VK_NULL_HANDLE;   // frame generation took this frame's (vk_dlaa_fg_inputs)
     vk_dlaa_swap_img = VK_NULL_HANDLE, vk_dlaa_swap_view = VK_NULL_HANDLE, vk_dlaa_swap_pic = VK_NULL_HANDLE;
     int bk = pick();
     static uint64_t evals_seen;   // an evaluation that completed this frame, not only the AA point reached
@@ -1530,6 +1712,7 @@ int vk_dlaa_skip_draw(VkExec *ex, const GfxShader *fs) {
 // process's end, like the back end's other pipelines.
 void vk_dlaa_release(void) {
     const VkCtx *c = vk_ctx();
+    vk_dlssg_release();   // its feature and images, through the NGX core still up
     for (int i = 0; i < 3; i++) {
         struct Size *e = &D.sizes[i];
         if (e->out_view) vkDestroyImageView(c->device, e->out_view, NULL);
@@ -1546,6 +1729,8 @@ void vk_dlaa_release(void) {
         features_sweep(1);
         if (D.params && N.destroy_params) N.destroy_params(D.params);
         D.params = NULL;
+        if (fg_params && N.destroy_params) N.destroy_params(fg_params);
+        fg_params = NULL;
         int left = 0;
         if (N.inited && N.shutdown) N.shutdown(c->device, &left);
         N.inited = N.available = 0;

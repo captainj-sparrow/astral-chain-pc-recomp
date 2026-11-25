@@ -509,6 +509,39 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   never shows. HDR output records the upscaled picture as the frame's scene (`vk_hdr.c` `vk_hdr_draw`).
   `output_res = auto` takes the screen's size, up to 1920x1080 without an upscaler and 3840x2160 with one (2560x1440 on
   a GPU with 4.5 GB of video memory or less).
+- Frame generation (`vk_dlssg.c`, `frame_generation = off | auto | 2x | 3x | 4x`, off by default): NVIDIA DLSS Frame
+  Generation, NGX's `NVSDK_NGX_Feature_FrameGeneration` (11) through the same NGX core as DLSS (loaded at start when it
+  is on; its model is the SDK's `nvngx_dlssg.dll` / `libnvidia-ngx-dlssg.so.<version>` beside the executable), makes
+  one to three frames between two of the game's. Its inputs per game frame are taken when the game presents it: the
+  window texture with the HUD, the HUD-less scene (the float picture SMAA's blend copied into the window texture before
+  the HUD, which `vk_hdr.c` finds for HDR output and here without it), and the temporal upscaler's scene depth, motion
+  vectors (render pixels, scaled by 1 / render size into NGX's normalised range), camera matrices (row-vector form of
+  the projection, the reprojection the motion pass uses and their inverses) and jitter (`vk_dlaa.c`
+  `vk_dlaa_fg_inputs`), so it runs only with a temporal upscaler. The present thread records the evaluations (one per
+  generated frame, `MultiFrameIndex` 1..n) at the start of the command buffer of the blit that shows the first
+  generated frame (`gfx_present.c` `vk_present_pre_record`), with a copy of the window texture: that submission comes
+  before the next frame's work (`vk_present_drain`), so the inputs still hold the frame. The game's frame is then shown
+  n/(n+1) of a frame period after its display time and the generated ones at even steps from that time; a frame
+  without generated frames (a new history: a cut, a size change, frames without the AA point) is shown at the same
+  delayed time. Measured on an RTX 5090 (driver 615.78.08, Linux, Hyprland, FIFO at 240 Hz), DLAA at 3840x2160, 4x,
+  the opening motorway through `tools/input/load_save.txt` for 50 s: NGX recorded the three evaluations in 0.2 ms of
+  CPU time, the probe measured 0.8-1.2 ms of GPU time per generated frame at 3840x2160 on cleared images, and the
+  generated frames went out at +0.0, +4.17 and +8.33 ms of the frame's display time. Two things had to change for
+  that: the present keeps 8 blits in flight instead of 2 (with 2, every other blit waited for the one before it, which
+  the GPU ran after the game's next frame), and the swapchain gets 3 images more while frame generation is set (in
+  FIFO the acquire of the next picture otherwise waited a refresh). With NVIDIA Reflex the generated frames are
+  presented from a second queue of the graphics family that Reflex is told is out of band (`vkQueueNotifyOutOfBandNV`,
+  made at start when frame generation is set): presented from the game's queue, the driver's sleep followed them and
+  slept 13 to 14 ms in every other frame, so frames reached the present in pairs, and leaving the sleep out while frame
+  generation ran held the game to 15 fps. Reflex's `vkLatencySleepNV` still blocks inside the driver for most of a
+  period in half the calls, under the present lock, which the acquire and the present need (both take the swapchain
+  externally synchronised): the generated frames of those frames go out together at the end of the sleep, and FIFO
+  shows them one refresh apart from its queue. The first pad read to the host present of the game's frame, same run:
+  10.5-12.9 ms with Reflex and no frame generation, 16-18 ms with Reflex and 4x, 46 ms with 4x and low latency off or
+  the built-in sleep (which does not sleep there: the replay one frame behind leaves a frame's measured work at two
+  periods). Not with HDR output: its present composes the PQ picture from the window texture and the float scene, which
+  generated frames do not have; frame generation stays off with an HDR10 swapchain and the log and the menu say so.
+  Not run on Windows, other NVIDIA GPUs or in a long play session.
 - Ambient occlusion (`vk_ao.c`, `ao = off | low | high | gi`, live; off by default): the game has none.
   The first light-target pass with the scene depth after the game's R32F linear-depth pass that writes colour is the
   opaque lighting (in play, every other frame, a pass with its colour writes masked off comes before it); when

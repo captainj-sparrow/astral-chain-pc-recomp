@@ -69,6 +69,9 @@ extern "C" const char *vk_dlaa_running(void);           // vk_dlaa.h: the upscal
 extern "C" int vk_fsr4_offered(void);                   // vk_fsr4.h: an AMD RDNA 2 or newer GPU, the library there
 extern "C" const char *vk_fsr4_missing(void);           // vk_fsr4.h: the file FSR 4 needs that is not there, or NULL
 extern "C" int vk_lowlat_backend(void);                 // vk.h: 0 off, 1 Reflex, 2 Anti-Lag 2, 3 built-in
+extern "C" const char *vk_dlssg_running(void);          // vk_dlssg.h: "2x".."6x" while generated frames show, or NULL
+extern "C" int vk_dlssg_choice_state(void);             // vk_dlssg.h: 0 runs, 1 restart, 2 not here, 3 no upscaler, 4 HDR
+extern "C" int vk_dlssg_max_multiplier(void);           // vk_dlssg.h: 2..6, 0 not offered here
 bool tab_cheats(float scale);        // ui/cheats_tab.cpp; true: restart into the rebuild
 int audout_mix_channels(void);       // ov_audout.c: what the game mixes, 2 or 6; 0 before it opened its output
 void audout_meters(float peak[6]);   // ov_audout.c: the highest sample per speaker since the last call
@@ -643,6 +646,27 @@ static void rows_upscaling(void) {
         const char *an[] = {menu_text(UI_MENU_AA_OFF), "SMAA"};
         if (vk_dlaa_running()) opt_disable_next(UI_MENU_AA_BY_UPSCALER);
         opt_choice_list("AC_ANTI_ALIASING", UI_MENU_AA, av, an, 2, UI_MENU_AA_DESC, cfg_smaa() ? 1 : 0);
+    }
+    {   // frame generation (vk_dlssg.c): 3x and 4x where NGX makes that many (the RTX 50 series)
+        static const char *const fv[] = {"off", "auto", "2x", "3x", "4x"};
+        const char *fn[] = {menu_text(UI_MENU_UPSCALING_OFF), menu_text(UI_MENU_UPSCALING_AUTO), "2x", "3x", "4x"};
+        const char *fg = cfg_value("AC_FRAME_GENERATION");
+        int max = vk_dlssg_max_multiplier(), n = 3 + (max >= 3) + (max >= 4), fcur = -1;
+        for (int i = 0; i < 5; i++)
+            if (fg && !strcmp(fg, fv[i])) fcur = i;
+        if (fcur >= n) n = fcur + 1;   // the setting asks for more than this GPU makes: shown, and clamped when it runs
+        static char note_fg[64];
+        const char *fnote = nullptr;
+        switch (vk_dlssg_choice_state()) {
+        case 1: fnote = menu_text(UI_MENU_AFTER_RESTART); break;
+        case 2: fnote = menu_text(UI_MENU_UPSCALING_UNAVAILABLE); break;
+        case 3: fnote = menu_text(UI_MENU_FRAMEGEN_NEEDS_TAA); break;
+        case 4: fnote = menu_text(UI_MENU_FRAMEGEN_NO_HDR); break;
+        default:
+            if (const char *on = vk_dlssg_running())
+                snprintf(note_fg, sizeof note_fg, menu_text(UI_MENU_PRESENT_IN_USE), on), fnote = note_fg;
+        }
+        opt_choice_list("AC_FRAME_GENERATION", UI_MENU_FRAMEGEN, fv, fn, n, UI_MENU_FRAMEGEN_DESC, fcur, fnote);
     }
 }
 
@@ -1510,6 +1534,11 @@ static void perf_picture(const MenuTarget *t, const ImVec4 &c, const PerfStats &
         char sc[64];
         snprintf(sc, sizeof sc, "%s", v[3]);
         snprintf(v[3], sizeof v[3], "%s + %s", taa, sc);
+    }
+    if (const char *fg = vk_dlssg_running()) {   // frame generation's frames between the game's (vk_dlssg.c)
+        char sc[64];
+        snprintf(sc, sizeof sc, "%s", v[3]);
+        snprintf(v[3], sizeof v[3], "%s, FG %s", sc, fg);
     }
     double hz = frame_step_limit_hz();
     snprintf(v[4], sizeof v[4], "%s", menu_text(UI_MENU_OV_NONE));

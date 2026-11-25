@@ -64,6 +64,10 @@ typedef enum {
     UI_MENU_UPSCALING_QUALITY, UI_MENU_UPSCALING_QUALITY_DESC, UI_MENU_UPSCALING_NATIVE, UI_MENU_DLSS_QUALITY,
     UI_MENU_DLSS_BALANCED, UI_MENU_DLSS_PERFORMANCE, UI_MENU_UPSCALING_ULTRA, UI_MENU_UPSCALING_MODE_OFF,
     UI_MENU_AA, UI_MENU_AA_DESC, UI_MENU_AA_OFF, UI_MENU_AA_BY_UPSCALER,
+    // frame generation (vk_dlssg.c)
+    UI_MENU_FRAMEGEN, UI_MENU_FRAMEGEN_DESC,
+    UI_MENU_FRAMEGEN_NEEDS_TAA,   // the row's note: no temporal upscaler runs, so no frames are generated
+    UI_MENU_FRAMEGEN_NO_HDR,      // the row's note: not with HDR output
     UI_MENU_OUTPUT_RES_AUTO,
     UI_MENU_OUTPUT_RES_NEXT,   // ", %s after restart": the size output_res = auto takes at the next start
 

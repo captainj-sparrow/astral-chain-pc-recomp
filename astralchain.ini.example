@@ -295,6 +295,16 @@
 # Up to 1.10.1 one setting, anti_aliasing = smaa | dlaa | xess | fsr3, chose the scene's anti-aliasing (and before it
 # dlaa = 1 / xess = 1): dlaa, xess and fsr3 are read as upscaling = dlss, xess or fsr3 with upscaling_quality = native,
 # the same picture as before, and saved so. The old dlss line is no longer read.
+# NVIDIA DLSS Frame Generation: frames made between the game's own, for a smoother picture; the game keeps its frame
+# rate (fps) and its timing. off (the default), 2x (one frame between two of the game's), 3x or 4x (two or three, the
+# RTX 50 series), or auto (as many as the display's refresh rate holds: 4x at 60 fps on a 240 Hz display). Needs an
+# NVIDIA RTX 40 or newer GPU, nvngx_dlssg.dll from NVIDIA's DLSS SDK next to astralchain.exe (on Linux the SDK's
+# libnvidia-ngx-dlssg.so.<version> next to astralchain), and a temporal upscaler running (upscaling, in any mode): its
+# motion vectors and depth are what frame generation follows. The game's frames are shown a little later, behind the
+# generated ones (12.5 ms at 60 fps with 4x); with low_latency, NVIDIA Reflex keeps the rest of the delay down. Not with
+# HDR output yet (hdr = 1 keeps it off). NGX is loaded at start when it is on: switching it on later waits for a restart,
+# between its values it changes at once.
+# frame_generation = off
 
 # HDR output: hdr = 1 sends the picture as HDR10 (needs HDR on in Windows, "Use HDR", or a Wayland compositor with
 # colour management; without it the picture stays SDR). The game's tonemap keeps highlights up to hdr_peak_nits (your

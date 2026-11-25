@@ -39,6 +39,7 @@
 #include "host.h"
 #include "nvn_api.h"
 #include "vk_dlaa.h"
+#include "vk_dlssg.h"
 #include "vk_exec.h"
 #include "platform/platform.h"
 
@@ -186,7 +187,8 @@ int vk_hdr_track;                 // vk_exec_draw.c calls vk_hdr_draw: set at th
 static volatile int32_t g_active;   // the swapchain is HDR10 (gfx_present.c vk_hdr_set_active)
 static PlatMutex rec_lock = PLAT_MUTEX_INIT;
 // per presented window image: the scene a draw into it sampled since its last present (fresh), and that scene's format
-static struct { VkImage win, src; VkFormat fmt; int fresh; } recs[4];
+// and size
+static struct { VkImage win, src; VkFormat fmt; uint32_t w, h; int fresh; } recs[4];
 static int nrecs;
 
 void vk_hdr_set_active(int on) { plat_xchg32(&g_active, on); }
@@ -208,6 +210,7 @@ void vk_hdr_draw(VkExec *ex, const VkPipeInfo *info) {
     // follow sample neither, and leave the scene in place
     VkImage src = VK_NULL_HANDLE;
     VkFormat fmt = VK_FORMAT_UNDEFINED;
+    uint32_t sw = 0, sh = 0;
     for (uint32_t i = 0; i < info->n_bindings && !src; i++) {
         const VkPipeBinding *bd = &info->bindings[i];
         if (bd->kind != GFX_RES_TEX || bd->stage != GFX_STAGE_FS || !bd->res || bd->count > 1) continue;
@@ -220,22 +223,26 @@ void vk_hdr_draw(VkExec *ex, const VkPipeInfo *info) {
             s->width * 4 >= t->width &&
             llabs((long long)s->width * t->height - (long long)s->height * t->width) * 50 <=
                 (long long)t->width * t->height)
-            src = s->image, fmt = s->format;
+            src = s->image, fmt = s->format, sw = s->width, sh = s->height;
     }
     if (!src) return;
     // An upscaled scene (vk_dlaa.c): the blend draw reads the upscaler's picture in the composite's place
     // (vk_exec_draw.c tex_info), so that picture, of the window's size, is the scene the window texture holds.
     if (src == vk_dlaa_swap_img && vk_dlaa_swap_pic && t->width > vk_dlaa_swap_w + 1)
-        src = vk_dlaa_swap_pic, fmt = VK_FORMAT_R16G16B16A16_SFLOAT;
+        src = vk_dlaa_swap_pic, fmt = VK_FORMAT_R16G16B16A16_SFLOAT, sw = t->width, sh = t->height;
     plat_mutex_lock(&rec_lock);
     for (int i = 0; i < nrecs; i++)
-        if (recs[i].win == t->image) recs[i].src = src, recs[i].fmt = fmt, recs[i].fresh = 1;
+        if (recs[i].win == t->image)
+            recs[i].src = src, recs[i].fmt = fmt, recs[i].w = sw, recs[i].h = sh, recs[i].fresh = 1;
     plat_mutex_unlock(&rec_lock);
 }
 
-void vk_hdr_present_source(const VkTexImage *win, VkImage *scene, VkFormat *format) {
+// Also for frame generation (vk_dlssg.c) without HDR output: fg, when not NULL, gets the fresh scene whether or not the
+// swapchain is HDR10 (its HUD-less picture), with its format and size.
+void vk_hdr_present_source(const VkTexImage *win, VkImage *scene, VkFormat *format, VkFgScene *fg) {
     *scene = VK_NULL_HANDLE;
-    if (!vk_hdr_wanted()) return;
+    if (fg) fg->image = VK_NULL_HANDLE;
+    if (!vk_hdr_wanted() && !(fg && vk_dlssg_scene_wanted())) return;
     vk_hdr_track = 1;
     plat_mutex_lock(&rec_lock);
     int r = -1;
@@ -244,6 +251,8 @@ void vk_hdr_present_source(const VkTexImage *win, VkImage *scene, VkFormat *form
     if (r < 0 && nrecs < 4) r = nrecs++, recs[r].win = win->image, recs[r].src = VK_NULL_HANDLE, recs[r].fresh = 0;
     // only a scene drawn into it since its last present: a movie or loading screen after play has none
     if (r >= 0 && recs[r].fresh && recs[r].src && vk_hdr_active()) *scene = recs[r].src, *format = recs[r].fmt;
+    if (fg && r >= 0 && recs[r].fresh && recs[r].src)
+        fg->image = recs[r].src, fg->format = recs[r].fmt, fg->w = recs[r].w, fg->h = recs[r].h;
     if (r >= 0) recs[r].fresh = 0;
     plat_xchg32(&g_scene_seen, *scene != VK_NULL_HANDLE);
     plat_mutex_unlock(&rec_lock);
