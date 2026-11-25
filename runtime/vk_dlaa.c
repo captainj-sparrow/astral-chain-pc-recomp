@@ -79,7 +79,10 @@ typedef NgxResult (*PFN_DestroyParams)(NgxParam *);
 typedef NgxResult (*PFN_Create)(VkCommandBuffer, int feature, NgxParam *, NgxHandle **);
 typedef NgxResult (*PFN_Evaluate)(VkCommandBuffer, const NgxHandle *, const NgxParam *, void *callback);
 typedef NgxResult (*PFN_Release)(NgxHandle *);
-typedef NgxResult (*PFN_Shutdown)(VkDevice);
+// The core's NVSDK_NGX_VULKAN_Shutdown1 takes a second argument the SDK's header does not show: an int it writes (what
+// is left in use, as the SDK's static loader reads it). Called with the device alone, the core wrote through whatever
+// the register held, a null pointer on Linux, and crashed every exit with NGX up.
+typedef NgxResult (*PFN_Shutdown)(VkDevice, int *left);
 
 static struct {
     void *core;              // the NGX core's module (HMODULE)
@@ -1543,7 +1546,8 @@ void vk_dlaa_release(void) {
         features_sweep(1);
         if (D.params && N.destroy_params) N.destroy_params(D.params);
         D.params = NULL;
-        if (N.inited && N.shutdown) N.shutdown(c->device);
+        int left = 0;
+        if (N.inited && N.shutdown) N.shutdown(c->device, &left);
         N.inited = N.available = 0;
     }
     vk_xess_release();
