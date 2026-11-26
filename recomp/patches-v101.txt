@@ -231,6 +231,14 @@ site fps60 main 6a3f54 6b08013f @fnz:rt_fps_cue_cmp    # cmp w9,w8 -> Z = entry 
 # keyframes advance by step/30 (main+0x911550), these by 1 a call; they now add the whole ticks (rt_fps_up_w9, the pad repeat helper)
 site fps60 main 910b20 11000529 @fn:rt_fps_up_w9   # add w9,w9,#1 -> w9 += ticks (flipbook)
 site fps60 main 910d44 11000529 @fn:rt_fps_up_w9   # add w9,w9,#1 -> w9 += ticks (text reveal)
+# the map screen's stick, read once a frame and applied as a distance per frame (main+0x592280): the left stick pans
+# the map by stick/1000 x the map's speed (main+0x593B30), a second cursor of the map (main+0x6ACC00) moves by
+# stick/1000 x its speed at +0xC8, and the right stick held zooms by 0.03 a frame (main+0x593770 in, main+0x593950
+# out). Each is now that per 30 fps frame of real time: times the step
+site fps60 main 592648 aa1303e0 aa1303e0 @fn:rt_fps_rate_s0s1   # mov x0,x19; then the pan (s0, s1) *= step
+site fps60 main 6accf8 bd40ca62 bd40ca62 @fn:rt_fps_rate_s2     # ldr s2,[x19,#0xc8]; then the speed *= step
+site fps60 main 5937b0 bd460921 bd460921 @fn:rt_fps_rate_s1     # ldr s1 = 0.03; then *= step (zoom in)
+site fps60 main 593990 bd47e921 bd47e921 @fn:rt_fps_rate_s1     # ldr s1 = -0.03; then *= step (zoom out)
 # (the cut clock's end test, which a cutscene at 60 needs exact, is in the avsync set below)
 # diagnostics (AC_TRACE=perf): the scene clock the event kept, after its update (main+0x8B7C60)
 site fps60 main 8b7cb0 b9402a68 b9402a68 @fn:rt_cut_state   # ldr w8,[x19,#0x28]; then log cut changes and stops
