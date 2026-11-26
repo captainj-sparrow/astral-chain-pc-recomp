@@ -519,13 +519,26 @@ static _Noreturn void device_lost_exit(void) {
 
 // The query runs once per process. Threads that hit the loss at the same time wait on the lock until it is logged, so
 // none of them reaches its rt_fatal and ends the process before the report is written.
-void vk_device_fault_report(VkResult r) {
+void vk_device_fault_report_at(VkResult r, const char *where) {
     static PlatMutex lock = PLAT_MUTEX_INIT;
     static int done;
     if (r != VK_ERROR_DEVICE_LOST) return;
     plat_mutex_lock(&lock);
     if (done) { plat_mutex_unlock(&lock); return; }
     done = 1;
+    // Which call noticed it, and what the machine's memory looked like: only the operating system's numbers here, since
+    // a driver call can block on a lost device and the budget query is one. An integrated GPU's device-local pools are
+    // system memory, so a system with none left shows up as a submission that stalls for seconds and then a lost
+    // device, which is what these two lines tell apart from a bad command.
+    float ram_used = 0, ram_total = 0, work = 0;
+    double priv = 0, commit_used = 0, commit_limit = 0;
+    plat_mem_info(&ram_used, &ram_total, &work);
+    plat_commit_info(&priv, &commit_used, &commit_limit);
+    rt_log("vk: device loss seen by %s", where);
+    // Commit, not page file: on Windows it is the commit charge against RAM plus page file, on Linux Committed_AS
+    // against CommitLimit, which overcommit lets the first exceed (platform.h plat_commit_info).
+    rt_log("vk: memory at the loss: system %.0f of %.0f MiB in use, commit %.0f of %.0f MiB, this process %.0f MiB "
+           "in memory, %.0f MiB private", ram_used, ram_total, commit_used, commit_limit, work, priv);
     vk_crumbs_report();
     VkCtx *c = vk_ctx();
     PFN_vkGetDeviceFaultInfoEXT get =

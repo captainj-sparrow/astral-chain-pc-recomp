@@ -80,10 +80,14 @@ VkCtx *vk_ctx(void);                        // NULL until vk_init() succeeded
 int vk_init(void);                          // idempotent; 1 on success, 0 on failure (reason logged with rt_log)
 void vk_shutdown(void);
 int vk_selftest(void);                      // 0 on success
-// Call with the result of a failed queue submit, present or wait before stopping on it: VK_ERROR_DEVICE_LOST logs
-// what VK_EXT_device_fault reports (description, faulting addresses with their precision, vendor codes) once per
-// process, after the GPU breadcrumbs (vk_crumbs_report). Any other result returns at once.
-void vk_device_fault_report(VkResult r);
+// Call with the result of a failed queue submit, present or wait before stopping on it: VK_ERROR_DEVICE_LOST logs the
+// call that noticed it, the machine's own memory (an integrated GPU's device-local pools are system memory, and a
+// system with none left is how a submission comes to stall for seconds before the driver gives up), what
+// VK_EXT_device_fault reports (description, faulting addresses with their precision, vendor codes) and the GPU
+// breadcrumbs (vk_crumbs_report), once per process. Any other result returns at once. The name of the caller comes from
+// the macro, which is why no call site passes it.
+void vk_device_fault_report_at(VkResult r, const char *where);
+#define vk_device_fault_report(r) vk_device_fault_report_at(r, __func__)
 
 // ---- GPU breadcrumbs (vk_crumbs.c): with VK_AMD_buffer_marker, each crumb has the GPU write its code into host memory
 // twice, when the command processor reaches it and when all work before it has finished. After a lost device the two
