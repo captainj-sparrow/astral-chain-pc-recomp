@@ -302,8 +302,9 @@
 # libnvidia-ngx-dlssg.so.<version> next to astralchain), and a temporal upscaler running (upscaling, in any mode): its
 # motion vectors and depth are what frame generation follows. The game's frames are shown a little later, behind the
 # generated ones (12.5 ms at 60 fps with 4x); with low_latency, NVIDIA Reflex keeps the rest of the delay down. Works
-# with HDR output too. NGX is loaded at start when it is on: switching it on later waits for a restart, between its
-# values it changes at once.
+# with HDR output too. With V-Sync on, a multiplier above what the display shows is lowered to fit (6x at 60 fps on a
+# 240 Hz display runs as 4x). NGX is loaded at start when it is on: switching it on later waits for a restart, between
+# its values it changes at once.
 # frame_generation = off
 
 # HDR output: hdr = 1 sends the picture as HDR10 (needs HDR on in Windows, "Use HDR", or a Wayland compositor with

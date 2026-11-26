@@ -242,6 +242,7 @@ static void present_image(const tex_t *t, const int crop[4], uint64_t at_ns, uin
     VkFgScene hs;   // AC_HDR: the scene the game drew into it, same size; frame generation: the same, its HUD-less picture
     vk_hdr_present_source(img, &j.scene, &j.scene_format, &hs);
     if (fg.depth && hs.image) fg.hudless = hs.image, fg.hudless_format = hs.format, fg.hw = hs.w, fg.hh = hs.h;
+    fg.frame_id = frame;
     vk_dlssg_collect(&fg);
     j.fg = fg;
     j.work = fg.on ? vk_sync_issued() : 0;

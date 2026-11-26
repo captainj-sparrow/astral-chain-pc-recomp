@@ -106,6 +106,7 @@ typedef void (*SetI)(NgxParam *, const char *, int);
 typedef void (*SetU)(NgxParam *, const char *, unsigned);
 typedef void (*SetF)(NgxParam *, const char *, float);
 typedef void (*SetP)(NgxParam *, const char *, void *);
+typedef void (*SetULL)(NgxParam *, const char *, unsigned long long);
 typedef NgxResult (*GetI)(const NgxParam *, const char *, int *);
 typedef NgxResult (*GetU)(const NgxParam *, const char *, unsigned *);
 typedef NgxResult (*GetF)(const NgxParam *, const char *, float *);
@@ -119,6 +120,7 @@ static void p_seti(NgxParam *p, const char *n, int v) { ((SetI)p->vt->slot[S_I])
 static void p_setu(NgxParam *p, const char *n, unsigned v) { ((SetU)p->vt->slot[S_U32])(p, n, v); }
 static void p_setf(NgxParam *p, const char *n, float v) { ((SetF)p->vt->slot[S_F])(p, n, v); }
 static void p_setp(NgxParam *p, const char *n, void *v) { ((SetP)p->vt->slot[S_P])(p, n, v); }
+static void p_setull(NgxParam *p, const char *n, unsigned long long v) { ((SetULL)p->vt->slot[S_U64])(p, n, v); }
 static int p_geti(const NgxParam *p, const char *n, int *v) { return NGX_OK(((GetI)p->vt->slot[G_I])(p, n, v)); }
 static int p_getu(const NgxParam *p, const char *n, unsigned *v) { return NGX_OK(((GetU)p->vt->slot[G_U32])(p, n, v)); }
 static int p_getf(const NgxParam *p, const char *n, float *v) { return NGX_OK(((GetF)p->vt->slot[G_F])(p, n, v)); }
@@ -1030,7 +1032,11 @@ int vk_ngx_fg_create(VkCommandBuffer cb, uint32_t w, uint32_t h, VkFormat fmt, u
     // UI recomposition: NGX takes the HUD's colour from the picture, the HUD-less picture and the HUD's alpha, makes the
     // frame between under it and lays the HUD back over it, so a see-through HUD does not hold the scene under it still
     p_setu(p, "DLSSG.UserInterfaceRecompositionEnabled", uir ? 1u : 0u);
-    (void)rw, (void)rh;   // the depth and motion vectors may be smaller: given per evaluation as their subrects
+    // the depth's and the motion vectors' size, also given per evaluation as their subrects; a fixed one (a new size
+    // remakes the feature, vk_dlssg.c ensure)
+    p_setu(p, "DLSSG.InternalWidth", rw);
+    p_setu(p, "DLSSG.InternalHeight", rh);
+    p_setu(p, "DLSSG.DynamicResolution", 0);
     NgxHandle *f = NULL;
     uint64_t t0 = plat_now_ns();
     NgxResult r = N.create(cb, NGX_FEATURE_FRAMEGEN, p, &f);
@@ -1064,7 +1070,13 @@ int vk_ngx_fg_evaluate(VkCommandBuffer cb, void *feat, const VkFgEval *e) {
                                  VK_IMAGE_ASPECT_COLOR_BIT, 0);
     p_setp(p, "DLSSG.UIAlpha", e->ui_alpha ? &ra : NULL);
     p_setp(p, "DLSSG.BidirectionalDistortionField", NULL);
-    p_setp(p, "DLSSG.OutputDisableInterpolation", NULL);
+    // NGX's "do not show this set" (a scene change it saw): a byte it writes into the buffer, read by vk_dlssg.c
+    NgxResourceVK rd;
+    memset(&rd, 0, sizeof rd);
+    rd.r.buf.buffer = e->no_interp, rd.r.buf.bytes = e->no_interp_bytes, rd.type = 1, rd.rw = 1;
+    p_setp(p, "DLSSG.OutputDisableInterpolation", e->no_interp ? &rd : NULL);
+    // the game frame's number, one more than the last (NGX finds a gap in it)
+    p_setull(p, "DLSSG.BackbufferFrameID", (unsigned long long)f->frame_id);
     p_setu(p, "DLSSG.MultiFrameCount", e->count);
     p_setu(p, "DLSSG.MultiFrameIndex", e->index);
     // NGX reads the matrices while the evaluation is recorded, which is now

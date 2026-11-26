@@ -24,6 +24,7 @@ typedef struct VkFgFrame {
     float view_to_clip[16], clip_to_view[16], clip_to_prev[16], prev_to_clip[16];
     float cam_pos[3], cam_up[3], cam_right[3], cam_fwd[3];
     float near_z, far_z, fov_y;
+    uint64_t frame_id;                     // the game frame's number: one more than the last presented
 } VkFgFrame;
 
 void vk_dlssg_init(void);             // vk_device.c after vk_dlaa_init: what NGX offers here, logged once
@@ -74,6 +75,8 @@ typedef struct VkFgEval {
     VkImage ui_alpha;                      // AC_DLSSG_UI_ALPHA: the HUD's coverage (R8, w x h), or VK_NULL_HANDLE
     VkImageView ui_alpha_view;
     int hdr;                               // the pictures are HDR10 (PQ code values): DLSSG.ColorBuffersHDR
+    VkBuffer no_interp;                    // DLSSG.OutputDisableInterpolation: NGX writes 1 to its first byte for a set
+    uint32_t no_interp_bytes;              // not to show; VK_NULL_HANDLE for none
 } VkFgEval;
 int vk_ngx_fg_caps(unsigned *max_count);   // 1: NGX is up and offers frame generation; *max_count its MultiFrameCountMax
 // uir: UI recomposition (DLSSG.UserInterfaceRecompositionEnabled): each evaluation gives the HUD's alpha (ui_alpha)

@@ -22,7 +22,14 @@
 // later, and the n generated frames before it at even steps from T on; a frame without generated frames (no motion
 // vectors, a new history) is shown at the same delayed time, so the game's frames keep even intervals when frame
 // generation starts and stops. The delay is what frame generation costs in latency: 8.3 ms at 60 fps with 2x, 12.5 ms
-// with 4x.
+// with 4x. Under FIFO a fixed multiplier is capped at the pictures the display shows in a game frame (6x at 60 fps on
+// 240 Hz: 4x; at least 2x): FIFO shows one per refresh, and more would queue up behind it.
+//
+// NGX also gets each game frame's number (DLSSG.BackbufferFrameID; a gap is a new history here too) and a buffer it
+// marks when it sees a scene change between the two frames (DLSSG.OutputDisableInterpolation): the generated frames of
+// such a set are replaced by the game's frame on the GPU (shaders/dlssg_hold.comp), and the log counts them. A set NGX
+// refuses shows the game's frame alone and its feature is remade; five refused sets in a row, or three failed
+// creations, turn frame generation off for the run.
 //
 // AC_DLSSG_MVDEBUG = 1 .. 8 (test, no settings row): frame generation's inputs drawn over every frame it shows, after
 // NGX evaluated (so its inputs stay as they were): 1 the motion vectors as a colour tint over the game's frame, 2 the
@@ -48,6 +55,7 @@
 
 #include "cfg.h"
 #include "dlssg_alpha0_spv.h"
+#include "dlssg_hold_spv.h"
 #include "dlssg_mvdebug_spv.h"
 #include "dlssg_uialpha_spv.h"
 #include "gfx.h"
@@ -57,6 +65,10 @@
 
 #define MAX_GEN 5   // generated frames per game frame: NGX's MultiFrameCountMax on the RTX 50 series
 #define HDR_FMT VK_FORMAT_A2B10G10R10_UNORM_PACK32   // the pictures with an HDR10 swapchain: PQ code values
+#define HINTS 8     // NGX's "do not show" buffers, a ring: one is read back HINTS - 1 sets after it was written, when
+                    // its blit (8 in flight at most, gfx_present.c) has long finished
+#define EVAL_FAILS_OFF 5     // sets in a row NGX refused: off for the run (each refused set remakes the feature)
+#define CREATE_FAILS_OFF 3   // failed feature creations in a row: off for the run
 
 typedef struct { VkImage img; VmaAllocation mem; VkImageView view; } Img;
 
@@ -71,7 +83,7 @@ static struct {
     int hdr;                  // this job's swapchain is HDR10: the pictures are encoded before NGX (vk_hdr_encode_fg)
     VkFormat img_fmt, img_wfmt;   // the formats the images below were made in
     Img gen[MAX_GEN], hud, real;
-    Img sdr, hud8;            // HDR output: the window texture and the HUD-less picture in its format, the encode's input
+    Img sdr, hud8;            // HDR output: the window texture and the HUD-less picture in its format (encode input)
     Img dbg;                  // AC_DLSSG_MVDEBUG: a copy of the game's frame the overlay reads
     Img uia;                  // AC_DLSSG_UI_ALPHA: the HUD's coverage from the picture's alpha (R8)
     int uir;                  // the feature was made with UI recomposition
@@ -81,11 +93,17 @@ static struct {
     int armed, made, n;       // this job: the hook is set, generated frames made, asked for
     int evaluated;            // this job: NGX evaluated the frame (its history now ends with it)
     int prev_shown;           // the previous job showed frame generation's frames: its history follows on
+    uint64_t last_id;         // the game frame NGX last evaluated (VkFgFrame.frame_id): a gap starts a new history
+    int eval_fails, create_fails;   // in a row (EVAL_FAILS_OFF, CREATE_FAILS_OFF)
+    int drop_feat;            // a set was refused: the feature is remade at the next job, once its blit is done
+    int capped;               // the multiplier last capped to under FIFO (logged on a change), 0 none
+    struct { VkBuffer buf; VmaAllocation mem; void *map; int pending; } hint[HINTS];
+    uint64_t sets, held;      // sets evaluated, and of those read back, the ones NGX said not to show (logged)
     VkFgFrame fr;             // this job's inputs
     VkImage win;              // and its window texture, of pw x ph
     uint32_t pw, ph;
     // any thread
-    volatile int32_t failed;  // a call failed: off for the run
+    volatile int32_t failed;  // off for the run (image creation, or NGX failing again and again)
     volatile int32_t shown;   // the multiplier last shown, 0 none
     uint64_t shown_ns;        // when (plat_now_ns)
 } G = {.fmt_ok = -1};
@@ -361,6 +379,55 @@ static void fail(const char *what) {
     plat_xchg32(&G.failed, 1);
 }
 
+// NGX's "do not show this set" byte (DLSSG.OutputDisableInterpolation): a small host-visible buffer per set, from a
+// ring. The set's own frames hear of it on the GPU (shaders/dlssg_hold.comp); the CPU reads it HINTS - 1 sets later,
+// only for the log.
+static VkBuffer hint_take(VkCommandBuffer cb) {
+    const VkCtx *c = vk_ctx();
+    unsigned i = (unsigned)(G.sets % HINTS), old = (unsigned)((G.sets + 1) % HINTS);
+    if (G.hint[old].pending) {
+        vmaInvalidateAllocation(c->vma, G.hint[old].mem, 0, VK_WHOLE_SIZE);
+        G.held += ((const uint8_t *)G.hint[old].map)[0] != 0;
+        G.hint[old].pending = 0;
+    }
+    if (G.sets && G.sets % 600 == 0) {
+        if (G.held)
+            rt_log("dlssg: NGX asked not to show %llu of the last 600 sets (a scene change): the game's frame went out "
+                   "in their place", (unsigned long long)G.held);
+        G.held = 0;
+    }
+    if (!G.hint[i].buf) {
+        VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = 16,
+                                 .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT};
+        VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO,
+                                      .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT |
+                                               VMA_ALLOCATION_CREATE_MAPPED_BIT};
+        VmaAllocationInfo info;
+        if (vmaCreateBuffer(c->vma, &bi, &ai, &G.hint[i].buf, &G.hint[i].mem, &info) != VK_SUCCESS)
+            return G.hint[i].buf = VK_NULL_HANDLE;
+        G.hint[i].map = info.pMappedData;
+    }
+    vkCmdFillBuffer(cb, G.hint[i].buf, 0, 16, 0);
+    G.hint[i].pending = 1;
+    return G.hint[i].buf;
+}
+
+static void hints_free(void) {
+    for (int i = 0; i < HINTS; i++)
+        if (G.hint[i].buf) vmaDestroyBuffer(vk_ctx()->vma, G.hint[i].buf, G.hint[i].mem);
+    memset(G.hint, 0, sizeof G.hint);
+}
+
+// Waits for the device, then lets NGX's feature go (a refused set's, which the GPU may still be running)
+static void feat_drop(void) {
+    vk_queue_lock();
+    vkDeviceWaitIdle(vk_ctx()->device);
+    vk_queue_unlock();
+    if (G.feat) vk_ngx_fg_release(G.feat);
+    G.feat = NULL;
+    G.drop_feat = 0;
+}
+
 // The images and the feature for this job's sizes, made in cb when missing. 1: ready; *fresh: a new feature (its
 // history starts with this frame).
 static int ensure(VkCommandBuffer cb, int *fresh) {
@@ -390,14 +457,17 @@ static int ensure(VkCommandBuffer cb, int *fresh) {
             fail("image creation");
             return 0;
         }
+    if (G.drop_feat) feat_drop();
     if (!G.feat) {
         barrier(cb);   // the new images' layouts before NGX records anything
         G.uir = vk_dlssg_ui_alpha();
         if (G.uir && !G.uia.img && !img_make(cb, &G.uia, G.w, G.h, VK_FORMAT_R8_UNORM)) G.uir = 0;
         if (!vk_ngx_fg_create(cb, G.w, G.h, G.fmt, G.rw, G.rh, G.uir, &G.feat)) {
-            fail("NGX's feature creation");
-            return 0;
+            G.feat = NULL;
+            if (++G.create_fails >= CREATE_FAILS_OFF) fail("NGX's feature creation, three times in a row,");
+            return 0;   // tried again at the next frame
         }
+        G.create_fails = 0;
         *fresh = 1;
     }
     return 1;
@@ -406,7 +476,7 @@ static int ensure(VkCommandBuffer cb, int *fresh) {
 // ---------------------------------------------------------------- the passes of ours
 // Compute passes with push descriptors: combined image samplers and one storage image (the output), in binding order.
 static PFN_vkCmdPushDescriptorSetKHR push_fn;
-static Pass dbg_pass, ua_pass;
+static Pass dbg_pass, ua_pass, hold_pass;
 
 static VkSampler sampler(VkFilter f) {
     VkSamplerCreateInfo si = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .magFilter = f, .minFilter = f,
@@ -468,7 +538,7 @@ static void pass_free(Pass *ps) {
 
 static void passes_release(void) {
     const VkCtx *c = vk_ctx();
-    pass_free(&dbg_pass), pass_free(&alpha_pass), pass_free(&ua_pass);
+    pass_free(&dbg_pass), pass_free(&alpha_pass), pass_free(&ua_pass), pass_free(&hold_pass);
     if (nearest) vkDestroySampler(c->device, nearest, NULL);
     nearest = VK_NULL_HANDLE;
 }
@@ -533,6 +603,31 @@ static void mvdebug(VkCommandBuffer cb, int mode) {
     barrier(cb);
 }
 
+// A set NGX said not to show (its byte in hint): the game's frame goes into each generated frame on the GPU
+static void hold(VkCommandBuffer cb, VkBuffer hint) {
+    static const VkDescriptorType t[3] = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                                          VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
+    if (!pass_init(&hold_pass, "scene change hold", dlssg_hold_spv, sizeof dlssg_hold_spv, t, 3)) return;
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, hold_pass.pipe);
+    int32_t pc[2] = {(int32_t)G.w, (int32_t)G.h};
+    vkCmdPushConstants(cb, hold_pass.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, pc);
+    for (int k = 0; k < G.n; k++) {
+        VkDescriptorImageInfo ri = {nearest, G.real.view, VK_IMAGE_LAYOUT_GENERAL},
+                              oi = {VK_NULL_HANDLE, G.gen[k].view, VK_IMAGE_LAYOUT_GENERAL};
+        VkDescriptorBufferInfo bi = {hint, 0, 16};
+        VkWriteDescriptorSet wr[3] = {
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 0, .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &ri},
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 1, .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .pImageInfo = &oi},
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 2, .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &bi}};
+        rec_push(push_fn, cb, VK_PIPELINE_BIND_POINT_COMPUTE, hold_pass.layout, 0, 3, wr);
+        vkCmdDispatch(cb, (G.w + 7) / 8, (G.h + 7) / 8, 1);
+    }
+    barrier(cb);
+}
+
 // vk_present_pre_record's hook: at the start of the blit's command buffer, before anything reads src. Returns the
 // image the blit shows: the first generated frame, or src when none was made.
 static VkImage record(VkCommandBuffer cb, VkImage src, unsigned slot, VkFormat *fmt) {
@@ -572,23 +667,44 @@ static VkImage record(VkCommandBuffer cb, VkImage src, unsigned slot, VkFormat *
             barrier(cb);
         }
     }
-    int reset = f->reset || fresh || !G.prev_shown;
+    int reset = f->reset || fresh || !G.prev_shown || f->frame_id != G.last_id + 1;
+    VkBuffer hint = hint_take(cb);
+    if (hint) barrier(cb);   // its fill before NGX writes it
     for (int k = 1; k <= G.n; k++) {
         VkFgEval e = {.back = G.real.img, .back_view = G.real.view, .hudless = G.hud.img, .hudless_view = G.hud.view,
                       .out = G.gen[k - 1].img, .out_view = G.gen[k - 1].view, .format = G.fmt, .w = G.w, .h = G.h,
                       .f = f, .count = (uint32_t)G.n, .index = (uint32_t)k, .reset = reset && k == 1,
                       .ui_alpha = G.uir ? G.uia.img : VK_NULL_HANDLE, .ui_alpha_view = G.uia.view,
-                      .hdr = G.hdr};
+                      .hdr = G.hdr, .no_interp = hint, .no_interp_bytes = 16};
         int r = vk_ngx_fg_evaluate(cb, G.feat, &e);
         if (!r || ((unsigned)r & 0xFFF00000u) == 0xBAD00000u) {   // NVSDK_NGX_Result: 1 success, 0xBAD0xxxx failures
-            char what[64];
-            snprintf(what, sizeof what, "NGX's evaluation (%08x)", (unsigned)r);
-            fail(what);
+            // The set is not shown and the feature is remade (feat_drop, at the next job): a new history. Only a run of
+            // refused sets turns frame generation off.
+            static int logged;
+            if (logged++ < 8)
+                rt_log("dlssg: NGX refused frame %d of %d (%08x): the game's frame alone", k, G.n, (unsigned)r);
+            if (k > 1) barrier(cb);   // the frames NGX did write, before the blit reads src
+            G.drop_feat = 1;
+            if (++G.eval_fails >= EVAL_FAILS_OFF) fail("NGX's evaluation, five sets in a row,");
             return src;
         }
     }
     barrier(cb);
+    if (hint) {   // NGX's byte, for the CPU's read HINTS - 1 sets later (after the blit's fence)
+        VkMemoryBarrier2 hb = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+                               .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                               .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                               .dstStageMask = VK_PIPELINE_STAGE_2_HOST_BIT,
+                               .dstAccessMask = VK_ACCESS_2_HOST_READ_BIT};
+        VkDependencyInfo di = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .memoryBarrierCount = 1,
+                               .pMemoryBarriers = &hb};
+        vkCmdPipelineBarrier2(cb, &di);
+    }
+    G.eval_fails = 0;
+    G.last_id = f->frame_id;
+    G.sets++;
     G.evaluated = 1;
+    if (hint && !reset) hold(cb, hint);
     int dm = mvdebug_mode();
     if (dm) mvdebug(cb, dm);
     *fmt = G.fmt;
@@ -608,9 +724,20 @@ int vk_dlssg_begin(const VkFgFrame *f, VkImage win, VkFormat fmt, uint32_t w, ui
         return 0;
     }
     int m = s;
+    double hz = gfx_window_refresh_hz(), slots = hz > 0 ? hz * (double)period_ns / 1e9 : 0.0;
     if (s == 1) {   // auto: as many frames as the display shows in a game frame
-        double hz = gfx_window_refresh_hz(), slots = hz > 0 ? hz * (double)period_ns / 1e9 : 2.0;
-        m = (int)(slots + 0.25);
+        m = slots > 0 ? (int)(slots + 0.25) : 2;
+    } else if (slots > 0 && !strcmp(gfx_window_present_mode(), "fifo") && (int)(slots + 0.25) < m) {
+        // FIFO shows one picture per refresh: more than fit in a game frame would queue up behind it, each game frame
+        // shown later than the last. As many as fit (at least 2x, the game frame and one between)
+        int fit = (int)(slots + 0.25);
+        m = fit < 2 ? 2 : fit;
+        if (G.capped != m)
+            rt_log("dlssg: %dx is more than the display shows at this frame rate under V-Sync (%.0f Hz, %.1f fps): %dx",
+                   s, hz, 1e9 / (double)period_ns, m);
+        G.capped = m;
+    } else {
+        G.capped = 0;
     }
     if (m > max) m = max;
     if (m < 2) {
@@ -648,6 +775,7 @@ int vk_dlssg_encoded(VkImage img) {
 
 void vk_dlssg_release(void) {
     free_all(0);
+    hints_free();
     capture_free();
     passes_release();
 }

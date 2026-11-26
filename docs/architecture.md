@@ -524,7 +524,11 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   before the next frame's work (`vk_present_drain`), so the inputs still hold the frame. The game's frame is then shown
   n/(n+1) of a frame period after its display time and the generated ones at even steps from that time; a frame
   without generated frames (a new history: a cut, a size change, frames without the AA point) is shown at the same
-  delayed time. Measured on an RTX 5090 (driver 615.78.08, Linux, Hyprland, FIFO at 240 Hz), DLAA at 3840x2160, 4x,
+  delayed time. Under FIFO a fixed multiplier is capped at the pictures the display shows in a game frame (at least 2x),
+  so they do not queue up behind V-Sync. NGX gets each frame's number (`DLSSG.BackbufferFrameID`) and a buffer it
+  marks for a set not to show (`DLSSG.OutputDisableInterpolation`, a scene change), whose generated frames
+  `shaders/dlssg_hold.comp` then replaces by the game's frame. A refused set remakes the feature; five in a row, or
+  three failed creations, turn frame generation off for the run. Measured on an RTX 5090 (driver 615.78.08, Linux, Hyprland, FIFO at 240 Hz), DLAA at 3840x2160, 4x,
   the opening motorway through `tools/input/load_save.txt` for 50 s: NGX recorded the three evaluations in 0.2 ms of
   CPU time, the probe measured 0.8-1.2 ms of GPU time per generated frame at 3840x2160 on cleared images, and the
   generated frames went out at +0.0, +4.17 and +8.33 ms of the frame's display time. Two things had to change for
