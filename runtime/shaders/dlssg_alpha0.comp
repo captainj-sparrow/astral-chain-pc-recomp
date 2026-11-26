@@ -1,0 +1,15 @@
+#version 450
+// Frame generation's UI alpha (vk_dlssg.c, AC_DLSSG_UI_ALPHA): the HUD-less copy of the window texture with its alpha
+// at 0, copied back into the window texture before the HUD's draws, so the alpha they blend in is the HUD's coverage.
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(binding = 0) uniform sampler2D src;           // the HUD-less copy
+layout(binding = 1) uniform writeonly image2D dst;   // the same with alpha 0, of src's format
+layout(push_constant) uniform P {
+    ivec2 size;
+} pc;
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(p, pc.size))) return;
+    imageStore(dst, p, vec4(texelFetch(src, p, 0).rgb, 0.0));
+}

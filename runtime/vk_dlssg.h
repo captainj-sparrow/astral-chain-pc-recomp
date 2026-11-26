@@ -33,6 +33,9 @@ int vk_dlssg_scene_wanted(void);      // vk_hdr.c: the HUD-less scene is to be f
 // and vk_dlssg_capture_image() holds it for this frame's present.
 int vk_dlssg_capture(VkCommandBuffer cb, VkImage win, VkFormat fmt, uint32_t w, uint32_t h);
 VkImage vk_dlssg_capture_image(void);
+// AC_DLSSG_UI_ALPHA=1 (test): the window texture's alpha is 0 from the HUD-less copy on, and the HUD's draws blend their
+// coverage into it (vk_hdr_hud_targets, vk_exec_draw.c), for frame generation's UI recomposition.
+int vk_dlssg_ui_alpha(void);
 int vk_dlssg_set_at_start(void);      // vk_device.c: the setting at start asked for it (its present queue)
 // vk_backend.c present_image, on the replay thread: fills f->on and f->reset from the setting and this frame's inputs
 // (the rest of *f is filled by vk_dlaa_fg_inputs and vk_hdr_present_source before).
@@ -66,9 +69,13 @@ typedef struct VkFgEval {
     const VkFgFrame *f;
     uint32_t count, index;                 // frames generated per game frame, and this one (1..count)
     int reset;
+    VkImage ui_alpha;                      // AC_DLSSG_UI_ALPHA: the HUD's coverage (R8, w x h), or VK_NULL_HANDLE
+    VkImageView ui_alpha_view;
 } VkFgEval;
 int vk_ngx_fg_caps(unsigned *max_count);   // 1: NGX is up and offers frame generation; *max_count its MultiFrameCountMax
-int vk_ngx_fg_create(VkCommandBuffer cb, uint32_t w, uint32_t h, VkFormat fmt, uint32_t rw, uint32_t rh, void **feat);
+// uir: UI recomposition (DLSSG.UserInterfaceRecompositionEnabled): each evaluation gives the HUD's alpha (ui_alpha)
+int vk_ngx_fg_create(VkCommandBuffer cb, uint32_t w, uint32_t h, VkFormat fmt, uint32_t rw, uint32_t rh, int uir,
+                     void **feat);
 int vk_ngx_fg_evaluate(VkCommandBuffer cb, void *feat, const VkFgEval *e);   // NGX's result
 void vk_ngx_fg_release(void *feat);
 // The frame's temporal upscaler inputs, at the game's present before vk_dlaa_frame: 1 when the upscaler resolved this

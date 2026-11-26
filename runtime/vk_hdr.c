@@ -192,6 +192,7 @@ static PlatMutex rec_lock = PLAT_MUTEX_INIT;
 // before the next draw into it (vk_hdr_before_draw), 0 neither since the last present
 static struct { VkImage win, src; VkFormat fmt; uint32_t w, h; int fresh, cap; } recs[4];
 static volatile int32_t g_cap_pending;   // recs with cap 1: the per-draw check's fast way out
+static volatile int32_t g_cap_done;      // recs with cap 2: the same for vk_hdr_hud_targets
 static int nrecs;
 
 void vk_hdr_set_active(int on) { plat_xchg32(&g_active, on); }
@@ -237,7 +238,10 @@ void vk_hdr_draw(VkExec *ex, const VkPipeInfo *info) {
     for (int i = 0; i < nrecs; i++)
         if (recs[i].win == t->image) {
             recs[i].src = src, recs[i].fmt = fmt, recs[i].w = sw, recs[i].h = sh, recs[i].fresh = 1;
-            if (vk_dlssg_scene_wanted() && recs[i].cap != 1) recs[i].cap = 1, plat_inc32(&g_cap_pending);
+            if (vk_dlssg_scene_wanted() && recs[i].cap != 1) {
+                if (recs[i].cap == 2) plat_dec32(&g_cap_done);
+                recs[i].cap = 1, plat_inc32(&g_cap_pending);
+            }
         }
     plat_mutex_unlock(&rec_lock);
 }
@@ -261,10 +265,23 @@ void vk_hdr_before_draw(VkExec *ex) {
         int ok = vk_dlssg_capture(ex->cb, t->image, t->img->format, t->img->width, t->img->height);
         ex->recorded += 3;
         plat_mutex_lock(&rec_lock);
-        if (recs[r].win == t->image) recs[r].cap = ok ? 2 : 0;
+        if (recs[r].win == t->image && ok) recs[r].cap = 2, plat_inc32(&g_cap_done);
         plat_mutex_unlock(&rec_lock);
         return;
     }
+}
+
+// AC_DLSSG_UI_ALPHA: the colour targets of this draw (bit i: ex->color[i]) that are window textures whose HUD-less copy
+// was taken: the HUD's draws, which blend their coverage into its alpha (vk_exec_draw.c).
+uint32_t vk_hdr_hud_targets(const VkExec *ex) {
+    if (!plat_cas32(&g_cap_done, 0, 0)) return 0;
+    uint32_t m = 0;
+    plat_mutex_lock(&rec_lock);
+    for (int c = 0; c < 8; c++)
+        for (int i = 0; i < nrecs && ex->color[c].image; i++)
+            if (recs[i].win == ex->color[c].image && recs[i].cap == 2) m |= 1u << c;
+    plat_mutex_unlock(&rec_lock);
+    return m;
 }
 
 // Also for frame generation (vk_dlssg.c) without HDR output: fg, when not NULL, gets the fresh scene whether or not the
@@ -292,6 +309,7 @@ void vk_hdr_present_source(const VkTexImage *win, VkImage *scene, VkFormat *form
     }
     if (r >= 0) {
         if (recs[r].cap == 1) plat_dec32(&g_cap_pending);
+        if (recs[r].cap == 2) plat_dec32(&g_cap_done);
         recs[r].fresh = 0, recs[r].cap = 0;
     }
     plat_xchg32(&g_scene_seen, *scene != VK_NULL_HANDLE);

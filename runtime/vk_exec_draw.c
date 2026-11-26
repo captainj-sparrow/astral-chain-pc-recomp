@@ -31,6 +31,7 @@
 #include "vk_exec.h"
 #include "platform/platform.h"
 #include "vk_dlaa.h"
+#include "vk_dlssg.h"
 
 #define MAX_BINDINGS 128
 #define MAX_DESC 1024
@@ -2543,6 +2544,36 @@ static int prepare_draw(VkExec *ex, int prim, int32_t count, int restart) {
         s.blend[0].dst_a = NVN_BLEND_FUNC_ZERO;
         s.blend[0].eq_rgb = NVN_BLEND_EQUATION_ADD;
         s.blend[0].eq_a = NVN_BLEND_EQUATION_ADD;
+    }
+    // AC_DLSSG_UI_ALPHA (vk_dlssg.c): a HUD draw into the window texture also writes the share of the scene it covers to
+    // the alpha, which starts at 0 there: "over" for a draw that keeps ONE_MINUS_SRC_ALPHA of what is under it (or
+    // another share of it), none for an additive one, all for an opaque one. Its colour is the game's.
+    uint32_t hud = vk_hdr_track && vk_dlssg_ui_alpha() ? vk_hdr_hud_targets(ex) : 0;
+    for (int i = 0; i < 8; i++) {
+        if (!(hud >> i & 1)) continue;
+        {   // each blend setup the HUD's draws use, once (AC_DLSSG_UI_ALPHA is a test)
+            static uint64_t seen[32];
+            static int n_seen;
+            const blend_st *g = &s.blend[i];
+            uint64_t k = (uint64_t)(s.color.blend_en >> i & 1) | (uint64_t)g->src_rgb << 1 | (uint64_t)g->dst_rgb << 8 |
+                         (uint64_t)g->src_a << 15 | (uint64_t)g->dst_a << 22 | (uint64_t)g->eq_rgb << 29 |
+                         (uint64_t)g->eq_a << 32 | (uint64_t)(s.chmask.mask >> (4 * i) & 0xf) << 35;
+            int j = 0;
+            while (j < n_seen && seen[j] != k) j++;
+            if (j == n_seen && n_seen < 32) {
+                seen[n_seen++] = k;
+                rt_log("dlssg: HUD draw blend: enable %d, rgb %d/%d eq %d, alpha %d/%d eq %d, mask %#x (prog %llu)",
+                       (int)(k & 1), g->src_rgb, g->dst_rgb, g->eq_rgb, g->src_a, g->dst_a, g->eq_a,
+                       (unsigned)(s.chmask.mask >> (4 * i) & 0xf), ex->prog ? (unsigned long long)ex->prog->serial : 0ull);
+            }
+        }
+        s.chmask.mask |= 8u << (4 * i);
+        if (!(s.color.blend_en >> i & 1)) continue;   // the shader's alpha, 1 for an opaque panel
+        blend_st *b = &s.blend[i];
+        int keep = b->dst_rgb == NVN_BLEND_FUNC_ONE, over = b->dst_rgb != NVN_BLEND_FUNC_ZERO && !keep;
+        b->src_a = keep ? NVN_BLEND_FUNC_ZERO : NVN_BLEND_FUNC_ONE;
+        b->dst_a = keep ? NVN_BLEND_FUNC_ONE : over ? NVN_BLEND_FUNC_ONE_MINUS_SRC_ALPHA : NVN_BLEND_FUNC_ZERO;
+        b->eq_a = NVN_BLEND_EQUATION_ADD;
     }
     s.vs = vs, s.fs = fs;
     s.feedback = (uint8_t)((fbl & 0xff ? 1 : 0) | (fbl & 0x100 ? 2 : 0));

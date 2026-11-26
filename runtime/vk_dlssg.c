@@ -42,7 +42,9 @@
 #include <string.h>
 
 #include "cfg.h"
+#include "dlssg_alpha0_spv.h"
 #include "dlssg_mvdebug_spv.h"
+#include "dlssg_uialpha_spv.h"
 #include "gfx.h"
 #include "host.h"
 #include "vk_dlaa.h"
@@ -61,6 +63,8 @@ static struct {
     VkFormat fmt;
     Img gen[MAX_GEN], hud, real;
     Img dbg;                  // AC_DLSSG_MVDEBUG: a copy of the game's frame the overlay reads
+    Img uia;                  // AC_DLSSG_UI_ALPHA: the HUD's coverage from the picture's alpha (R8)
+    int uir;                  // the feature was made with UI recomposition
     int fmt_ok;               // -1 not checked
     int armed, made, n;       // this job: the hook is set, generated frames made, asked for
     int evaluated;            // this job: NGX evaluated the frame (its history now ends with it)
@@ -204,15 +208,53 @@ static struct {
     VmaAllocation mem;
     uint32_t w, h;
     VkFormat fmt;
+    // AC_DLSSG_UI_ALPHA: the copy's view, and the copy with alpha 0 that goes back into the window texture
+    VkImageView view;
+    Img zero;
 } CAP;
 static void barrier(VkCommandBuffer cb);
 // Compute passes with push descriptors (the passes of ours, below)
-typedef struct {
+typedef struct Pass {
     int tried, ok;
     VkDescriptorSetLayout dsl;
     VkPipelineLayout layout;
     VkPipeline pipe;
 } Pass;
+static Pass alpha_pass;
+static VkSampler nearest;
+static int pass_init(Pass *ps, const char *name, const uint32_t *spv, size_t bytes, const VkDescriptorType *types,
+                     uint32_t n);
+static void pass_run(VkCommandBuffer cb, Pass *ps, const VkImageView *views, const VkSampler *samplers, uint32_t n,
+                     uint32_t out, const void *pc, uint32_t pc_bytes, uint32_t w, uint32_t h);
+
+// AC_DLSSG_UI_ALPHA=1 (test): the window texture's alpha set to 0 at the HUD-less copy, so after the HUD's draws it
+// holds their coverage (where they blend their alpha in over the destination's), for frame generation's UI
+// recomposition. The game's scene leaves 1 there, and "over" onto 1 stays 1 (AC_DLSSG_MVDEBUG=5 shows it).
+int vk_dlssg_ui_alpha(void) {
+    const char *v = cfg_get("AC_DLSSG_UI_ALPHA");
+    return v && !strcmp(v, "1");
+}
+
+static void zero_alpha(VkCommandBuffer cb, VkImage win) {
+    static const VkDescriptorType t[2] = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
+    const VkCtx *c = vk_ctx();
+    if (!pass_init(&alpha_pass, "UI alpha", dlssg_alpha0_spv, sizeof dlssg_alpha0_spv, t, 2)) return;
+    if (!CAP.view) {
+        VkImageViewCreateInfo vi = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = CAP.img,
+                                    .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = CAP.fmt,
+                                    .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+        if (vkCreateImageView(c->device, &vi, NULL, &CAP.view) != VK_SUCCESS) CAP.view = VK_NULL_HANDLE;
+    }
+    if (!CAP.view || (!CAP.zero.img && !img_make(cb, &CAP.zero, CAP.w, CAP.h, CAP.fmt))) return;
+    VkImageView v[2] = {CAP.view, CAP.zero.view};
+    VkSampler sm[2] = {nearest, VK_NULL_HANDLE};
+    int32_t pc[2] = {(int32_t)CAP.w, (int32_t)CAP.h};
+    pass_run(cb, &alpha_pass, v, sm, 2, 1, pc, sizeof pc, CAP.w, CAP.h);
+    barrier(cb);
+    VkImageCopy cp = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                      .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .extent = {CAP.w, CAP.h, 1}};
+    vkCmdCopyImage(cb, CAP.zero.img, VK_IMAGE_LAYOUT_GENERAL, win, VK_IMAGE_LAYOUT_GENERAL, 1, &cp);
+}
 
 int vk_dlssg_capture(VkCommandBuffer cb, VkImage win, VkFormat fmt, uint32_t w, uint32_t h) {
     const VkCtx *c = vk_ctx();
@@ -220,8 +262,10 @@ int vk_dlssg_capture(VkCommandBuffer cb, VkImage win, VkFormat fmt, uint32_t w, 
         vk_queue_lock();
         vkDeviceWaitIdle(c->device);
         vk_queue_unlock();
+        if (CAP.view) vkDestroyImageView(c->device, CAP.view, NULL);
+        img_free(&CAP.zero);
         vmaDestroyImage(c->vma, CAP.img, CAP.mem);
-        CAP.img = VK_NULL_HANDLE;
+        CAP.img = VK_NULL_HANDLE, CAP.view = VK_NULL_HANDLE;
     }
     if (!CAP.img) {
         VkImageCreateInfo ii = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D,
@@ -256,12 +300,18 @@ int vk_dlssg_capture(VkCommandBuffer cb, VkImage win, VkFormat fmt, uint32_t w, 
                       .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .extent = {w, h, 1}};
     vkCmdCopyImage(cb, win, VK_IMAGE_LAYOUT_GENERAL, CAP.img, VK_IMAGE_LAYOUT_GENERAL, 1, &cp);
     barrier(cb);   // before the HUD draws write the window texture again
+    if (vk_dlssg_ui_alpha()) {
+        zero_alpha(cb, win);
+        barrier(cb);
+    }
     return 1;
 }
 
 VkImage vk_dlssg_capture_image(void) { return CAP.img; }
 
 static void capture_free(void) {
+    if (CAP.view) vkDestroyImageView(vk_ctx()->device, CAP.view, NULL);
+    img_free(&CAP.zero);
     if (CAP.img) vmaDestroyImage(vk_ctx()->vma, CAP.img, CAP.mem);
     memset(&CAP, 0, sizeof CAP);
 }
@@ -277,7 +327,7 @@ static void free_all(int wait) {
     if (G.feat) vk_ngx_fg_release(G.feat);
     G.feat = NULL;
     for (int i = 0; i < MAX_GEN; i++) img_free(&G.gen[i]);
-    img_free(&G.hud), img_free(&G.real), img_free(&G.dbg);
+    img_free(&G.hud), img_free(&G.real), img_free(&G.dbg), img_free(&G.uia);
     G.w = G.h = G.rw = G.rh = 0;
 }
 
@@ -318,7 +368,9 @@ static int ensure(VkCommandBuffer cb, int *fresh) {
         }
     if (!G.feat) {
         barrier(cb);   // the new images' layouts before NGX records anything
-        if (!vk_ngx_fg_create(cb, G.w, G.h, G.fmt, G.rw, G.rh, &G.feat)) {
+        G.uir = vk_dlssg_ui_alpha();
+        if (G.uir && !G.uia.img && !img_make(cb, &G.uia, G.w, G.h, VK_FORMAT_R8_UNORM)) G.uir = 0;
+        if (!vk_ngx_fg_create(cb, G.w, G.h, G.fmt, G.rw, G.rh, G.uir, &G.feat)) {
             fail("NGX's feature creation");
             return 0;
         }
@@ -330,8 +382,7 @@ static int ensure(VkCommandBuffer cb, int *fresh) {
 // ---------------------------------------------------------------- the passes of ours
 // Compute passes with push descriptors: combined image samplers and one storage image (the output), in binding order.
 static PFN_vkCmdPushDescriptorSetKHR push_fn;
-static VkSampler nearest;
-static Pass dbg_pass;
+static Pass dbg_pass, ua_pass;
 
 static VkSampler sampler(VkFilter f) {
     VkSamplerCreateInfo si = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .magFilter = f, .minFilter = f,
@@ -393,7 +444,7 @@ static void pass_free(Pass *ps) {
 
 static void passes_release(void) {
     const VkCtx *c = vk_ctx();
-    pass_free(&dbg_pass);
+    pass_free(&dbg_pass), pass_free(&alpha_pass), pass_free(&ua_pass);
     if (nearest) vkDestroySampler(c->device, nearest, NULL);
     nearest = VK_NULL_HANDLE;
 }
@@ -479,11 +530,22 @@ static VkImage record(VkCommandBuffer cb, VkImage src) {
                      .dstOffsets = {{0, 0, 0}, {(int32_t)G.w, (int32_t)G.h, 1}}};
     vkCmdBlitImage(cb, f->hudless, VK_IMAGE_LAYOUT_GENERAL, G.hud.img, VK_IMAGE_LAYOUT_GENERAL, 1, &b, VK_FILTER_LINEAR);
     barrier(cb);
+    if (G.uir) {   // the HUD's coverage the picture's alpha holds (vk_exec_draw.c), as NGX's single channel
+        static const VkDescriptorType t[2] = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
+        if (pass_init(&ua_pass, "UI alpha extraction", dlssg_uialpha_spv, sizeof dlssg_uialpha_spv, t, 2)) {
+            VkImageView v[2] = {G.real.view, G.uia.view};
+            VkSampler sm[2] = {nearest, VK_NULL_HANDLE};
+            int32_t pc[2] = {(int32_t)G.w, (int32_t)G.h};
+            pass_run(cb, &ua_pass, v, sm, 2, 1, pc, sizeof pc, G.w, G.h);
+            barrier(cb);
+        }
+    }
     int reset = f->reset || fresh || !G.prev_shown;
     for (int k = 1; k <= G.n; k++) {
         VkFgEval e = {.back = G.real.img, .back_view = G.real.view, .hudless = G.hud.img, .hudless_view = G.hud.view,
                       .out = G.gen[k - 1].img, .out_view = G.gen[k - 1].view, .format = G.fmt, .w = G.w, .h = G.h,
-                      .f = f, .count = (uint32_t)G.n, .index = (uint32_t)k, .reset = reset && k == 1};
+                      .f = f, .count = (uint32_t)G.n, .index = (uint32_t)k, .reset = reset && k == 1,
+                      .ui_alpha = G.uir ? G.uia.img : VK_NULL_HANDLE, .ui_alpha_view = G.uia.view};
         int r = vk_ngx_fg_evaluate(cb, G.feat, &e);
         if (!r || ((unsigned)r & 0xFFF00000u) == 0xBAD00000u) {   // NVSDK_NGX_Result: 1 success, 0xBAD0xxxx failures
             char what[64];

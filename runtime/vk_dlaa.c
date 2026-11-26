@@ -1010,7 +1010,8 @@ int vk_ngx_fg_caps(unsigned *max_count) {
     return N.inited && N.fg_available;
 }
 
-int vk_ngx_fg_create(VkCommandBuffer cb, uint32_t w, uint32_t h, VkFormat fmt, uint32_t rw, uint32_t rh, void **feat) {
+int vk_ngx_fg_create(VkCommandBuffer cb, uint32_t w, uint32_t h, VkFormat fmt, uint32_t rw, uint32_t rh, int uir,
+                     void **feat) {
     *feat = NULL;
     if (!N.inited || !N.fg_available) return 0;
     if (!fg_params && (!NGX_OK(N.alloc_params(&fg_params)) || !fg_params)) {
@@ -1026,6 +1027,9 @@ int vk_ngx_fg_create(VkCommandBuffer cb, uint32_t w, uint32_t h, VkFormat fmt, u
     p_setu(p, "DLSSG.Width", w);
     p_setu(p, "DLSSG.Height", h);
     p_setu(p, "DLSSG.BackbufferFormat", (unsigned)fmt);
+    // UI recomposition: NGX takes the HUD's colour from the picture, the HUD-less picture and the HUD's alpha, makes the
+    // frame between under it and lays the HUD back over it, so a see-through HUD does not hold the scene under it still
+    p_setu(p, "DLSSG.UserInterfaceRecompositionEnabled", uir ? 1u : 0u);
     (void)rw, (void)rh;   // the depth and motion vectors may be smaller: given per evaluation as their subrects
     NgxHandle *f = NULL;
     uint64_t t0 = plat_now_ns();
@@ -1034,8 +1038,8 @@ int vk_ngx_fg_create(VkCommandBuffer cb, uint32_t w, uint32_t h, VkFormat fmt, u
         rt_log("dlssg: frame generation feature creation at %ux%u (format %d) failed (%08x)", w, h, (int)fmt, (unsigned)r);
         return 0;
     }
-    rt_log("dlssg: frame generation feature created at %ux%u (format %d, scene %ux%u) in %.1f ms", w, h, (int)fmt, rw,
-           rh, (double)(plat_now_ns() - t0) / 1e6);
+    rt_log("dlssg: frame generation feature created at %ux%u (format %d, scene %ux%u%s) in %.1f ms", w, h, (int)fmt, rw,
+           rh, uir ? ", UI recomposition" : "", (double)(plat_now_ns() - t0) / 1e6);
     *feat = f;
     return 1;
 }
@@ -1056,7 +1060,9 @@ int vk_ngx_fg_evaluate(VkCommandBuffer cb, void *feat, const VkFgEval *e) {
     p_setp(p, "DLSSG.OutputInterpolated", &ro);
     p_setp(p, "DLSSG.OutputReal", NULL);
     p_setp(p, "DLSSG.UI", NULL);
-    p_setp(p, "DLSSG.UIAlpha", NULL);
+    NgxResourceVK ra = res_image(e->ui_alpha_view, e->ui_alpha, VK_FORMAT_R8_UNORM, e->w, e->h,
+                                 VK_IMAGE_ASPECT_COLOR_BIT, 0);
+    p_setp(p, "DLSSG.UIAlpha", e->ui_alpha ? &ra : NULL);
     p_setp(p, "DLSSG.BidirectionalDistortionField", NULL);
     p_setp(p, "DLSSG.OutputDisableInterpolation", NULL);
     p_setu(p, "DLSSG.MultiFrameCount", e->count);
@@ -1103,8 +1109,8 @@ int vk_ngx_fg_evaluate(VkCommandBuffer cb, void *feat, const VkFgEval *e) {
     p_setu(p, "DLSSG.MenuDetectionEnabled", 0);
     const char *rect[][2] = {{"DLSSG.MVecsSubrect", "m"}, {"DLSSG.DepthSubrect", "z"},
                              {"DLSSG.HUDLessSubrect", "c"}, {"DLSSG.InputBackbufferSubrect", "c"},
-                             {"DLSSG.OutputInterpolatedSubrect", "c"}};
-    for (int i = 0; i < 5; i++) {
+                             {"DLSSG.OutputInterpolatedSubrect", "c"}, {"DLSSG.UIAlphaSubrect", "c"}};
+    for (int i = 0; i < (e->ui_alpha ? 6 : 5); i++) {
         char k[64];
         uint32_t w = rect[i][1][0] == 'c' ? e->w : f->rw, h = rect[i][1][0] == 'c' ? e->h : f->rh;
         snprintf(k, sizeof k, "%sBaseX", rect[i][0]), p_setu(p, k, 0);
