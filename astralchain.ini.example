@@ -7,6 +7,9 @@
 # Frame rate: 60 runs the game's community 60 fps patch (the default), 30 switches it off for the game's own rate.
 # Changes while the game runs take effect at once. At 60 the in-engine cutscenes run at 60 too, on the real-time clock,
 # so they keep to the voices and music; movies stay at 30.
+# EXPERIMENTAL: 61 and up (such as 90, 120, 144, 240) or uncapped run gameplay at up to that rate on the same patch, its
+# speed on the real-time clock; cutscenes stay at 60 and 30. Known problems from about 110 fps up: the title screen's
+# ZL + ZR sequence ends about 1.25 s early, and the opening movie cannot be skipped.
 # fps = 60
 # Real-time frame step: game speed follows the clock instead of the frame count.
 # realtime = 1

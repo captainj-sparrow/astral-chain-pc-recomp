@@ -350,6 +350,7 @@ void *rt_patch_page(void);                                 // the page the patch
 void frame_step_init(void);                                // after rt_patches_init: the real-time step's first value
 int frame_step_realtime(void);                             // the real-time step is on: presents ignore the interval
 uint64_t frame_step_cap_ns(void);                          // with the real-time step: the shortest frame in ns
+uint64_t frame_step_gameplay_ns(void);                     // above 60 fps in gameplay: the present period, else 0
 double frame_step_limit_hz(void);                         // the frame rate the limit gives (overlay); 0 unknown
 int rt_movie_showing(void);                                // a full-screen movie is on screen (frame_rate.c); any thread
 void rt_movie_list(char *buf, size_t cap);                 // the open movies and their state, for a log line
