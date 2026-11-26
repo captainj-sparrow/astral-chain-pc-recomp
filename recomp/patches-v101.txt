@@ -225,6 +225,12 @@ site fps60 main 1a043c 1e280842 1e254904 1e240842   # fmul s2,s2,s8 -> fmax s4,s
 site fps60 main 6a3f28 11000508 @fn:rt_fps_cue_up_w8   # add w8,w8,#1 -> w8 += ticks
 site fps60 main 6a3f38 6b08013f @fnz:rt_fps_cue_cmp    # cmp w9,w8 -> Z = entry due
 site fps60 main 6a3f54 6b08013f @fnz:rt_fps_cue_cmp    # cmp w9,w8 -> Z = entry due (next entries)
+# interface parts' frame counters (main+0x910890, called for each part of a layout on each of its ticks, which run at
+# the frame rate): a picture part's texture flipbook (+0x454 counts to the period [resource+0x64], then the texture
+# index +0x458 steps) and a text part's reveal (+0x45c counts to +0x460, then one more character +0x464). The layout's
+# keyframes advance by step/30 (main+0x911550), these by 1 a call; they now add the whole ticks (rt_fps_up_w9, the pad repeat helper)
+site fps60 main 910b20 11000529 @fn:rt_fps_up_w9   # add w9,w9,#1 -> w9 += ticks (flipbook)
+site fps60 main 910d44 11000529 @fn:rt_fps_up_w9   # add w9,w9,#1 -> w9 += ticks (text reveal)
 # (the cut clock's end test, which a cutscene at 60 needs exact, is in the avsync set below)
 # diagnostics (AC_TRACE=perf): the scene clock the event kept, after its update (main+0x8B7C60)
 site fps60 main 8b7cb0 b9402a68 b9402a68 @fn:rt_cut_state   # ldr w8,[x19,#0x28]; then log cut changes and stops
