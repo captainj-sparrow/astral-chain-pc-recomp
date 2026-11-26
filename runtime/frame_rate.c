@@ -656,6 +656,10 @@ void rt_fps_sway_s0(Cpu *c) { FP_SETS(0, VSF32(9) * VSF32(0) * rt_fps_step()); }
 // a push per 30 fps frame. Only lane 0 is read (the next call scales a vector by v0.s[0]).
 void rt_fps_push_s0(Cpu *c) { FP_SETS(0, VSF32(8) * rt_fps_step()); }
 
+// A rate added once a call with no time in it (the effect shatter radii, main+0x973BC4 and main+0x974974, each after
+// the `ldr s0` of the rate): s0 = s0 * step, a gain per 30 fps frame of real time.
+void rt_fps_rate_s0(Cpu *c) { FP_SETS(0, VSF32(0) * rt_fps_step()); }
+
 // The clock's own scale (main+0x91D6F0, `ldr s0, [x8, #0x1c]`), read without any time channel: by what runs while the
 // game is paused (the menus' objects with their ignore-pause flag, main+0x3BE590) and by float countdowns that take
 // it off once a frame. Times the step it is a scale per 30 fps frame of real time.
