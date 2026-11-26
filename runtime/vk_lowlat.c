@@ -148,19 +148,22 @@ static void reflex_mode_apply(void) {
     plat_mutex_unlock_shared(&sc_lock);
 }
 
-// Before the frame (the game's thread, its core given up): the driver's sleep. vkLatencySleepNV needs the swapchain
-// synchronised with the acquire and the present, which run under the present lock; the wait stays outside it.
+// Before the frame (the game's thread, its core given up): the driver's sleep. Like the markers, vkLatencySleepNV needs
+// no external synchronisation of its swapchain (vk.xml), only that it is not destroyed meanwhile: sc_lock shared, not
+// the present lock. NVIDIA's driver can block in the call itself (about 14 ms in every other call at 60 fps); under the
+// present lock that held back frame generation's presents (vk_backend.c present_main), which then went out bunched:
+// hidden at 4x on 240 Hz, where FIFO has a picture for every refresh, a stutter at 2x. The wait stays outside the lock.
 static void reflex_sleep(void) {
     VkCtx *c = vk_ctx();
-    VkSwapchainKHR sc = vk_present_lock();
     VkResult r = VK_NOT_READY;
     uint64_t val = 0;
-    if (sc) {
+    plat_mutex_lock_shared(&sc_lock);
+    if (g_sc) {
         val = ++g_sem_val;
         VkLatencySleepInfoNV si = {.sType = VK_STRUCTURE_TYPE_LATENCY_SLEEP_INFO_NV, .signalSemaphore = g_sem, .value = val};
-        r = p_sleep(c->device, sc, &si);
+        r = p_sleep(c->device, g_sc, &si);
     }
-    vk_present_unlock();
+    plat_mutex_unlock_shared(&sc_lock);
     if (r != VK_SUCCESS) return;
     VkSemaphoreWaitInfo wi = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO, .semaphoreCount = 1, .pSemaphores = &g_sem,
                               .pValues = &val};
