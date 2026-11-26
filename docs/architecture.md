@@ -574,7 +574,19 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   (`vk_texture.c` `shadow_scale_of`; 1 by default, the game's size): its depth-only pass draws at that
   size and the screen-space sun mask that reads it samples in UV, so edges get finer at the same softness. At x2 it
   takes 85 MiB of its own on an Arc 140T (the pool storage it no longer aliases stays) and its pass about 0.5 ms more.
-- Occlusion queries never block the CPU; a result that is not ready counts as visible.
+- Occlusion queries never block the CPU; a result that is not ready counts as visible. The samples-passed counters come
+  from a 4096-slot ring (`vk_exec_xfer.c`): the completion thread reads a segment's slots once its submission's fence
+  passed and publishes how far the ring got, and the replay then resets everything behind that watermark on the GPU, one
+  `vkCmdResetQueryPool` per contiguous run, at the head of the next pass - outside the render pass instance, which does
+  not allow the command, and after the pass chain's barrier test, so it neither needs a CPU wait nor resets a pool a
+  command buffer of an earlier part of a submission is still running (the host reset the completion thread used to make
+  raced that way, and the driver then left one query unavailable after its fence). A slot is handed out again only once
+  that reset is recorded, not as soon as it is read, since a slot read during the open pass is reset only at the head
+  of the next one; the pool is host-reset once at creation, which frees the first lap. It costs one command per frame
+  of segments and nothing measurable: 3262 frames in 60 s of a Moreno walk at 16.7 ms mean and 33 passes per submission,
+  the same as the run before the change, with no validation error (Arc 140T, Steam Deck profile, 1280x720, upscaling
+  off, 6.4-6.9 of the machine's 63.6 GiB of system RAM free the whole time because another process holds the rest),
+  and no validation error either in 90 s at the desktop profile on that GPU and on an RTX 5060 Ti.
 - ASTC textures are uploaded as they are where the device reports `textureCompressionASTC_LDR`, and decoded by a
   compute shader everywhere else (`vk_astc.c`, `AC_ASTC`). A discrete GPU with 6 GB of video memory or more keeps
   the decoded textures as RGBA8, their full quality (`AC_ASTC_BC=auto`, the default, resolves to `0`), and the

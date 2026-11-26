@@ -119,16 +119,28 @@ static unsigned pending_head;
 // on for good (cumulative NVN semantics; that one report misses the draws since the previous one). The queries closed since the last
 // report or reset form a segment, handed to the completion thread with that report or reset: in submit order it sums
 // the segment's results into the running count (a reset drops the sum and zeroes the count) and writes the count of a
-// report into guest memory. Slots come from one ring; the completion thread reads and host-resets them
-// (hostQueryReset, Vulkan 1.2), so the replay records no reset commands. A full ring (no slot read back yet) leaves the
-// draw uncounted and the segment's count at least 1, as does a query still unavailable after its fence. Without hostQueryReset the counts stay 0.
+// report into guest memory. Slots come from one ring, allocated in order: the completion thread reads them and publishes
+// how far it got, and the replay resets everything behind that watermark on the GPU at the head of the next pass before
+// the ring hands those slots out again, one command per run (a read-back batch is contiguous, so only a wrap splits it).
+// A host reset would need every submitted use of the slots to have finished first (VUID-vkResetQueryPool-firstQuery-02741);
+// as a submission only signals the timeline with its last part, the validator caught a host reset of a pool a command
+// buffer of an earlier part was still running, and the driver then reported a query that never became available after
+// its fence. A command is ordered by the queue, so it waits for the earlier use by itself, and it may not sit inside a
+// render pass instance (VUID-vkCmdResetQueryPool-renderpass), which is why the head of a pass holds it rather than the
+// draw that reuses the slot. The pool is still host-reset once, at creation, where nothing is in flight: a query must be
+// unavailable before its first use (VUID-vkCmdBeginQuery-None-00807). The resets cost one command per frame of segments.
+// A slot is free once its reset is recorded, not once it is read: the reset watermark is what the replay goes by, since
+// a slot read during the open pass is reset only at the head of the next one. A full ring (no slot reset since the ring
+// last went round) leaves the draw uncounted and the segment's count at least 1, as does a query still unavailable after
+// its fence.
 #define OQ_N 4096
 #define LOG_ONCE(...) do { static volatile char once_; if (!__atomic_exchange_n(&once_, 1, __ATOMIC_RELAXED)) rt_log(__VA_ARGS__); } while (0)
 static VkQueryPool oq_pool;
 static int oq_state;                     // 0 not set up, 1 counting available, -1 unavailable
 static VkQueryControlFlags oq_flags;
-static volatile uint8_t oq_busy[OQ_N];   // from begin until the completion thread read and reset the slot
-static uint32_t oq_next;                 // replay: next ring slot
+static volatile uint64_t oq_read_hi;     // completion thread: slots taken so far whose results were read
+static uint64_t oq_reset_hi;             // replay: slots taken whose reset was recorded; free: oq_next < it + OQ_N
+static uint64_t oq_next;                 // replay: next slot, an index into the ring rather than a ring position
 static int oq_counting;                  // replay: draws are counted (a reset since the last report, or oq_keep)
 static int oq_reported;                  // replay: a samples-passed report since the last reset
 static int oq_keep;                      // replay: the game reported twice without a reset: count every draw
@@ -138,7 +150,9 @@ static uint32_t oq_nseg, oq_capseg;
 static int oq_lost;                      // replay: the segment missed a draw (ring full)
 static uint64_t oq_count;                // completion thread: samples since the last reset
 
-typedef struct { uint64_t addr; int reset, lost; uint32_t n; uint32_t q[]; } OqSegment;
+// end: one past the last slot the segment holds, as an index into the ring: what the completion thread publishes as
+// read, which is what the replay may then reset.
+typedef struct { uint64_t addr, end; int reset, lost; uint32_t n; uint32_t q[]; } OqSegment;
 
 static int oq_ready(void) {
     if (oq_state) return oq_state > 0;
@@ -159,6 +173,8 @@ static int oq_ready(void) {
         rt_log("vk: occlusion query pool creation failed (%d): samples-passed counters report 0", (int)r);
         return 0;
     }
+    // The only host reset: here nothing has been submitted, and a query must be unavailable before its first use.
+    // Every reuse after that is reset on the GPU, by vk_exec_oq_resets at the head of a pass.
     vkResetQueryPool(v->device, oq_pool, 0, OQ_N);
     oq_flags = f2.features.occlusionQueryPrecise ? VK_QUERY_CONTROL_PRECISE_BIT : 0;
     oq_state = 1;
@@ -178,15 +194,33 @@ static void oq_close(VkExec *ex) {
     oq_open = -1;
 }
 
+// The slots the completion thread has read back, reset on the GPU ahead of the ring reusing them. The queue runs the
+// command after every command of the submission whose fence let the read happen, which is what resetting a query pool
+// asks for, and a run stops at the ring's end, so a read-back batch that wrapped is two commands. vk_exec_pass_begin
+// calls this before it opens a pass: a query reset inside a render pass instance is not allowed.
+void vk_exec_oq_resets(VkExec *ex) {
+    if (oq_state <= 0) return;
+    uint64_t read = __atomic_load_n(&oq_read_hi, __ATOMIC_ACQUIRE);
+    while (oq_reset_hi < read) {
+        uint32_t first = (uint32_t)(oq_reset_hi % OQ_N);
+        uint64_t room = OQ_N - first;
+        uint32_t n = (uint32_t)(read - oq_reset_hi < room ? read - oq_reset_hi : room);
+        vkCmdResetQueryPool(ex->cb, oq_pool, first, n);
+        ex->recorded++;
+        oq_reset_hi += n;
+    }
+}
+
 void vk_exec_oq_draw(VkExec *ex) {
     if (!oq_counting || oq_open >= 0) return;
-    uint32_t q = oq_next % OQ_N;
-    if (__atomic_load_n(&oq_busy[q], __ATOMIC_ACQUIRE)) {
+    // The pool was host-reset at creation, so the first lap is free (oq_reset_hi 0); after that a slot comes back only
+    // with the pass-head reset that follows its read-back.
+    if (oq_next - oq_reset_hi >= OQ_N) {
         warn_once(W_QUERY, "occlusion query ring full: draws left uncounted");
         oq_lost = 1;
         return;
     }
-    oq_busy[q] = 1;
+    uint32_t q = (uint32_t)(oq_next % OQ_N);
     oq_next++;
     vkCmdBeginQuery(ex->cb, oq_pool, q, oq_flags);
     ex->recorded++;
@@ -198,8 +232,7 @@ void vk_exec_oq_pass_end(VkExec *ex) { oq_close(ex); }
 void vk_exec_xfer_shutdown(void) {
     if (oq_state > 0) vkDestroyQueryPool(vk_ctx()->device, oq_pool, NULL);
     oq_pool = VK_NULL_HANDLE, oq_state = 0, oq_next = 0, oq_counting = oq_reported = oq_keep = 0, oq_open = -1;
-    oq_nseg = 0, oq_lost = 0, oq_count = 0;
-    memset((void *)oq_busy, 0, sizeof oq_busy);
+    oq_nseg = 0, oq_lost = 0, oq_count = 0, oq_read_hi = 0, oq_reset_hi = 0;
 }
 
 static void oq_cb(void *arg) {
@@ -217,17 +250,21 @@ static void oq_cb(void *arg) {
             vk_device_fault_report(r);
             rt_fatal("vk: occlusion query results failed (%d)", (int)r);
         }
-        vkResetQueryPool(dev, oq_pool, s->q[i], j - i);
         for (uint32_t k = i; k < j; k++) {
             if (v[2 * (k - i) + 1]) sum += v[2 * (k - i)];
             else {
                 sum += 1;
                 LOG_ONCE("vk: occlusion query slot %u not available after its fence, counted as visible", s->q[k]);
             }
-            __atomic_store_n(&oq_busy[s->q[k]], 0, __ATOMIC_RELEASE);
         }
         i = j;
     }
+    // The slots of this segment may now be reset: the replay records the reset at the head of its next pass, and only
+    // then hands them out again. Segments are read in submit order, the same order the ring hands out slots, so every
+    // slot below s->end has been read and the watermark only moves forward.
+    uint64_t hi = s->end;
+    uint64_t has = __atomic_load_n(&oq_read_hi, __ATOMIC_RELAXED);
+    while (hi > has && !__atomic_compare_exchange_n(&oq_read_hi, &has, hi, false, __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {}
     if (s->reset) oq_count = 0;
     else {
         oq_count += sum;
@@ -242,7 +279,7 @@ static void oq_segment(VkExec *ex, uint64_t addr, int reset) {
     oq_close(ex);
     OqSegment *s = malloc(sizeof *s + sizeof *s->q * oq_nseg);
     if (!s) rt_fatal("vk: out of memory");
-    s->addr = addr, s->reset = reset, s->lost = oq_lost, s->n = oq_nseg;
+    s->addr = addr, s->end = oq_next, s->reset = reset, s->lost = oq_lost, s->n = oq_nseg;
     memcpy(s->q, oq_seg, sizeof *s->q * oq_nseg);
     oq_nseg = 0, oq_lost = 0;
     vk_completion_add(ex->fence, oq_cb, s);

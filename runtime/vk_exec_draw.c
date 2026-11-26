@@ -195,6 +195,10 @@ static void cb_done(void *arg) {   // completion thread
     VkCtx *c = vk_ctx();
     for (int i = 0; i < r->nwritten; i++) vk_gpu_stored(r->written[i].addr, r->written[i].size);
     for (int i = 0; i < r->npools; i++) {
+        // The host reset is safe here, and the pool is popped ready, so a bind never has to reset one: a pool serves one
+        // submission only (cb_res keys this record on ex->fence, and a pool leaves the spare list at a later submission's
+        // bind), and the timeline value the completion thread waited for is signalled by that submission's last part, so
+        // no command buffer that took descriptors from the pool is still running.
         vkResetDescriptorPool(c->device, r->pools[i], 0);
         plat_mutex_lock(&spare_lock);
         int kept = nspare_pool < SPARE_POOLS;

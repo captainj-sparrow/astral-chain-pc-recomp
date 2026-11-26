@@ -277,8 +277,11 @@ void vk_contact_flush(VkExec *ex);
 void vk_ao_pass(VkExec *ex);
 void vk_ao_flush(VkExec *ex);
 void vk_ao_draw(VkExec *ex);
-// vk_exec_xfer.c, samples-passed counting: a draw about to be recorded in the open pass (begins an occlusion query
-// when counting and none is active), and the open pass about to end (ends the active query).
+// vk_exec_xfer.c, samples-passed counting: a pass about to begin (occlusion query slots the completion thread read back
+// go back to the pool here, on the GPU and outside the instance about to open), a draw about to be recorded in the open
+// pass (begins an occlusion query when counting and none is active), and the open pass about to end (ends the active
+// query).
+void vk_exec_oq_resets(VkExec *ex);
 void vk_exec_oq_draw(VkExec *ex);
 void vk_exec_oq_pass_end(VkExec *ex);
 // vk_gpuprof.c, AC_GPU_PASSES: GPU time per pass. kind: 0 start of a command buffer, 1 before a pass begins, 2 after

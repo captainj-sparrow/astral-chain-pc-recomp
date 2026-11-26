@@ -984,6 +984,9 @@ void vk_exec_pass_begin(VkExec *ex) {
     }
     ex->pass_force = 0;
     ex->pass_how = (uint8_t)barrier_to(ex, VK_BAR_PASS, kind, want, wasp, nwant);
+    // Read-back occlusion slots go back to the pool here: outside the instance the line further down opens, and after
+    // the chain test above, so the resets neither sit in a pass nor break the pass chain (vk_exec_xfer.c).
+    vk_exec_oq_resets(ex);
     BC.passes++;
     if (ex->pass_rt == ex->rt_serial) BC.same_rt++;
     ex->pass_rt = ex->rt_serial;
