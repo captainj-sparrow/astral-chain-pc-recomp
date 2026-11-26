@@ -341,7 +341,14 @@ site fps60 main 49eb4c 1e3e1001 @fn:rt_fps_neg_step_s1
 site fps60 main 49ed98 1e3e1001 @fn:rt_fps_neg_step_s1
 site fps60 main 49eed8 1e3e1001 @fn:rt_fps_neg_step_s1
 site fps60 main 49ef4c 1e3e1001 @fn:rt_fps_neg_step_s1
-# same form, not reached in the measured scene, left as is: ffd0 1145bc 1a8904 1b7854 1c0470 5d5d28 5d5ebc 5eada0 6c0f18 95b228 970fa4 97e218
+# same form, not reached in the measured scene, left as is: ffd0 1145bc 1a8904 1b7854 1c0470 5d5d28 5d5ebc 5eada0 6c0f18
+# effect objects (main+0x95ED70 .. 0x992174): bounce test countdowns and shatter radii count calls (read statically, not reached in play)
+site fps60 main 970fa4 1e3e1001 @fn:rt_fps_neg_step_s1   # bounce test countdown +0x880 (970f40)
+site fps60 main 97e218 1e3e1001 @fn:rt_fps_neg_step_s1   # bounce test countdown +0x910 (97e1b0)
+site fps60 main 95b228 1e3e1001 @fn:rt_fps_neg_step_s1   # per-particle bounce test countdown [+0x48]+0x30 (95b1f0)
+site fps60 main 973bd0 1e3e1001 @fn:rt_fps_neg_step_s1   # bounce test cadence +0x968 (973960; +0x96C beside it takes +0x1D0)
+site fps60 main 973bc4 bd493260 bd493260 @fn:rt_fps_rate_s0   # ldr s0,[x19,#0x930]; s0 *= step: radius +0x95C (973960)
+site fps60 main 974974 bd490260 bd490260 @fn:rt_fps_rate_s0   # ldr s0,[x19,#0x900]; s0 *= step: radius +0x940 (974880)
 # cloth sway (main+0x556d10, the player's hair among it): the phase gain and wind push are per call; now times the step
 site fps60 main 556e14 1e200920 @fn:rt_fps_sway_s0      # fmul s0,s9,s0 -> s0 = s9 * s0 * step
 site fps60 main 556e84 4ea81d00 @fn:rt_fps_push_s0      # mov v0.16b,v8.16b -> s0 = s8 * step

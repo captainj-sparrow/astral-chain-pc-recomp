@@ -642,6 +642,9 @@ void rt_fps_sway_s0(Cpu *c) { FP_SETS(0, VSF32(9) * VSF32(0) * rt_fps_step()); }
 // Cloth sway push (`mov v0.16b, v8.16b`, lane 0 only read): s0 = s8 * step.
 void rt_fps_push_s0(Cpu *c) { FP_SETS(0, VSF32(8) * rt_fps_step()); }
 
+// A rate added once a call with no time in it, after the `ldr` of the rate: s<n> = s<n> * step.
+void rt_fps_rate_s0(Cpu *c) { FP_SETS(0, VSF32(0) * rt_fps_step()); }
+
 // The clock's own scale (main+0x91D6F0, `ldr s0, [x8, #0x1c]`), read by what runs while paused: scale * step.
 void rt_fps_scale_s0(Cpu *c) {
     float s; memcpy(&s, (const uint8_t *)(uintptr_t)c->x[8] + 0x1c, 4);
