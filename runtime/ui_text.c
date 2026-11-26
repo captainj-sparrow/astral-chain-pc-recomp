@@ -87,6 +87,12 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_UPSCALER_DESC] = "How the picture is scaled to the window. FSR keeps edges and detail sharper than "
                               "bilinear, and sharpens the picture even when it already fits the window.",
     [UI_MENU_UPSCALER_FSR] = "AMD FSR 1", [UI_MENU_UPSCALER_BILINEAR] = "Bilinear",
+    [UI_MENU_ASPECT] = "Picture shape",
+    [UI_MENU_ASPECT_DESC] = "On a screen that is not 16:9 (21:9, 32:9, 16:10 like the Steam Deck). Fill the screen "
+                            "widens the camera to the screen's shape: more of the world shows at the sides (above and "
+                            "below on a taller screen), while menus and movies keep 16:9. 16:9 (original) keeps the "
+                            "game's own view, with black bars. On a 16:9 screen the two are the same.",
+    [UI_MENU_ASPECT_FIT] = "16:9 (original)", [UI_MENU_ASPECT_WIDE] = "Fill the screen",
     [UI_MENU_FOV] = "Field of view",
     [UI_MENU_FOV_DESC] = "How much of the world the camera shows, in percent of the game's own (50 degrees vertically in play). Cutscenes keep the game's own framing.",
     [UI_MENU_DRAW_DISTANCE] = "Draw distance",

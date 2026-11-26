@@ -233,6 +233,22 @@ msgctxt "UI_MENU_UPSCALER_BILINEAR"
 msgid "Bilinear"
 msgstr "Билинейное"
 
+msgctxt "UI_MENU_ASPECT"
+msgid "Picture shape"
+msgstr "Форма изображения"
+
+msgctxt "UI_MENU_ASPECT_DESC"
+msgid "On a screen that is not 16:9 (21:9, 32:9, 16:10 like the Steam Deck). Fill the screen widens the camera to the screen's shape: more of the world shows at the sides (above and below on a taller screen), while menus and movies keep 16:9. 16:9 (original) keeps the game's own view, with black bars. On a 16:9 screen the two are the same."
+msgstr "Для экрана с соотношением сторон не 16:9 (21:9, 32:9, 16:10, как у Steam Deck). «На весь экран» расширяет обзор камеры под форму экрана: по бокам видно больше мира (сверху и снизу на более высоком экране), а меню и видеоролики остаются 16:9. «16:9 (оригинал)» сохраняет исходный вид игры с чёрными полосами. На экране 16:9 оба варианта одинаковы."
+
+msgctxt "UI_MENU_ASPECT_FIT"
+msgid "16:9 (original)"
+msgstr "16:9 (оригинал)"
+
+msgctxt "UI_MENU_ASPECT_WIDE"
+msgid "Fill the screen"
+msgstr "На весь экран"
+
 msgctxt "UI_MENU_FOV"
 msgid "Field of view"
 msgstr "Поле зрения"

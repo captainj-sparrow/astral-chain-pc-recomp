@@ -201,9 +201,10 @@
 # window): wide, the default, widens the camera's view so the game fills a window wider than 16:9 (21:9, 32:9, up to
 # 48:9) or taller (16:10, down to 4:3): the game still renders at the game resolution, more of the world shows at the
 # sides (above and below in a taller window), the HUD goes to the screen's edges, menus keep their shape in the middle
-# and full-screen movies stay 16:9 between black bars; in a 16:9 window it is the same as fit. fit keeps the picture's shape, with black bars at the sides or above and
-# below; stretch fills the window. Set here only, the menu has no row for it; changes while the game runs take effect
-# at once.
+# and full-screen movies stay 16:9 between black bars; in a 16:9 window it is the same as fit. fit keeps the game's
+# 16:9 picture, with black bars at the sides or above and below; stretch fills the window with it. The menu's Picture
+# shape row offers wide (Fill the screen) and fit (16:9 (original)); stretch is set here only. Changes while the game
+# runs take effect at once.
 # aspect = wide
 # Written by the game, not a setting: up to 1.11.0 the picture's shape was fit or stretch, and the first start of a
 # later version removes such an aspect line here once, so the default, wide, applies. aspect_migrated = 1 records that

@@ -38,6 +38,8 @@ typedef enum {
     UI_MENU_GRAPHICS,         // group heading over the resolution rows
     UI_MENU_OUTPUT_RES, UI_MENU_OUTPUT_RES_DESC,   // output_res (resolution.c res_pick): the size the game renders
     UI_MENU_UPSCALER, UI_MENU_UPSCALER_DESC, UI_MENU_UPSCALER_FSR, UI_MENU_UPSCALER_BILINEAR,
+    UI_MENU_ASPECT, UI_MENU_ASPECT_DESC,   // aspect (resolution.c wide pictures, gfx_present.c gfx_fit_rect)
+    UI_MENU_ASPECT_FIT, UI_MENU_ASPECT_WIDE,
     UI_MENU_FOV, UI_MENU_FOV_DESC,
     UI_MENU_DRAW_DISTANCE, UI_MENU_DRAW_DISTANCE_DESC,
     UI_MENU_ANISO, UI_MENU_ANISO_DESC, UI_MENU_ANISO_GAME, UI_MENU_ANISO_AUTO,

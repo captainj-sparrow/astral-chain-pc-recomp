@@ -234,6 +234,22 @@ msgctxt "UI_MENU_UPSCALER_BILINEAR"
 msgid "Bilinear"
 msgstr "双线性"
 
+msgctxt "UI_MENU_ASPECT"
+msgid "Picture shape"
+msgstr "画面比例"
+
+msgctxt "UI_MENU_ASPECT_DESC"
+msgid "On a screen that is not 16:9 (21:9, 32:9, 16:10 like the Steam Deck). Fill the screen widens the camera to the screen's shape: more of the world shows at the sides (above and below on a taller screen), while menus and movies keep 16:9. 16:9 (original) keeps the game's own view, with black bars. On a 16:9 screen the two are the same."
+msgstr "用于非 16:9 的屏幕（21:9、32:9，或像 Steam Deck 那样的 16:10）。填满屏幕：将镜头视野扩展为屏幕的比例，两侧能看到更多场景（较高的屏幕则是上下），菜单和过场影片仍保持 16:9。16:9（原始）：保留游戏原本的画面，并显示黑边。在 16:9 屏幕上两者效果相同。"
+
+msgctxt "UI_MENU_ASPECT_FIT"
+msgid "16:9 (original)"
+msgstr "16:9（原始）"
+
+msgctxt "UI_MENU_ASPECT_WIDE"
+msgid "Fill the screen"
+msgstr "填满屏幕"
+
 msgctxt "UI_MENU_FOV"
 msgid "Field of view"
 msgstr "视野"

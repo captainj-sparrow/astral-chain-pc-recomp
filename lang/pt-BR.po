@@ -233,6 +233,22 @@ msgctxt "UI_MENU_UPSCALER_BILINEAR"
 msgid "Bilinear"
 msgstr "Bilinear"
 
+msgctxt "UI_MENU_ASPECT"
+msgid "Picture shape"
+msgstr "Formato da imagem"
+
+msgctxt "UI_MENU_ASPECT_DESC"
+msgid "On a screen that is not 16:9 (21:9, 32:9, 16:10 like the Steam Deck). Fill the screen widens the camera to the screen's shape: more of the world shows at the sides (above and below on a taller screen), while menus and movies keep 16:9. 16:9 (original) keeps the game's own view, with black bars. On a 16:9 screen the two are the same."
+msgstr "Em uma tela que não é 16:9 (21:9, 32:9, 16:10 como o Steam Deck). Preencher a tela alarga a câmera para o formato da tela: mostra mais do mundo nas laterais (acima e abaixo em uma tela mais alta), enquanto menus e vídeos continuam em 16:9. 16:9 (original) mantém a visão do próprio jogo, com barras pretas. Em uma tela 16:9 as duas são iguais."
+
+msgctxt "UI_MENU_ASPECT_FIT"
+msgid "16:9 (original)"
+msgstr "16:9 (original)"
+
+msgctxt "UI_MENU_ASPECT_WIDE"
+msgid "Fill the screen"
+msgstr "Preencher a tela"
+
 msgctxt "UI_MENU_FOV"
 msgid "Field of view"
 msgstr "Campo de visão"

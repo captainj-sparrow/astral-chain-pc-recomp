@@ -778,6 +778,13 @@ static void tab_screen(float scale) {
     static const UiTextId up[] = {UI_MENU_UPSCALER_FSR, UI_MENU_UPSCALER_BILINEAR};
     opt_choice("AC_UPSCALER", UI_MENU_UPSCALER, up, 2, UI_MENU_UPSCALER_DESC);
     opt_slider("AC_SHARPNESS", UI_MENU_SHARPNESS, 0, 100, UI_MENU_SHARPNESS_DESC, 5, "%.0f %%");
+    // Wide (the default) or the game's 16:9 with bars; stretch stays an ini value only, and shows as it is here. Live:
+    // resolution.c rereads it at the next present (wide_settings) and gfx_present.c gfx_fit_rect at each one.
+    {
+        static const char *const av[] = {"wide", "fit"};
+        const char *an[] = {menu_text(UI_MENU_ASPECT_WIDE), menu_text(UI_MENU_ASPECT_FIT)};
+        opt_choice_list("AC_ASPECT", UI_MENU_ASPECT, av, an, 2, UI_MENU_ASPECT_DESC);
+    }
     opt_slider("AC_FOV", UI_MENU_FOV, 70, 140, UI_MENU_FOV_DESC, 5, "%.0f %%");
     opt_slider("AC_DRAW_DISTANCE", UI_MENU_DRAW_DISTANCE, 100, 400, UI_MENU_DRAW_DISTANCE_DESC, 25, "%.0f %%");
     static const char *const aniso[] = {"auto", "game", "2", "4", "8", "16"};

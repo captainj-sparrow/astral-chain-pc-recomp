@@ -322,7 +322,8 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
 - Wide pictures on 1.0.1 (`aspect = wide`, the default; `resolution.c` `res_wide_tick`, set `wide` of
   `recomp/patches-v101.txt`, switched on the first time the window's shape is more than 1 % off 16:9;
   `cfg_migrate_aspect` removes, once, an ini `aspect = fit` or `stretch` from before the option and marks the file
-  with `aspect_migrated = 1`). The game's targets stay 16:9, since sizes off the 32n x 18n grid lose the device; a
+  with `aspect_migrated = 1`; the menu's Picture shape row switches it live between wide and `fit` (`stretch` is an ini value only), and
+  leaving wide sends the lenses back to 16:9 through the same sites, since the set stays on). The game's targets stay 16:9, since sizes off the 32n x 18n grid lose the device; a
   window wider than 16:9 (up to 48:9) gets them drawn with a wider camera instead, and a taller one (16:10, the Steam
   Deck's 1280x800, down to 4:3) with a taller camera that keeps the 16:9 view's width: where the projection is built
   from the lens's vertical angle, `rt_wide_angle24_s0` (or the fov set's helper on the same site) widens that angle
