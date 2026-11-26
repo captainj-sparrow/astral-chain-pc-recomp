@@ -1196,6 +1196,13 @@ static void motion_main(void *arg) {
         if (!have || !input_motion_enabled()) continue;
         double acc[3], gyro[3];
         input_motion_axes(a, g, acc, gyro);
+        static unsigned turn_seen;
+        static int turn_set;
+        if (!turn_set || cfg_version() != turn_seen) {   // live: read again when the settings change
+            turn_set = 1;
+            turn_seen = cfg_version();
+            motion_set_turn(motion_global(), cfg_int("AC_MOTION_TURN"));
+        }
         motion_feed(motion_global(), acc, gyro, kern_now_ns());
     }
 }

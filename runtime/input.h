@@ -136,6 +136,9 @@ _Static_assert(sizeof(MotionState) == 0x60, "SixAxisSensorState ABI");
 typedef struct MotionFusion MotionFusion;
 MotionFusion *motion_new(void);
 MotionFusion *motion_global(void);   // the gamepad's, fed by input_win.c
+// Turning the controller left and right (yaw) also counts as rolling it, times k (0 off, 1, -1 the other way): the
+// game's gyro aim (blade mode) reads only the pitch and roll angles. AC_MOTION_TURN sets it on motion_global().
+void motion_set_turn(MotionFusion *m, int k);
 void motion_feed(MotionFusion *m, const double acc_g[3], const double gyro_rad_s[3], uint64_t now_ns);
 int motion_read(MotionFusion *m, MotionState *out, int max, uint64_t now_ns);   // newest first; 0 = none in 200 ms
 void motion_restart(MotionFusion *m);   // angle and direction start over at the next sample
