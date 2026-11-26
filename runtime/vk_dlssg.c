@@ -24,15 +24,25 @@
 // generation starts and stops. The delay is what frame generation costs in latency: 8.3 ms at 60 fps with 2x, 12.5 ms
 // with 4x.
 //
+// AC_DLSSG_MVDEBUG = 1 .. 8 (test, no settings row): frame generation's inputs drawn over every frame it shows, after
+// NGX evaluated (so its inputs stay as they were): 1 the motion vectors as a colour tint over the game's frame, 2 the
+// vectors alone, 3 the depth, 4 where the picture differs from the HUD-less one, what NGX keeps still as HUD, 5 and 6
+// the alpha channel of the picture and of the HUD-less one, 7 HUD that UI recomposition misses, 8 HUD alpha over the bare
+// scene (shaders/dlssg_mvdebug.comp has the key). The generated
+// frames show the game's frame too, so the picture holds still and the vectors sit on the surfaces they belong to.
+// AC_DLSSG_MVDEBUG_SCALE: the motion in render pixels that saturates the colour (default 8). Read at each present.
+//
 // Not with HDR output (yet): its present composes the PQ picture from the window texture and the float scene, which
 // the generated frames do not have. With AC_HDR=1 and an HDR10 swapchain, frame generation stays off and the log and
 // the menu say so.
 #include "vk_dlssg.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "cfg.h"
+#include "dlssg_mvdebug_spv.h"
 #include "gfx.h"
 #include "host.h"
 #include "vk_dlaa.h"
@@ -50,6 +60,7 @@ static struct {
     uint32_t w, h, rw, rh;    // the picture's size and the scene's
     VkFormat fmt;
     Img gen[MAX_GEN], hud, real;
+    Img dbg;                  // AC_DLSSG_MVDEBUG: a copy of the game's frame the overlay reads
     int fmt_ok;               // -1 not checked
     int armed, made, n;       // this job: the hook is set, generated frames made, asked for
     int evaluated;            // this job: NGX evaluated the frame (its history now ends with it)
@@ -195,6 +206,13 @@ static struct {
     VkFormat fmt;
 } CAP;
 static void barrier(VkCommandBuffer cb);
+// Compute passes with push descriptors (the passes of ours, below)
+typedef struct {
+    int tried, ok;
+    VkDescriptorSetLayout dsl;
+    VkPipelineLayout layout;
+    VkPipeline pipe;
+} Pass;
 
 int vk_dlssg_capture(VkCommandBuffer cb, VkImage win, VkFormat fmt, uint32_t w, uint32_t h) {
     const VkCtx *c = vk_ctx();
@@ -259,7 +277,7 @@ static void free_all(int wait) {
     if (G.feat) vk_ngx_fg_release(G.feat);
     G.feat = NULL;
     for (int i = 0; i < MAX_GEN; i++) img_free(&G.gen[i]);
-    img_free(&G.hud), img_free(&G.real);
+    img_free(&G.hud), img_free(&G.real), img_free(&G.dbg);
     G.w = G.h = G.rw = G.rh = 0;
 }
 
@@ -309,6 +327,137 @@ static int ensure(VkCommandBuffer cb, int *fresh) {
     return 1;
 }
 
+// ---------------------------------------------------------------- the passes of ours
+// Compute passes with push descriptors: combined image samplers and one storage image (the output), in binding order.
+static PFN_vkCmdPushDescriptorSetKHR push_fn;
+static VkSampler nearest;
+static Pass dbg_pass;
+
+static VkSampler sampler(VkFilter f) {
+    VkSamplerCreateInfo si = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .magFilter = f, .minFilter = f,
+                              .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+                              .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                              .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                              .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .maxLod = 0};
+    VkSampler s = VK_NULL_HANDLE;
+    vkCreateSampler(vk_ctx()->device, &si, NULL, &s);
+    return s;
+}
+
+// types[i]: binding i's descriptor type; push constants up to 48 bytes
+static int pass_init(Pass *ps, const char *name, const uint32_t *spv, size_t bytes, const VkDescriptorType *types,
+                     uint32_t n) {
+    if (ps->tried) return ps->ok;
+    ps->tried = 1;
+    const VkCtx *c = vk_ctx();
+    if (!push_fn) push_fn = (PFN_vkCmdPushDescriptorSetKHR)vkGetDeviceProcAddr(c->device, "vkCmdPushDescriptorSetKHR");
+    if (!nearest) nearest = sampler(VK_FILTER_NEAREST);
+    VkDescriptorSetLayoutBinding b[8];
+    for (uint32_t i = 0; i < n; i++)
+        b[i] = (VkDescriptorSetLayoutBinding){i, types[i], 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL};
+    VkDescriptorSetLayoutCreateInfo dci = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                                           .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
+                                           .bindingCount = n, .pBindings = b};
+    VkPushConstantRange pr = {VK_SHADER_STAGE_COMPUTE_BIT, 0, 48};
+    VkShaderModuleCreateInfo mi = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, .codeSize = bytes,
+                                   .pCode = spv};
+    VkShaderModule m = VK_NULL_HANDLE;
+    VkResult r = VK_ERROR_INITIALIZATION_FAILED;
+    if (push_fn && nearest && vkCreateDescriptorSetLayout(c->device, &dci, NULL, &ps->dsl) == VK_SUCCESS) {
+        VkPipelineLayoutCreateInfo li = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1,
+                                         .pSetLayouts = &ps->dsl, .pushConstantRangeCount = 1,
+                                         .pPushConstantRanges = &pr};
+        if (vkCreatePipelineLayout(c->device, &li, NULL, &ps->layout) == VK_SUCCESS &&
+            vkCreateShaderModule(c->device, &mi, NULL, &m) == VK_SUCCESS) {
+            VkComputePipelineCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+                                              .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                                                        .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = m,
+                                                        .pName = "main"},
+                                              .layout = ps->layout};
+            r = vkCreateComputePipelines(c->device, VK_NULL_HANDLE, 1, &ci, NULL, &ps->pipe);
+            vkDestroyShaderModule(c->device, m, NULL);
+        }
+    }
+    ps->ok = r == VK_SUCCESS;
+    if (!ps->ok) rt_log("dlssg: the %s pass could not be created", name);
+    return ps->ok;
+}
+
+static void pass_free(Pass *ps) {
+    const VkCtx *c = vk_ctx();
+    if (ps->pipe) vkDestroyPipeline(c->device, ps->pipe, NULL);
+    if (ps->layout) vkDestroyPipelineLayout(c->device, ps->layout, NULL);
+    if (ps->dsl) vkDestroyDescriptorSetLayout(c->device, ps->dsl, NULL);
+    memset(ps, 0, sizeof *ps);
+}
+
+static void passes_release(void) {
+    const VkCtx *c = vk_ctx();
+    pass_free(&dbg_pass);
+    if (nearest) vkDestroySampler(c->device, nearest, NULL);
+    nearest = VK_NULL_HANDLE;
+}
+
+// One dispatch over the picture: views[i] for binding i (the storage image at binding out), samplers[i] for the rest.
+static void pass_run(VkCommandBuffer cb, Pass *ps, const VkImageView *views, const VkSampler *samplers, uint32_t n,
+                     uint32_t out, const void *pc, uint32_t pc_bytes, uint32_t gw, uint32_t gh) {
+    VkDescriptorImageInfo ii[8];
+    VkWriteDescriptorSet wr[8];
+    for (uint32_t i = 0; i < n; i++) {
+        ii[i] = (VkDescriptorImageInfo){i == out ? VK_NULL_HANDLE : samplers[i], views[i], VK_IMAGE_LAYOUT_GENERAL};
+        wr[i] = (VkWriteDescriptorSet){.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = i,
+                                      .descriptorCount = 1,
+                                      .descriptorType = i == out ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
+                                                                 : VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                      .pImageInfo = &ii[i]};
+    }
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, ps->pipe);
+    rec_push(push_fn, cb, VK_PIPELINE_BIND_POINT_COMPUTE, ps->layout, 0, n, wr);
+    vkCmdPushConstants(cb, ps->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pc_bytes, pc);
+    vkCmdDispatch(cb, (gw + 7) / 8, (gh + 7) / 8, 1);
+}
+
+// AC_DLSSG_MVDEBUG
+static int mvdebug_mode(void) {
+    const char *v = cfg_get("AC_DLSSG_MVDEBUG");
+    int m = v && *v ? atoi(v) : 0;
+    return m >= 1 && m <= 8 ? m : 0;
+}
+
+// After NGX's evaluations in cb: the overlay into the game's frame (G.real) and each generated frame, all from a copy
+// of the game's frame, so every frame shown is the game's frame with its inputs.
+static void mvdebug(VkCommandBuffer cb, int mode) {
+    static const VkDescriptorType t[5] = {
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER};
+    const VkFgFrame *f = &G.fr;
+    if (!dbg_pass.tried)
+        rt_log("dlssg: AC_DLSSG_MVDEBUG=%d: frame generation's inputs drawn over the frames it shows", mode);
+    if (!pass_init(&dbg_pass, "AC_DLSSG_MVDEBUG", dlssg_mvdebug_spv, sizeof dlssg_mvdebug_spv, t, 5)) return;
+    if (!G.dbg.img && !img_make(cb, &G.dbg, G.w, G.h, G.fmt)) return;
+    VkImageCopy cp = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                      .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .extent = {G.w, G.h, 1}};
+    vkCmdCopyImage(cb, G.real.img, VK_IMAGE_LAYOUT_GENERAL, G.dbg.img, VK_IMAGE_LAYOUT_GENERAL, 1, &cp);
+    barrier(cb);
+    const char *e = cfg_get("AC_DLSSG_MVDEBUG_SCALE");
+    double sc = e ? atof(e) : 0.0;
+    for (int k = 0; k <= G.n; k++) {
+        VkImageView v[5] = {G.dbg.view, f->mv_view, f->depth_view, k ? G.gen[k - 1].view : G.real.view, G.hud.view};
+        VkSampler sm[5] = {nearest, nearest, nearest, VK_NULL_HANDLE, nearest};
+        struct {
+            int32_t size[2];
+            float rsize[2], scale;
+            int32_t mode;
+            float near_z, far_z;
+            int32_t generated;
+        } pc = {{(int32_t)G.w, (int32_t)G.h}, {(float)f->rw, (float)f->rh}, sc > 0 ? (float)sc : 8.0f, mode,
+                f->near_z, f->far_z, k};
+        pass_run(cb, &dbg_pass, v, sm, 5, 3, &pc, sizeof pc, G.w, G.h);
+    }
+    barrier(cb);
+}
+
 // vk_present_pre_record's hook: at the start of the blit's command buffer, before anything reads src. Returns the
 // image the blit shows: the first generated frame, or src when none was made.
 static VkImage record(VkCommandBuffer cb, VkImage src) {
@@ -320,14 +469,15 @@ static VkImage record(VkCommandBuffer cb, VkImage src) {
     barrier(cb);   // the game's writes to the window texture, its scene, depth and motion vectors
     // the HUD-less scene in the picture's format and size (a blit converts the float and scales a smaller scene of the
     // picture's shape), and the picture itself, kept for its own present after the generated ones
+    VkImageCopy cp = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                      .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .extent = {G.w, G.h, 1}};
+    vkCmdCopyImage(cb, src, VK_IMAGE_LAYOUT_GENERAL, G.real.img, VK_IMAGE_LAYOUT_GENERAL, 1, &cp);
+    barrier(cb);
     VkImageBlit b = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
                      .srcOffsets = {{0, 0, 0}, {(int32_t)f->hw, (int32_t)f->hh, 1}},
                      .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
                      .dstOffsets = {{0, 0, 0}, {(int32_t)G.w, (int32_t)G.h, 1}}};
     vkCmdBlitImage(cb, f->hudless, VK_IMAGE_LAYOUT_GENERAL, G.hud.img, VK_IMAGE_LAYOUT_GENERAL, 1, &b, VK_FILTER_LINEAR);
-    VkImageCopy cp = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
-                      .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .extent = {G.w, G.h, 1}};
-    vkCmdCopyImage(cb, src, VK_IMAGE_LAYOUT_GENERAL, G.real.img, VK_IMAGE_LAYOUT_GENERAL, 1, &cp);
     barrier(cb);
     int reset = f->reset || fresh || !G.prev_shown;
     for (int k = 1; k <= G.n; k++) {
@@ -344,6 +494,8 @@ static VkImage record(VkCommandBuffer cb, VkImage src) {
     }
     barrier(cb);
     G.evaluated = 1;
+    int dm = mvdebug_mode();
+    if (dm) mvdebug(cb, dm);
     // a new history gives no frame between the last one and this: only the game's frame is shown, at its delayed time
     if (reset) return G.real.img;
     G.made = G.n;
@@ -394,6 +546,7 @@ VkFormat vk_dlssg_format(void) { return G.fmt; }
 void vk_dlssg_release(void) {
     free_all(0);
     capture_free();
+    passes_release();
 }
 
 // ---------------------------------------------------------------- the menu and the overlay
