@@ -644,6 +644,13 @@ void rt_fps_push_s0(Cpu *c) { FP_SETS(0, VSF32(8) * rt_fps_step()); }
 
 // A rate added once a call with no time in it, after the `ldr` of the rate: s<n> = s<n> * step.
 void rt_fps_rate_s0(Cpu *c) { FP_SETS(0, VSF32(0) * rt_fps_step()); }
+void rt_fps_rate_s1(Cpu *c) { FP_SETS(1, VSF32(1) * rt_fps_step()); }
+void rt_fps_rate_s2(Cpu *c) { FP_SETS(2, VSF32(2) * rt_fps_step()); }
+void rt_fps_rate_s0s1(Cpu *c) {
+    float f = rt_fps_step(), x = VSF32(0) * f, y = VSF32(1) * f;
+    FP_SETS(0, x);
+    FP_SETS(1, y);
+}
 
 // The clock's own scale (main+0x91D6F0, `ldr s0, [x8, #0x1c]`), read by what runs while paused: scale * step.
 void rt_fps_scale_s0(Cpu *c) {
