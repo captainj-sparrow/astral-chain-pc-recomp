@@ -10,7 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "X-Astral-Language-Name: Italiano\n"
-"X-Generator: Poedit 3.9\n"
+"X-Generator: Poedit 3.10\n"
 
 msgctxt "UI_SWKBD_TITLE"
 msgid "Text entry"
@@ -158,7 +158,7 @@ msgstr "Bassa latenza"
 
 msgctxt "UI_MENU_LOW_LATENCY_DESC"
 msgid "Starts each frame as late as it can still be shown on time, so the picture answers the controls sooner. Uses NVIDIA Reflex or AMD Anti-Lag 2 when the driver offers them, the port's own timing otherwise. Boost: with Reflex the GPU also keeps its clocks up; otherwise shorter waits, with a dropped frame now and then."
-msgstr "Avvia ogni frame il più tardi possibile pur mostrandolo in tempo, così l'immagine risponde prima ai comandi. Usa NVIDIA Reflex o AMD Anti-Lag 2 quando il driver li offre, altrimenti la sincronizzazione propria del port. Boost: con Reflex la GPU tiene anche le frequenze alte; altrimenti attese più brevi, con qualche frame perso di tanto in tanto."
+msgstr "Avvia ogni frame il più tardi possibile, purché venga comunque mostrato in tempo, così l'immagine risponde prima ai comandi. Usa NVIDIA Reflex o AMD Anti-Lag 2 se disponibili, altrimenti la sincronizzazione interna del port. In modalità Boost, con Reflex la GPU mantiene anche le frequenze alte; senza Reflex riduce i tempi di attesa, accettando di tanto in tanto un frame perso."
 
 msgctxt "UI_MENU_LOW_LATENCY_OFF"
 msgid "Off"
@@ -350,7 +350,7 @@ msgstr "Uscita HDR"
 
 msgctxt "UI_MENU_HDR_DESC"
 msgid "Bright highlights on an HDR display. Needs HDR turned on in Windows (\"Use HDR\") or in a Wayland compositor with colour management; without it the picture stays SDR. Applies after a restart. The colour profile above is for SDR and is not used in HDR."
-msgstr "Luci vive su un display HDR. Richiede HDR attivo in Windows (\"Usa HDR\") o in un compositore Wayland con gestione del colore; senza resta SDR. Si applica dopo un riavvio. Il profilo colore qui sopra è per SDR e non usato in HDR."
+msgstr "Luci vive su un display HDR. Richiede HDR attivo in Windows (\"Usa HDR\") o in un compositore Wayland con gestione del colore; senza resta SDR. Si applica dopo un riavvio. Il profilo colore qui sopra è per SDR e non viene usato in HDR."
 
 msgctxt "UI_MENU_HDR_PEAK"
 msgid "Peak brightness"
@@ -390,7 +390,7 @@ msgstr "Risoluzione ombre"
 
 msgctxt "UI_MENU_SHADOW_SCALE_DESC"
 msgid "Draws the sun's shadow map this many times larger on each side than the game's 2048x2048: sharper shadow edges and leaf shadows, for more video memory (about 85 to 130 MiB at 2x, 340 to 520 MiB at 4x). Takes effect at the next start."
-msgstr "Dimensione delle shadow map disegnate dal gioco rispetto al predefinito 2048x2048: bordi delle ombre e ombre delle foglie più netti, ma maggiore consumo di memoria video (circa 85-130 MiB a 2x, 340-520 MiB a 4x). Ha effetto al prossimo avvio."
+msgstr "Aumenta la risoluzione della shadow map del sole rispetto al 2048x2048 originale del gioco. Migliora i bordi delle ombre e le ombre delle foglie, ma consuma più memoria video (circa 85-130 MiB a 2x, 340-520 MiB a 4x). Si applica al prossimo avvio."
 
 msgctxt "UI_MENU_AO"
 msgid "Ambient occlusion"
@@ -398,7 +398,7 @@ msgstr "Occlusione ambientale"
 
 msgctxt "UI_MENU_AO_DESC"
 msgid "Darkens creases, corners and the ground under characters and objects, where little of the surrounding light reaches. High + bounce light also adds the light the surfaces on screen send back to each other: a lit wall or floor brightens and tints what faces it, even from far away. Computed on the screen after the world is lit; the game has none of its own. Each level costs more GPU time than the one before; High + bounce light is demanding, so on a weak graphics card prefer High. Takes effect at once."
-msgstr "Scurisce pieghe, angoli e il terreno sotto personaggi e oggetti, dove arriva poca luce circostante. Alto + luce di rimbalzo aggiunge anche la luce che le superfici a schermo si rimandano a vicenda: un muro o un pavimento illuminato schiarisce e tinge ciò che gli sta di fronte, anche da lontano. Calcolata a schermo dopo che il mondo è illuminato; il gioco non ha la sua. Ogni livello costa più tempo GPU del precedente; Alto + luce di rimbalzo è impegnativo, quindi su una scheda poco potente preferisci Alto. Ha effetto subito."
+msgstr "Scurisce pieghe, angoli e il terreno sotto personaggi e oggetti, dove arriva poca luce ambientale. Alto + illuminazione indiretta aggiunge anche la luce indiretta che le superfici si rimandano a vicenda: un muro o un pavimento illuminato schiarisce e colora ciò che gli sta di fronte, anche da lontano. È calcolata a schermo dopo l'illuminazione del mondo (il gioco non ha un'occlusione ambientale propria). Ogni livello costa più tempo GPU del precedente; Alto + illuminazione indiretta è impegnativo, quindi su una scheda poco potente preferisci Alto. Ha effetto subito."
 
 msgctxt "UI_MENU_AO_OFF"
 msgid "Off"
@@ -414,7 +414,7 @@ msgstr "Alta"
 
 msgctxt "UI_MENU_AO_GI"
 msgid "High + bounce light (demanding)"
-msgstr "Alta + luce di rimbalzo (impegnativa)"
+msgstr "Alta + illuminazione indiretta (impegnativa)"
 
 msgctxt "UI_MENU_UPSCALING"
 msgid "Upscaler"
@@ -422,11 +422,11 @@ msgstr "Upscaler"
 
 msgctxt "UI_MENU_UPSCALING_DESC"
 msgid "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less shimmer, and with a mode below Native more frames per second. NVIDIA DLSS needs an NVIDIA RTX GPU and nvngx_dlss.dll next to astralchain.exe, Intel XeSS a recent GPU and libxess.dll next to astralchain.exe; AMD FSR 3 runs on any GPU, AMD FSR 4 on a Radeon RX 6000 or newer. Automatic takes DLSS where it can run and FSR 3 elsewhere. DLSS, XeSS and FSR 4 chosen here take effect after a restart. The HUD is not touched."
-msgstr "Un upscaler temporale al posto dell'anti-aliasing del gioco: bordi più levigati e meno sfarfallio, e con una modalità sotto Nativo più frame al secondo. NVIDIA DLSS richiede una GPU NVIDIA RTX e nvngx_dlss.dll accanto a astralchain.exe, Intel XeSS una GPU recente e libxess.dll accanto a astralchain.exe; AMD FSR 3 funziona su qualsiasi GPU, AMD FSR 4 su una Radeon RX 6000 o più recente. Automatica prende DLSS dove può girare e FSR 3 altrove. DLSS, XeSS e FSR 4 scelti qui hanno effetto dopo un riavvio. La HUD non viene toccata."
+msgstr "Un upscaler temporale al posto dell'anti-aliasing del gioco: bordi più levigati e meno sfarfallio, e con una modalità sotto Nativo più frame al secondo. NVIDIA DLSS richiede una GPU NVIDIA RTX e nvngx_dlss.dll accanto a astralchain.exe, Intel XeSS una GPU recente e libxess.dll accanto a astralchain.exe; AMD FSR 3 funziona su qualsiasi GPU, AMD FSR 4 su una Radeon RX 6000 o più recente. \"Automatico\" prende DLSS dove può girare e FSR 3 altrove. DLSS, XeSS e FSR 4 scelti qui hanno effetto dopo un riavvio. La HUD non viene toccata."
 
 msgctxt "UI_MENU_UPSCALING_DESC_OTHER"
 msgid "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less shimmer, and with a mode below Native more frames per second. AMD FSR 3 runs on any GPU, AMD FSR 4 on a Radeon RX 6000 or newer; Automatic is FSR 3 here (NVIDIA DLSS and Intel XeSS are Windows only). FSR 4 chosen here takes effect after a restart. The HUD is not touched."
-msgstr "Un upscaler temporale al posto dell'anti-aliasing del gioco: bordi più levigati e meno sfarfallio, e scegliendo modalità sotto Nativo, maggiori frame al secondo. AMD FSR 3 funziona su qualsiasi GPU, AMD FSR 4 su una Radeon RX 6000 o più recente; Automatica è FSR 3 qui (NVIDIA DLSS e Intel XeSS sono solo su Windows). FSR 4 scelto qui ha effetto dopo un riavvio. La HUD non viene toccata."
+msgstr "Un upscaler temporale al posto dell'anti-aliasing del gioco: bordi più levigati e meno sfarfallio, e scegliendo modalità sotto Nativo, maggiori frame al secondo. AMD FSR 3 funziona su qualsiasi GPU, AMD FSR 4 su una Radeon RX 6000 o più recente; \"Automatico\" è FSR 3 qui (NVIDIA DLSS e Intel XeSS sono solo su Windows). FSR 4 scelto qui ha effetto dopo un riavvio. La HUD non viene toccata."
 
 msgctxt "UI_MENU_UPSCALING_OFF"
 msgid "Off"
@@ -490,7 +490,7 @@ msgstr "Anti-aliasing"
 
 msgctxt "UI_MENU_AA_DESC"
 msgid "The game's own anti-aliasing, SMAA, for when no upscaler runs. Off leaves the edges jagged."
-msgstr "L'anti-aliasing del gioco, SMAA, per quando non è attivato alcun upscaler. Riduce i bordi frastagliati quando attivato."
+msgstr "L'anti-aliasing del gioco, SMAA, usato quando non c'è un upscaler attivo. Se disattivato, i bordi restano frastagliati."
 
 msgctxt "UI_MENU_AA_OFF"
 msgid "Off"
@@ -526,7 +526,7 @@ msgstr "60 FPS"
 
 msgctxt "UI_MENU_REALTIME"
 msgid "Game speed follows the clock"
-msgstr "La velocità del gioco segue l'orologio"
+msgstr "La velocità del gioco segue il clock"
 
 msgctxt "UI_MENU_REALTIME_DESC"
 msgid "Steps the game by real time, so a slow frame does not slow the game down."
@@ -646,7 +646,7 @@ msgstr "%u dei suoi file provengono da %s, che è più in alto nella lista."
 
 msgctxt "UI_MENU_MODS_MOVE_HINT"
 msgid "The top face button or Ctrl+Up moves it up, the left face button or Ctrl+Down moves it down. When two mods change the same file, the higher one wins. Changes apply after a restart."
-msgstr "Il pulsante superiore dei 4 frontali o Ctrl+Up lo sposta su, il pulsante sinistro dei 4 frontali o Ctrl+Down lo sposta giù. Quando due mod cambiano lo stesso file, quella in alto ha la proprità. Le modifiche hanno effetto dopo un riavvio."
+msgstr "Il pulsante superiore dei 4 frontali o Ctrl+Up lo sposta su, il pulsante sinistro dei 4 frontali o Ctrl+Down lo sposta giù. Quando due mod cambiano lo stesso file, quella in alto ha la priorità. Le modifiche hanno effetto dopo un riavvio."
 
 msgctxt "UI_MENU_MODS_EMPTY"
 msgid "This folder has no romfs, exefs or cheats files."
@@ -658,7 +658,7 @@ msgstr "Questa mod porta codice di gioco proprio (un plugin subsdk o un main sos
 
 msgctxt "UI_MENU_MODS_EXEFS_LATER"
 msgid "This mod patches the game code (exefs). The game builds the patches in when it starts next (a rebuild of a few minutes); until then the whole mod stays off."
-msgstr "Questa mod applica patch al codice di gioco (exefs). Il gioco le costruisce al prossimo avvio (una ricostruzione di qualche minuto); fino a allora l'intera mod resta disattivata."
+msgstr "Questa mod applica patch al codice di gioco (exefs). Il gioco le costruisce al prossimo avvio (una ricostruzione di qualche minuto); fino ad allora l'intera mod resta disattivata."
 
 msgctxt "UI_MENU_MODS_BAD_NAME"
 msgid "The folder name contains |, which the mod list uses between names. Rename the folder."
@@ -774,7 +774,7 @@ msgstr "Prova altoparlanti"
 
 msgctxt "UI_MENU_AUDIO_TEST_DESC"
 msgid "Plays a noise on each speaker in turn, as an A/V receiver does: check that every speaker works and sits where the diagram shows it. The game's sound is muted meanwhile. Press again to stop."
-msgstr "Riproduce un rumore su ogni altoparlante a turno, come fa un receiver A/V: verifica che ogni altoparlante funzioni e sia dove indica lo schema. Il suono del gioco resta muto. Premi di nuovo per fermare."
+msgstr "Riproduce un rumore su ogni altoparlante a turno, come fa un ricevitore A/V: verifica che ogni altoparlante funzioni e sia dove indica lo schema. Il suono del gioco resta muto. Premi di nuovo per fermare."
 
 msgctxt "UI_MENU_AUDIO_TEST_START"
 msgid "Start"
@@ -922,7 +922,7 @@ msgstr "Disposizione pulsanti"
 
 msgctxt "UI_MENU_PAD_LAYOUT_DESC"
 msgid "Which button is A. Nintendo: the right one, as on a Switch. Xbox: the bottom one, as labelled on an Xbox controller. PlayStation: the bottom one as labelled (cross) and the rest by position, to match the PlayStation button mod. Automatic picks Nintendo for controllers with Nintendo labels, PlayStation for PlayStation controllers and Xbox for the others. Which controller the game's prompts show is set under Button prompts."
-msgstr "Quale pulsante è A. Nintendo: quello a destra, come su Switch. Xbox: quello in basso, come etichettato su un controller Xbox. PlayStation: quello in basso come etichettato (croce) e gli altri per posizione, per corrispondere alla mod pulsanti PlayStation. Automatico sceglie Nintendo per controller con etichette Nintendo, PlayStation per controller PlayStation e Xbox per gli altri. Quale controller mostrano le prompt del gioco si imposta sotto Prompt pulsanti."
+msgstr "Quale pulsante è A. Nintendo: quello a destra, come su Switch. Xbox: quello in basso, come etichettato su un controller Xbox. PlayStation: quello in basso come etichettato (croce) e gli altri per posizione, per corrispondere alla mod pulsanti PlayStation. Automatico sceglie Nintendo per controller con etichette Nintendo, PlayStation per controller PlayStation e Xbox per gli altri. Quale controller mostrano le icone del gioco si imposta sotto Icone pulsanti."
 
 msgctxt "UI_MENU_PAD_LAYOUT_AUTO"
 msgid "Automatic"
@@ -946,11 +946,11 @@ msgstr "in uso: %s"
 
 msgctxt "UI_MENU_PROMPTS"
 msgid "Button prompts"
-msgstr "Prompt pulsanti"
+msgstr "Icone pulsanti"
 
 msgctxt "UI_MENU_PROMPTS_DESC"
 msgid "Which controller's buttons the game's prompts show. Automatic follows the controller in use (the Xbox or PlayStation mod when built, else Nintendo). Nintendo: the game's own. Xbox and PlayStation: button mods drawn for one layout each (a loaded mod forces its layout: Xbox for the Xbox mod, PlayStation for the PlayStation mod). The game reads its prompts at start, so they change after a restart."
-msgstr "I pulsanti di quale controller mostrano le prompt del gioco. Automatico segue il controller in uso (la mod Xbox o PlayStation se costruita, altrimenti Nintendo). Nintendo: quelle del gioco. Xbox e PlayStation: mod pulsanti disegnate per una disposizione ciascuna (una mod caricata impone la sua disposizione: Xbox per la mod Xbox, PlayStation per la mod PlayStation). Il gioco legge le sue prompt all'avvio, quindi cambiano dopo un riavvio."
+msgstr "I pulsanti di quale controller mostrano le icone del gioco. Automatico segue il controller in uso (la mod Xbox o PlayStation se presente, altrimenti Nintendo). Nintendo: quelle del gioco. Xbox e PlayStation: mod pulsanti disegnate per una disposizione ciascuna (una mod caricata impone la sua disposizione: Xbox per la mod Xbox, PlayStation per la mod PlayStation). Il gioco legge le sue icone all'avvio, quindi cambiano dopo un riavvio."
 
 msgctxt "UI_MENU_PROMPTS_AUTO"
 msgid "Automatic"
@@ -970,27 +970,27 @@ msgstr "PlayStation"
 
 msgctxt "UI_MENU_PROMPTS_MISSING"
 msgid "prompt files missing: run the setup again"
-msgstr "file prompt mancanti: riesegui l'installazione"
+msgstr "file icone mancanti: riesegui l'installazione"
 
 msgctxt "UI_MENU_PROMPTS_FAILED"
 msgid "prompt files damaged: run the setup again"
-msgstr "file prompt danneggiati: riesegui l'installazione"
+msgstr "file icone danneggiati: riesegui l'installazione"
 
 msgctxt "UI_MENU_PROMPTS_RESTART"
 msgid "prompts change after restart"
-msgstr "le prompt cambiano dopo il riavvio"
+msgstr "le icone cambiano dopo il riavvio"
 
 msgctxt "UI_MENU_PROMPTS_OFF_SHAPE"
 msgid "off at a game resolution not 16:9"
-msgstr "spente a una risoluzione di gioco diversa da 16:9"
+msgstr "disattivate con risoluzione di gioco diversa da 16:9"
 
 msgctxt "UI_MENU_PROMPTS_OFF_MODS"
 msgid "off: a RomFS mod replaces their files"
-msgstr "spente: una mod RomFS sostituisce i loro file"
+msgstr "disattivate: una mod RomFS sostituisce i loro file"
 
 msgctxt "UI_MENU_PROMPTS_OFF_PATCHES"
 msgid "off while AC_ROMFS_PATCHES is set"
-msgstr "spente mentre AC_ROMFS_PATCHES è impostato"
+msgstr "disattivate mentre AC_ROMFS_PATCHES è impostato"
 
 msgctxt "UI_MENU_RESTART"
 msgid "Restart now"
@@ -998,7 +998,7 @@ msgstr "Riavvia ora"
 
 msgctxt "UI_MENU_RESTART_DESC"
 msgid "Closes the game and starts it again with the new prompts. Progress since your last save is lost."
-msgstr "Chiude il gioco e lo riavvia con le nuove prompt. I progressi dall'ultimo salvataggio vengono persi."
+msgstr "Chiude il gioco e lo riavvia con le nuove icone. I progressi dall'ultimo salvataggio vengono persi."
 
 msgctxt "UI_MENU_RESTART_CONFIRM"
 msgid "Restart the game now? Progress since your last save is lost."
@@ -1282,7 +1282,7 @@ msgstr "Selezione rapida."
 
 msgctxt "UI_BIND_DESC_MOVE"
 msgid "Moves Link like the left stick. The controller's left stick always works too."
-msgstr "Muove Link come lo stick sinistro. Anche lo stick sinistro del controller funziona sempre."
+msgstr "Muove il personaggio come lo stick sinistro. Anche lo stick sinistro del controller funziona sempre."
 
 msgctxt "UI_BIND_DESC_CAMERA"
 msgid "Turns the camera like the right stick. The mouse and the controller's right stick always work too."
@@ -2110,7 +2110,7 @@ msgstr "RCAS prima della HUD, nitidezza %d%%"
 
 msgctxt "UI_MENU_OV_SCALE_NONE"
 msgid "none (1:1)"
-msgstr "nessuno (1:1)"
+msgstr "nessuna (1:1)"
 
 msgctxt "UI_MENU_OV_SCALE_BILINEAR"
 msgid "bilinear"
@@ -2134,7 +2134,7 @@ msgstr "Ricostruisci il gioco ora"
 
 msgctxt "UI_MENU_CHEATS_REBUILD_DESC"
 msgid "Some cheats change the game's code and are not built into it: they are new or edited, or their last rebuild failed or was cancelled. Closes the game; the setup builds them in (a few minutes) and starts the game again. Progress since your last save is lost."
-msgstr "Alcuni trucchi cambiano il codice del gioco e non sono costruiti in esso: sono nuovi o modificati, o la loro ultima ricostruzione è fallita o annullata. Chiude il gioco; l'installazione li inserisce (qualche minuto) e avvia di nuovo il gioco. I progressi dall'ultimo salvataggio vengono persi."
+msgstr "Alcuni trucchi cambiano il codice del gioco e non sono integrati in esso: sono nuovi o modificati, o la loro ultima ricostruzione è fallita o annullata. Chiude il gioco; l'installazione li inserisce (qualche minuto) e avvia di nuovo il gioco. I progressi dall'ultimo salvataggio vengono persi."
 
 msgctxt "UI_MENU_CHEAT_CODE_DESC"
 msgid "Changes the game's code. Switches at once."
@@ -2179,4 +2179,3 @@ msgstr "non supportato"
 msgctxt "UI_MENU_CHEAT_UNSUPPORTED_DESC"
 msgid "This cheat cannot be used with this version of the game:"
 msgstr "Questo trucco non può essere usato con questa versione del gioco:"
-
