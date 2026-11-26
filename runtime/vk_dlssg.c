@@ -4,9 +4,10 @@
 //
 // The inputs, per game frame (vk_backend.c present_image, on the replay thread, the frame's images still holding it):
 // - the picture the game presents, with its HUD: its window texture (RGBA8);
-// - the same picture without the HUD: the float scene the game's last pass (SMAA's blend) copied into the window
-//   texture before the HUD was drawn over it, which vk_hdr.c finds for HDR output (vk_hdr_draw) and here without it;
-//   NGX compares the two to tell the HUD from the scene, so the HUD is not moved along with the scene;
+// - the same picture without the HUD: the window texture copied when the game's last scene pass (SMAA's blend, which
+//   vk_hdr.c finds: vk_hdr_draw) has drawn it and before the first HUD draw (vk_hdr_before_draw, vk_dlssg_capture);
+//   NGX compares the two to tell the HUD from the scene, so the HUD is not moved along with the scene. The float scene
+//   that pass reads is from before its blend: NGX took every edge the blend changed for HUD and held it still;
 // - the scene depth and the motion vectors of the temporal upscaler (vk_dlaa.c vk_dlaa_fg_inputs: render pixels, the
 //   camera's and the objects' own), the camera's matrices and the jitter. So frame generation needs a temporal
 //   upscaler running (DLSS, FSR 3, FSR 4, in any mode): without one the frame has no motion vectors and is shown alone.
@@ -181,6 +182,72 @@ static int img_make(VkCommandBuffer cb, Img *i, uint32_t w, uint32_t h, VkFormat
     return 1;
 }
 
+// ---------------------------------------------------------------- the HUD-less picture (the replay thread)
+// The window texture as the game's last scene pass left it, before the first HUD draw (vk_hdr.c vk_hdr_before_draw):
+// the scene exactly as the picture shows it, anti-aliased, without the HUD. The float scene that pass read is from
+// before its SMAA blend; NGX took every edge the blend changed for HUD and held it still (a fence smeared at any
+// multiplier). The copy is read by the present of the same frame, which is queued before the next frame's work, as the
+// float scene was.
+static struct {
+    VkImage img;
+    VmaAllocation mem;
+    uint32_t w, h;
+    VkFormat fmt;
+} CAP;
+static void barrier(VkCommandBuffer cb);
+
+int vk_dlssg_capture(VkCommandBuffer cb, VkImage win, VkFormat fmt, uint32_t w, uint32_t h) {
+    const VkCtx *c = vk_ctx();
+    if (CAP.img && (CAP.w != w || CAP.h != h || CAP.fmt != fmt)) {   // a new game resolution: rare
+        vk_queue_lock();
+        vkDeviceWaitIdle(c->device);
+        vk_queue_unlock();
+        vmaDestroyImage(c->vma, CAP.img, CAP.mem);
+        CAP.img = VK_NULL_HANDLE;
+    }
+    if (!CAP.img) {
+        VkImageCreateInfo ii = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D,
+                                .format = fmt, .extent = {w, h, 1}, .mipLevels = 1, .arrayLayers = 1,
+                                .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL,
+                                .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                         VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
+        VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+        if (vmaCreateImage(c->vma, &ii, &ai, &CAP.img, &CAP.mem, NULL) != VK_SUCCESS) {
+            CAP.img = VK_NULL_HANDLE;
+            static int logged;
+            if (!logged)
+                logged = 1, rt_log("dlssg: the HUD-less picture's image could not be made: the float scene instead");
+            return 0;
+        }
+        CAP.w = w, CAP.h = h, CAP.fmt = fmt;
+        VkImageMemoryBarrier2 b = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                                   .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                                   .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
+                                   .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED, .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+                                   .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                   .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .image = CAP.img,
+                                   .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+        VkDependencyInfo di = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 1,
+                               .pImageMemoryBarriers = &b};
+        vkCmdPipelineBarrier2(cb, &di);
+        rt_log("dlssg: the HUD-less picture is the window texture before the HUD (%ux%u, format %d)", w, h, (int)fmt);
+    }
+    barrier(cb);   // the scene pass's writes, and the present before still reading last frame's copy
+    VkImageCopy cp = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                      .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .extent = {w, h, 1}};
+    vkCmdCopyImage(cb, win, VK_IMAGE_LAYOUT_GENERAL, CAP.img, VK_IMAGE_LAYOUT_GENERAL, 1, &cp);
+    barrier(cb);   // before the HUD draws write the window texture again
+    return 1;
+}
+
+VkImage vk_dlssg_capture_image(void) { return CAP.img; }
+
+static void capture_free(void) {
+    if (CAP.img) vmaDestroyImage(vk_ctx()->vma, CAP.img, CAP.mem);
+    memset(&CAP, 0, sizeof CAP);
+}
+
 // Everything goes: the GPU may still read the images and NGX's feature (a resize, the release), so the device is
 // waited for first. Rare: a change of the game resolution or the scene's size.
 static void free_all(int wait) {
@@ -324,7 +391,10 @@ int vk_dlssg_end(void) {
 VkImage vk_dlssg_image(int k) { return k <= 0 ? G.real.img : k <= G.n ? G.gen[k - 1].img : VK_NULL_HANDLE; }
 VkFormat vk_dlssg_format(void) { return G.fmt; }
 
-void vk_dlssg_release(void) { free_all(0); }
+void vk_dlssg_release(void) {
+    free_all(0);
+    capture_free();
+}
 
 // ---------------------------------------------------------------- the menu and the overlay
 const char *vk_dlssg_running(void) {

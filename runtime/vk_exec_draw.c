@@ -2474,6 +2474,7 @@ static int prepare_draw(VkExec *ex, int prim, int32_t count, int restart) {
         if (ex->in_pass && (w > ex->pass_w || h > ex->pass_h)) vk_exec_pass_end_why(ex, VK_END_AREA);
         if (!ex->in_pass) ex->rt_resolved = 0;
     }
+    if (vk_hdr_track) vk_hdr_before_draw(ex);   // may end the pass: before the check below
     if (!ex->in_pass) ex->dirty |= VK_EXEC_DIRTY_VIEWPORT | VK_EXEC_DIRTY_SCISSOR;
     vk_exec_pass_begin(ex);
     VkRect2D sc = vk_exec_scissor(ex);

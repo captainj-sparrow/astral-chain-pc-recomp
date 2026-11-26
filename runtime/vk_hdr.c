@@ -188,7 +188,10 @@ static volatile int32_t g_active;   // the swapchain is HDR10 (gfx_present.c vk_
 static PlatMutex rec_lock = PLAT_MUTEX_INIT;
 // per presented window image: the scene a draw into it sampled since its last present (fresh), and that scene's format
 // and size
-static struct { VkImage win, src; VkFormat fmt; uint32_t w, h; int fresh; } recs[4];
+// cap (frame generation): 1 the scene pass drew into win and no draw has followed, 2 the window texture was copied
+// before the next draw into it (vk_hdr_before_draw), 0 neither since the last present
+static struct { VkImage win, src; VkFormat fmt; uint32_t w, h; int fresh, cap; } recs[4];
+static volatile int32_t g_cap_pending;   // recs with cap 1: the per-draw check's fast way out
 static int nrecs;
 
 void vk_hdr_set_active(int on) { plat_xchg32(&g_active, on); }
@@ -232,9 +235,36 @@ void vk_hdr_draw(VkExec *ex, const VkPipeInfo *info) {
         src = vk_dlaa_swap_pic, fmt = VK_FORMAT_R16G16B16A16_SFLOAT, sw = t->width, sh = t->height;
     plat_mutex_lock(&rec_lock);
     for (int i = 0; i < nrecs; i++)
-        if (recs[i].win == t->image)
+        if (recs[i].win == t->image) {
             recs[i].src = src, recs[i].fmt = fmt, recs[i].w = sw, recs[i].h = sh, recs[i].fresh = 1;
+            if (vk_dlssg_scene_wanted() && recs[i].cap != 1) recs[i].cap = 1, plat_inc32(&g_cap_pending);
+        }
     plat_mutex_unlock(&rec_lock);
+}
+
+// Frame generation's HUD-less picture (vk_dlssg_capture): before a draw that writes a window texture the scene pass
+// drew into (the first HUD draw; vk_exec_draw.c prepare_draw, before its pass begins), the open pass ends and the
+// window texture, the anti-aliased scene without the HUD, is copied; the draw's pass then begins again, loading it.
+// Without such a draw (no HUD this frame) the window texture itself is HUD-less at the present.
+void vk_hdr_before_draw(VkExec *ex) {
+    if (!plat_cas32(&g_cap_pending, 0, 0)) return;
+    for (int c = 0; c < 8; c++) {
+        const VkExecTarget *t = &ex->color[c];
+        if (!t->image || !t->img) continue;
+        int r = -1;
+        plat_mutex_lock(&rec_lock);
+        for (int i = 0; i < nrecs; i++)
+            if (recs[i].win == t->image && recs[i].cap == 1) r = i, recs[i].cap = 0, plat_dec32(&g_cap_pending);
+        plat_mutex_unlock(&rec_lock);
+        if (r < 0) continue;
+        vk_exec_pass_end(ex);
+        int ok = vk_dlssg_capture(ex->cb, t->image, t->img->format, t->img->width, t->img->height);
+        ex->recorded += 3;
+        plat_mutex_lock(&rec_lock);
+        if (recs[r].win == t->image) recs[r].cap = ok ? 2 : 0;
+        plat_mutex_unlock(&rec_lock);
+        return;
+    }
 }
 
 // Also for frame generation (vk_dlssg.c) without HDR output: fg, when not NULL, gets the fresh scene whether or not the
@@ -251,9 +281,19 @@ void vk_hdr_present_source(const VkTexImage *win, VkImage *scene, VkFormat *form
     if (r < 0 && nrecs < 4) r = nrecs++, recs[r].win = win->image, recs[r].src = VK_NULL_HANDLE, recs[r].fresh = 0;
     // only a scene drawn into it since its last present: a movie or loading screen after play has none
     if (r >= 0 && recs[r].fresh && recs[r].src && vk_hdr_active()) *scene = recs[r].src, *format = recs[r].fmt;
-    if (fg && r >= 0 && recs[r].fresh && recs[r].src)
-        fg->image = recs[r].src, fg->format = recs[r].fmt, fg->w = recs[r].w, fg->h = recs[r].h;
-    if (r >= 0) recs[r].fresh = 0;
+    if (fg && r >= 0 && recs[r].fresh && recs[r].src) {
+        VkImage cap = vk_dlssg_capture_image();
+        if (recs[r].cap == 2 && cap)   // the window texture copied before its HUD (vk_hdr_before_draw)
+            fg->image = cap, fg->format = win->format, fg->w = win->width, fg->h = win->height;
+        else if (recs[r].cap == 1)     // no draw after the scene pass: the window texture is HUD-less itself
+            fg->image = win->image, fg->format = win->format, fg->w = win->width, fg->h = win->height;
+        else
+            fg->image = recs[r].src, fg->format = recs[r].fmt, fg->w = recs[r].w, fg->h = recs[r].h;
+    }
+    if (r >= 0) {
+        if (recs[r].cap == 1) plat_dec32(&g_cap_pending);
+        recs[r].fresh = 0, recs[r].cap = 0;
+    }
     plat_xchg32(&g_scene_seen, *scene != VK_NULL_HANDLE);
     plat_mutex_unlock(&rec_lock);
     static int logged;

@@ -28,6 +28,11 @@ typedef struct VkFgFrame {
 
 void vk_dlssg_init(void);             // vk_device.c after vk_dlaa_init: what NGX offers here, logged once
 int vk_dlssg_scene_wanted(void);      // vk_hdr.c: the HUD-less scene is to be found even without HDR output
+// vk_hdr.c, on the replay thread, before the first draw into the window texture after the game's last scene pass (the
+// render pass ended): the window texture copied into frame generation's HUD-less picture, recorded into cb. 1: done,
+// and vk_dlssg_capture_image() holds it for this frame's present.
+int vk_dlssg_capture(VkCommandBuffer cb, VkImage win, VkFormat fmt, uint32_t w, uint32_t h);
+VkImage vk_dlssg_capture_image(void);
 int vk_dlssg_set_at_start(void);      // vk_device.c: the setting at start asked for it (its present queue)
 // vk_backend.c present_image, on the replay thread: fills f->on and f->reset from the setting and this frame's inputs
 // (the rest of *f is filled by vk_dlaa_fg_inputs and vk_hdr_present_source before).
