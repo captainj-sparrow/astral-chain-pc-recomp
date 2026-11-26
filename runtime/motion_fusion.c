@@ -184,6 +184,14 @@ void motion_set_turn(MotionFusion *m, int k) {
     plat_mutex_unlock(&m->lock);
 }
 
+void motion_reset_bias(MotionFusion *m) {
+    plat_mutex_lock(&m->lock);
+    memset(m->bias, 0, sizeof m->bias);
+    m->calibrated = 0;
+    m->still_from = m->still_n = 0;
+    plat_mutex_unlock(&m->lock);
+}
+
 int motion_read(MotionFusion *m, MotionState *out, int max, uint64_t now) {
     if (max <= 0) return 0;
     int n = 0;

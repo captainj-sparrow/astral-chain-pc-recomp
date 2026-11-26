@@ -654,6 +654,19 @@ static void probe_feedback(uint32_t pid, uint32_t style) {
     CHECK(fabs(ms[0].gyro[0]) < 1e-6 && fabs(ms[0].gyro[2]) < 1e-6 && fabs(ms[0].angle[0] - settled) < 1e-5,
           "gyro bias taken off at rest: rate %.6f %.6f rev/s, angle moved %.6f rev", (double)ms[0].gyro[0],
           (double)ms[0].gyro[2], (double)(ms[0].angle[0] - settled));
+    // Another controller (motion_reset_bias), resting with a bias of -1 deg/s on y: the old pad's bias is gone at once
+    // (its first sample reads its own raw rate), and after a still half second the new one is taken off.
+    motion_reset_bias(b);
+    const double other[3] = {0, -1 * M_PI / 180, 0};
+    motion_feed(b, down, other, t += 4000000);
+    motion_read(b, ms, 1, t + 1000000);
+    double first[3] = {ms[0].gyro[0], ms[0].gyro[1], ms[0].gyro[2]};
+    for (int i = 0; i < 250; i++) motion_feed(b, down, other, t += 4000000);
+    motion_read(b, ms, 1, t + 1000000);
+    CHECK(fabs(first[0]) < 1e-6 && fabs(first[1] + 1.0 / 360) < 1e-6 && fabs(first[2]) < 1e-6 &&
+              fabs(ms[0].gyro[1]) < 1e-6,
+          "gyro bias reset for another controller: first rate %.6f %.6f %.6f rev/s, then %.6f", first[0], first[1],
+          first[2], (double)ms[0].gyro[1]);
     // motion_set_turn: a quarter turn to the right (-z) also adds a quarter revolution of -y, which blade mode reads as right
     MotionFusion *tr = motion_new();
     const double right[3] = {0, 0, -M_PI / 2};

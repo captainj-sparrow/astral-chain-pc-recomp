@@ -1153,6 +1153,7 @@ static int sensors_ready(void) {
     SDL_JoystickID id = SDL_GetGamepadID(pad);
     if (id == sensor_pad) return sensor_ok;
     sensor_pad = id;
+    motion_reset_bias(motion_global());   // the bias belongs to the gamepad: the new one is measured afresh
     // Nothing drains the SDL event queue: no event per sample (the data still updates, SDL_SendJoystickSensor)
     SDL_SetEventEnabled(SDL_EVENT_GAMEPAD_SENSOR_UPDATE, false);
     sensor_ok =SDL_GamepadHasSensor(pad, SDL_SENSOR_GYRO) && SDL_GamepadHasSensor(pad, SDL_SENSOR_ACCEL) &&
