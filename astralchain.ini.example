@@ -301,15 +301,17 @@
 # NVIDIA RTX 40 or newer GPU, nvngx_dlssg.dll from NVIDIA's DLSS SDK next to astralchain.exe (on Linux the SDK's
 # libnvidia-ngx-dlssg.so.<version> next to astralchain), and a temporal upscaler running (upscaling, in any mode): its
 # motion vectors and depth are what frame generation follows. The game's frames are shown a little later, behind the
-# generated ones (12.5 ms at 60 fps with 4x); with low_latency, NVIDIA Reflex keeps the rest of the delay down. Not with
-# HDR output yet (hdr = 1 keeps it off). NGX is loaded at start when it is on: switching it on later waits for a restart,
-# between its values it changes at once.
+# generated ones (12.5 ms at 60 fps with 4x); with low_latency, NVIDIA Reflex keeps the rest of the delay down. Works
+# with HDR output too. NGX is loaded at start when it is on: switching it on later waits for a restart, between its
+# values it changes at once.
 # frame_generation = off
 
 # HDR output: hdr = 1 sends the picture as HDR10 (needs HDR on in Windows, "Use HDR", or a Wayland compositor with
-# colour management; without it the picture stays SDR). The game's tonemap keeps highlights up to hdr_peak_nits (your
-# display's peak); hdr_game_nits is the picture's white (paper white, 203 is the HDR reference) and hdr_ui_nits the
-# HUD's and the menu's. hdr is read at start, the nits at once. The colour profile above is for SDR only.
+# colour management; without it the picture stays SDR). On Linux SDL may run the game through XWayland, which has no
+# HDR10 output: start it with SDL_VIDEODRIVER=wayland (the log's "gfx: ... video driver" line says which it uses). The
+# game's tonemap keeps highlights up to hdr_peak_nits (your display's peak); hdr_game_nits is the picture's white
+# (paper white, 203 is the HDR reference) and hdr_ui_nits the HUD's and the menu's. hdr is read at start, the nits at
+# once. The colour profile above is for SDR only.
 # hdr = 0
 # hdr_peak_nits = 1000
 # hdr_game_nits = 203
