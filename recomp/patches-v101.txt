@@ -349,6 +349,24 @@ site fps60 main 49eed8 1e3e1001 @fn:rt_fps_neg_step_s1
 site fps60 main 49ef4c 1e3e1001 @fn:rt_fps_neg_step_s1
 # Same form, not reached in the scene measured (left as they are until one is): ffd0 1145bc 1a8904 1b7854 1c0470
 # 5d5d28 5d5ebc 5eada0 6c0f18 95b228 970fa4 97e218.
+# Cloth sway (main+0x556d10, run by the cloth update main+0x554e60 with no time argument, the player's hair among
+# it): every element's phase gains the cloth's speed (+0xC34, or 0.1047 rad, 6 degrees) times its rate a call, and the
+# sine of it turns the element up to 30 degrees; each call then pushes the element's velocity (+0x40) along the turned
+# wind, (sin + 1) / 2 times its weight and the cloth's strength (+0xB48). At one call a frame the hair swayed twice as
+# fast at 60 fps, four times at 120, and was pushed as many times more; times the step both keep their 30 fps rate.
+site fps60 main 556e14 1e200920 @fn:rt_fps_sway_s0      # fmul s0,s9,s0 -> s0 = s9 * s0 * step
+site fps60 main 556e84 4ea81d00 @fn:rt_fps_push_s0      # mov v0.16b,v8.16b -> s0 = s8 * step
+# Time while paused. The clock getter main+0x91D6F0 returns a clock's own scale (+0x1C, 1.0) with no time channel in
+# it. What runs while the game is paused takes its time from it: the objects of main+0x95ED70 .. 0x992174 with their
+# ignore-pause flag (+0xD0 bit 4) take it through main+0x3BE590, and a fixed 1.0 from main+0x3BE5B0, in place of
+# their clock and the step; and 18 float countdowns take it off once a frame. So the animation of the pause menu ran
+# twice as fast at 60 fps and four times at 120. Times the step it is a scale per 30 fps frame of real time. The talk
+# command's countdown (main+0x443EF4) takes the whole ticks in a cutscene at 60, where it runs only on frames with a
+# tick (as rt_fps_talk_wait_s1).
+site fps60 main 91d6f8 bd401d00 @fn:rt_fps_scale_s0       # ldr s0,[x8,#0x1c] -> s0 = scale * step
+site fps60 main 91d700 1e2e1000 @fn:rt_fps_step_s0        # fmov s0,#1.0 (no clock) -> s0 = step
+site fps60 main 3be5d0 1e2e1000 @fn:rt_fps_step_s0        # fmov s0,#1.0 (ignore-pause flag) -> s0 = step
+site fps60 main 443ef4 1e220800 @fn:rt_fps_talk_scale_s0  # fmul s0,s0,s2 -> s0 = scale * s2 * (ticks in a cutscene at 60, else step)
 # r2 bank of buffer counters (sub w8,w8,#1, no flags)
 site fps60 main 283044 51000508 @fn:rt_fps_sub_w8
 site fps60 main 283054 51000508 @fn:rt_fps_sub_w8

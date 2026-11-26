@@ -649,6 +649,33 @@ void rt_fps_sector_str(Cpu *c) {
 // 30 fps frames of real time.
 void rt_fps_neg_step_s1(Cpu *c) { FP_SETS(1, -rt_fps_step()); }
 
+// The cloth sway oscillator (main+0x556d10, `fmul s0, s9, s0`): each element's phase gains speed s9 times its rate a
+// call, with no time in it; s0 = s9 * s0 * step makes that a gain per 30 fps frame of real time.
+void rt_fps_sway_s0(Cpu *c) { FP_SETS(0, VSF32(9) * VSF32(0) * rt_fps_step()); }
+// Its push (`mov v0.16b, v8.16b`, the element's weight as the scale of the velocity it adds a call): s0 = s8 * step,
+// a push per 30 fps frame. Only lane 0 is read (the next call scales a vector by v0.s[0]).
+void rt_fps_push_s0(Cpu *c) { FP_SETS(0, VSF32(8) * rt_fps_step()); }
+
+// The clock's own scale (main+0x91D6F0, `ldr s0, [x8, #0x1c]`), read without any time channel: by what runs while the
+// game is paused (the menus' objects with their ignore-pause flag, main+0x3BE590) and by float countdowns that take
+// it off once a frame. Times the step it is a scale per 30 fps frame of real time.
+void rt_fps_scale_s0(Cpu *c) {
+    float s; memcpy(&s, (const uint8_t *)(uintptr_t)c->x[8] + 0x1c, 4);
+    FP_SETS(0, s * rt_fps_step());
+}
+// `fmov s0, #1.0` as a time per call (no clock, or the ignore-pause flag of main+0x3BE5B0): the step.
+void rt_fps_step_s0(Cpu *c) { FP_SETS(0, rt_fps_step()); }
+// The talk command's countdown (main+0x443EF4, `fmul s0, s0, s2` after the scale getter above, s2 = -1): the global
+// clock's scale (main+0xDB8568 -> holder -> clock +0x1C) times s2 times the whole ticks in a cutscene at 60, where the
+// command runs only on frames with a tick, else the step.
+void rt_fps_talk_scale_s0(Cpu *c) {
+    uintptr_t holder = *(const volatile uint64_t *)((uintptr_t)MOD_MAIN_BASE + 0xDB8568ull);
+    uintptr_t clk = holder ? *(const uint64_t *)holder : 0;
+    float s = 1.0f;
+    if (clk) memcpy(&s, (const uint8_t *)clk + 0x1c, 4);
+    FP_SETS(0, s * VSF32(2) * (cut60_now ? (float)rt_fps_ticks() : rt_fps_step()));
+}
+
 // `sub w8, w8, #1` (no flags), the r2 bank of tap/buffer counters: max(w8 - ticks, 0).
 void rt_fps_sub_w8(Cpu *c) {
     uint32_t w = (uint32_t)c->x[8], t = rt_fps_ticks(), r = w - t;
