@@ -37,7 +37,7 @@ Report problems as issues, following [CONTRIBUTING.md](CONTRIBUTING.md).
 - Optional pause while the game's window is out of focus (the menu's Game tab, "Keep running out of focus")
 - No-HUD mode for screenshots and videos: F12 (or the menu's Game tab) hides the gauges, map, prompts and markers
   during play and shows them again; the menus stay
-- Setup and in-game menu in English, Russian, Brazilian Portuguese and Simplified Chinese
+- In-game menu, overlay and setup installer in English, Italian, Russian, Brazilian Portuguese and Simplified Chinese
 - Keyboard, mouse and gamepad, with remapping, rumble and gyro
 - Xbox and PlayStation button prompts, each with its matching button layout (PlayStation mod from https://gamebanana.com/mods/604666)
 - Shaders prepared at install instead of during play

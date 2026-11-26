@@ -92,6 +92,12 @@ From the repository root, in PowerShell. Every step that depends on the game ver
 
    `--cpu v2` targets x86-64-v2 (SSE4.2, no AVX2/FMA) for older CPUs; the default `v3` needs AVX2. The v2 build links
    `runtime/fma.c`, a correctly rounded software fma the FP lowering needs, and runs slower.
+   `build_game.py` first regenerates the ids and template, checks the `lang\*.po` sources and compiles them into the
+   `lang\*.mo` files the runtime reads (generated locally, not committed), so adding an id and its English text in
+   `ui_text.h` and `ui_text.c` is enough for the next build. Use `--skip-ui-catalogs` only for the release builders'
+   internal calls.
+
+
 
    Lifting takes about 2 minutes on 6 workers (a Z1 Extreme; the register analysis of `recomp/ipa.py` is most of
    it, and `--no-abi-trust` lifts without it in about 20 s), a clean compile about 200 s on 24 threads; later builds

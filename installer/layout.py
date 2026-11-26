@@ -12,6 +12,8 @@ Release (docs/installer.md "Release layout"), root = the unpacked folder:
                             include/ + lib/ of Vulkan, SDL3, Opus, libvpx and VMA (build_game.py --deps)
     bin/                    ac_xlate.exe (+ ac_xlate.id), hactool.exe, ninja.exe, SDL3.dll, libopus-0.dll
     data/shader-answers.bin the shader variants players met (a shader-answers.bin recorded in play, tools/prepare_shaders.py)
+    lang/                   the compiled UI catalogs (lang/*.mo) and lang/messages.pot, copied next to astralchain.exe
+                            at prepare
     astralchain.ini.example
     VERSION                 the release version, one line
     temp/                   the default scratch folder (a successful install removes it; its run logs move to the
@@ -67,6 +69,7 @@ class Layout:
     temp: Path | None = None
     sysroot: Path | None = None       # Linux release: what the game links against, instead of the host's
     runtime_lib_v2: Path | None = None   # libacrt-v2.a: the runtime for CPUs without AVX2 (build_game.py --cpu v2)
+    lang: Path = Path('lang')            # UI catalogs; release: <root>/lang
 
     @property
     def clang(self):
@@ -104,6 +107,8 @@ class Layout:
             need.append(self.shader_answers)
         if self.sysroot:
             need.append(self.sysroot)
+        if not self.dev and not self.lang.is_dir():
+            need.append(self.lang)
         return [str(p) for p in need if not p.exists()]
 
 
@@ -134,6 +139,7 @@ def release_layout(root):
         else (root / 'bin' / 'libSDL3.so.0', root / 'bin' / 'libffx_vk_linux.so',
               root / 'bin' / 'amd_fidelityfx_loader_vk.dll', root / 'bin' / 'amd_fidelityfx_upscaler_vk.dll'),
         shader_answers=root / 'data' / 'shader-answers.bin', ini_example=root / 'astralchain.ini.example',
+        lang=root / 'lang',
         # Linux: None, the install folder's .setup-temp (installer/cli.py): the AppImage is mounted read-only, and on
         # a Steam Deck /home is often too full for the generated C while the install folder is on the SD card
         temp=root / 'temp' if WIN else None,
@@ -160,7 +166,7 @@ def dev_layout(root):
         xlate=root / 'build' / 'xlate' / ('ac_xlate' + EXE),
         dlls=tuple(sorted((deps / 'bin').glob('*.dll'))),
         shader_answers=root / 'generated' / 'shader-answers.bin', ini_example=root / 'astralchain.ini.example',
-        temp=root / 'build' / 'install-temp')
+        lang=root / 'lang', temp=root / 'build' / 'install-temp')
 
 
 def dev_commit(root):
@@ -180,7 +186,7 @@ def dev_layout_posix(root):
         ninja=Path(ninja) if ninja else root / 'toolchain' / 'ninja-missing',
         hactool=root / 'toolchain' / 'hactool' / 'hactool', xlate=root / 'build' / 'xlate' / 'ac_xlate',
         shader_answers=root / 'generated' / 'shader-answers.bin', ini_example=root / 'astralchain.ini.example',
-        temp=root / 'build' / 'install-temp')
+        lang=root / 'lang', temp=root / 'build' / 'install-temp')
 
 
 def running_appimage(layout):

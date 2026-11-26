@@ -9,11 +9,11 @@ import os
 import re
 from pathlib import Path
 
-# runtime/ov_system.c: the codes AC_LANG offers. Each language appears once, under the code the game accepts.
+# runtime/ov_system.c: the codes AC_LANG offers. `pt` is kept for old configs but canonicalized to `pt-BR`.
 LANGUAGES = ('ja', 'en-US', 'en-GB', 'fr', 'fr-CA', 'de', 'it', 'es', 'es-419', 'nl', 'pt', 'pt-BR', 'ru', 'ko',
              'zh-Hans', 'zh-Hant')
-# Older installer builds wrote these two codes; they are read as the canonical ones and rewritten on the next install.
-ALIASES = {'zh-CN': 'zh-Hans', 'zh-TW': 'zh-Hant'}
+# Older installer builds wrote these codes; they are read as the canonical ones and rewritten on the next install.
+ALIASES = {'zh-CN': 'zh-Hans', 'zh-TW': 'zh-Hant', 'pt': 'pt-BR'}
 # Their text draws with the Switch shared fonts (runtime/ov_system.c). The setup has no firmware to take them from;
 # the runtime gives the game a substitute for shared font 0 only.
 NEED_SHARED_FONTS = ('ko', 'zh-Hans', 'zh-Hant')

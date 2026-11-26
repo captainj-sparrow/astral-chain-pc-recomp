@@ -1,0 +1,2175 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: astral-chain-pc-recomp\n"
+"Language: pt-BR\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"X-Astral-Language-Name: Português (Brasil)\n"
+
+msgctxt "UI_SWKBD_TITLE"
+msgid "Text entry"
+msgstr "Inserir texto"
+
+msgctxt "UI_SWKBD_PROMPT"
+msgid "Enter a name"
+msgstr "Insira um nome"
+
+msgctxt "UI_SWKBD_DEFAULT_NAME"
+msgid "Horse"
+msgstr "Cavalo"
+
+msgctxt "UI_SWKBD_OK"
+msgid "OK"
+msgstr "OK"
+
+msgctxt "UI_SWKBD_CANCEL"
+msgid "Cancel"
+msgstr "Cancelar"
+
+msgctxt "UI_SWKBD_PAD_HINT"
+msgid "Controller: A = OK, B = Cancel"
+msgstr "Controle: A = OK, B = Cancelar"
+
+msgctxt "UI_MENU_TITLE"
+msgid "Settings"
+msgstr "Configurações"
+
+msgctxt "UI_MENU_TAB_SCREEN"
+msgid "Screen"
+msgstr "Tela"
+
+msgctxt "UI_MENU_TAB_GAME"
+msgid "Game"
+msgstr "Jogo"
+
+msgctxt "UI_MENU_TAB_MODS"
+msgid "Mods"
+msgstr "Mods"
+
+msgctxt "UI_MENU_TAB_SOUND"
+msgid "Sound"
+msgstr "Som"
+
+msgctxt "UI_MENU_TAB_CONTROLS"
+msgid "Controls"
+msgstr "Controles"
+
+msgctxt "UI_MENU_TAB_MENU"
+msgid "Menu"
+msgstr "Menu"
+
+msgctxt "UI_MENU_TAB_ADVANCED"
+msgid "Advanced"
+msgstr "Avançado"
+
+msgctxt "UI_MENU_CONTINUE"
+msgid "Continue"
+msgstr "Continuar"
+
+msgctxt "UI_MENU_QUIT"
+msgid "Quit game"
+msgstr "Sair do jogo"
+
+msgctxt "UI_MENU_ON"
+msgid "On"
+msgstr "Ligado"
+
+msgctxt "UI_MENU_OFF"
+msgid "Off"
+msgstr "Desligado"
+
+msgctxt "UI_MENU_AUTO"
+msgid "Automatic"
+msgstr "Automático"
+
+msgctxt "UI_MENU_DEFAULT_MARK"
+msgid "default"
+msgstr "padrão"
+
+msgctxt "UI_MENU_AFTER_RESTART"
+msgid "after restart"
+msgstr "após reiniciar"
+
+msgctxt "UI_MENU_SET_BY_ENV"
+msgid "set by environment variable"
+msgstr "definido por variável de ambiente"
+
+msgctxt "UI_MENU_SAVE_FAILED"
+msgid "could not save settings"
+msgstr "não foi possível salvar as configurações"
+
+msgctxt "UI_MENU_VERSION"
+msgid "Astral Chain Recomp %s, game %s"
+msgstr "Astral Chain Recomp %s, jogo %s"
+
+msgctxt "UI_MENU_FULLSCREEN"
+msgid "Fullscreen"
+msgstr "Tela cheia"
+
+msgctxt "UI_MENU_FULLSCREEN_DESC"
+msgid "Fills the screen with the game; F11 toggles it."
+msgstr "O jogo ocupa a tela inteira; F11 alterna."
+
+msgctxt "UI_MENU_WINDOW_SIZE"
+msgid "Window size"
+msgstr "Tamanho da janela"
+
+msgctxt "UI_MENU_WINDOW_SIZE_DESC"
+msgid "Size of the game window when not fullscreen."
+msgstr "Tamanho da janela do jogo fora da tela cheia."
+
+msgctxt "UI_MENU_WINDOW_SIZE_CUSTOM"
+msgid "Custom"
+msgstr "Personalizado"
+
+msgctxt "UI_MENU_PRESENT"
+msgid "Presentation"
+msgstr "Apresentação"
+
+msgctxt "UI_MENU_PRESENT_DESC"
+msgid "How finished frames reach the screen."
+msgstr "Como os quadros prontos chegam à tela."
+
+msgctxt "UI_MENU_PRESENT_MAILBOX"
+msgid "Mailbox"
+msgstr "Mailbox"
+
+msgctxt "UI_MENU_PRESENT_VSYNC"
+msgid "VSync"
+msgstr "VSync"
+
+msgctxt "UI_MENU_PRESENT_IMMEDIATE"
+msgid "Immediate"
+msgstr "Imediato"
+
+msgctxt "UI_MENU_PRESENT_IN_USE"
+msgid "in use: %s"
+msgstr "em uso: %s"
+
+msgctxt "UI_MENU_LOW_LATENCY"
+msgid "Low latency"
+msgstr "Baixa latência"
+
+msgctxt "UI_MENU_LOW_LATENCY_DESC"
+msgid "Starts each frame as late as it can still be shown on time, so the picture answers the controls sooner. Uses NVIDIA Reflex or AMD Anti-Lag 2 when the driver offers them, the port's own timing otherwise. Boost: with Reflex the GPU also keeps its clocks up; otherwise shorter waits, with a dropped frame now and then."
+msgstr "Começa cada quadro o mais tarde possível ainda a tempo de ser exibido, para a imagem responder antes aos controles. Usa NVIDIA Reflex ou AMD Anti-Lag 2 quando o driver os oferece; senão, o controle de tempo do próprio port. Turbo: com Reflex a GPU também mantém o clock alto; nos outros casos, esperas mais curtas, com um quadro perdido de vez em quando."
+
+msgctxt "UI_MENU_LOW_LATENCY_OFF"
+msgid "Off"
+msgstr "Desligado"
+
+msgctxt "UI_MENU_LOW_LATENCY_ON"
+msgid "On"
+msgstr "Ligado"
+
+msgctxt "UI_MENU_LOW_LATENCY_BOOST"
+msgid "Boost"
+msgstr "Turbo"
+
+msgctxt "UI_MENU_LOW_LATENCY_BUILTIN"
+msgid "built-in timing"
+msgstr "controle integrado"
+
+msgctxt "UI_MENU_GPU"
+msgid "Graphics card"
+msgstr "Placa de vídeo"
+
+msgctxt "UI_MENU_GPU_DESC"
+msgid "The Vulkan device that draws the game."
+msgstr "O dispositivo Vulkan que desenha o jogo."
+
+msgctxt "UI_MENU_GPU_AUTO"
+msgid "Automatic"
+msgstr "Automática"
+
+msgctxt "UI_MENU_PERF_OVERLAY"
+msgid "Performance overlay"
+msgstr "Indicador de desempenho"
+
+msgctxt "UI_MENU_PERF_OVERLAY_DESC"
+msgid "Frame rate in the top right corner. Full adds frame times with a graph, CPU, GPU and memory load, temperatures and the render thread's waits. F10 cycles the modes."
+msgstr "Taxa de quadros no canto superior direito. Completo adiciona os tempos de quadro com gráfico, o uso de CPU, GPU e memória, as temperaturas e as esperas da thread de renderização. F10 alterna os modos."
+
+msgctxt "UI_MENU_PERF_OFF"
+msgid "Off"
+msgstr "Desligado"
+
+msgctxt "UI_MENU_PERF_FPS"
+msgid "FPS"
+msgstr "FPS"
+
+msgctxt "UI_MENU_PERF_FULL"
+msgid "Full"
+msgstr "Completo"
+
+msgctxt "UI_PERF_LINE_FPS"
+msgid "%.0f fps"
+msgstr "%.0f fps"
+
+msgctxt "UI_MENU_GRAPHICS"
+msgid "Picture"
+msgstr "Imagem"
+
+msgctxt "UI_MENU_OUTPUT_RES"
+msgid "Game resolution"
+msgstr "Resolução do jogo"
+
+msgctxt "UI_MENU_OUTPUT_RES_DESC"
+msgid "The size the game draws its picture and interface in. 1280 x 720 is the lightest, for weaker GPUs. Above 1920 x 1080 the game needs more memory (about 240 MB more at 2560 x 1440, 790 MB at 3840 x 2160) and GPU time. Takes effect after a restart. Automatic takes the screen's size: up to 1920 x 1080, and up to 3840 x 2160 while an upscaler runs."
+msgstr "O tamanho em que o jogo desenha a imagem e a interface. 1280 × 720 é o mais leve, para GPUs mais fracas. Acima de 1920 × 1080 o jogo precisa de mais memória (cerca de 240 MB a mais em 2560 × 1440, 790 MB em 3840 × 2160) e tempo de GPU. Vale após reiniciar. Automático usa o tamanho da tela: até 1920 × 1080 e, com um upscaler, até 3840 × 2160."
+
+msgctxt "UI_MENU_UPSCALER"
+msgid "Scaling to the window"
+msgstr "Escala para a janela"
+
+msgctxt "UI_MENU_UPSCALER_DESC"
+msgid "How the picture is scaled to the window. FSR keeps edges and detail sharper than bilinear, and sharpens the picture even when it already fits the window."
+msgstr "Como a imagem é ajustada à janela. O FSR mantém bordas e detalhes mais nítidos que o bilinear e aumenta a nitidez mesmo quando a imagem já tem o tamanho da janela."
+
+msgctxt "UI_MENU_UPSCALER_FSR"
+msgid "AMD FSR 1"
+msgstr "AMD FSR 1"
+
+msgctxt "UI_MENU_UPSCALER_BILINEAR"
+msgid "Bilinear"
+msgstr "Bilinear"
+
+msgctxt "UI_MENU_FOV"
+msgid "Field of view"
+msgstr "Campo de visão"
+
+msgctxt "UI_MENU_FOV_DESC"
+msgid "How much of the world the camera shows, in percent of the game's own (50 degrees vertically in play). Cutscenes keep the game's own framing."
+msgstr "Quanto do mundo a câmera mostra, em porcentagem do original do jogo (50 graus na vertical durante o jogo). As cenas mantêm o enquadramento original."
+
+msgctxt "UI_MENU_DRAW_DISTANCE"
+msgid "Draw distance"
+msgstr "Distância de renderização"
+
+msgctxt "UI_MENU_DRAW_DISTANCE_DESC"
+msgid "How far away objects keep their detailed model and small objects stay visible, in percent of the game's own. Higher shows less pop-in and draws more. Takes effect on what the game loads after the change, at the next loading screen."
+msgstr "Até que distância os objetos mantêm o modelo detalhado e os objetos pequenos continuam visíveis, em porcentagem do original do jogo. Valores maiores reduzem o surgimento repentino de objetos e desenham mais. Vale para o que o jogo carregar depois da mudança, a partir da próxima tela de carregamento."
+
+msgctxt "UI_MENU_ANISO"
+msgid "Texture filtering"
+msgstr "Filtragem de texturas"
+
+msgctxt "UI_MENU_ANISO_DESC"
+msgid "Anisotropic filtering of surface textures: ground, roads and walls seen at a shallow angle stay sharp into the distance instead of blurring. Game: the level the game asks for, as on the Switch. Auto: 16x with 3D render scale 1440p, twice the game's level at 2160p, the game's level otherwise."
+msgstr "Filtragem anisotrópica das texturas de superfície: chão, estradas e paredes vistos em ângulo raso continuam nítidos ao longe em vez de borrar. Jogo: o nível que o jogo pede, como no Switch. Auto: 16x com escala de renderização 3D 1440p, o dobro do nível do jogo em 2160p, o nível do jogo nos demais casos."
+
+msgctxt "UI_MENU_ANISO_GAME"
+msgid "Game"
+msgstr "Jogo"
+
+msgctxt "UI_MENU_ANISO_AUTO"
+msgid "Auto"
+msgstr "Auto"
+
+msgctxt "UI_MENU_SHARPNESS"
+msgid "FSR sharpness"
+msgstr "Nitidez do FSR"
+
+msgctxt "UI_MENU_SHARPNESS_DESC"
+msgid "Sharpening after FSR scaling; 0 turns it off."
+msgstr "Aumento de nitidez após a ampliação do FSR; 0 desliga."
+
+msgctxt "UI_MENU_COLOR"
+msgid "Colour"
+msgstr "Cor"
+
+msgctxt "UI_MENU_COLOR_PRESET"
+msgid "Colour profile"
+msgstr "Perfil de cor"
+
+msgctxt "UI_MENU_COLOR_PRESET_DESC"
+msgid "Sets the four values below. Vivid: more contrast and saturation, shadows opened a little (made for OLED screens). Clarity: a little more contrast, saturation and brightness. Moving a value makes the profile Custom. The HUD changes with the picture; this menu does not."
+msgstr "Define os quatro valores abaixo. Vívido: mais contraste e saturação, sombras um pouco mais abertas (feito para telas OLED). Clareza: um pouco mais de contraste, saturação e brilho. Mexer em um valor torna o perfil Personalizado. O HUD muda com a imagem; este menu não."
+
+msgctxt "UI_MENU_COLOR_DEFAULT"
+msgid "Game's own"
+msgstr "Do jogo"
+
+msgctxt "UI_MENU_COLOR_VIVID"
+msgid "Vivid (OLED)"
+msgstr "Vívido (OLED)"
+
+msgctxt "UI_MENU_COLOR_CLARITY"
+msgid "Clarity"
+msgstr "Clareza"
+
+msgctxt "UI_MENU_COLOR_CUSTOM"
+msgid "Custom"
+msgstr "Personalizado"
+
+msgctxt "UI_MENU_COLOR_BRIGHTNESS"
+msgid "Brightness"
+msgstr "Brilho"
+
+msgctxt "UI_MENU_COLOR_BRIGHTNESS_DESC"
+msgid "Added to every colour; 0 leaves it."
+msgstr "Somado a todas as cores; 0 não muda nada."
+
+msgctxt "UI_MENU_COLOR_CONTRAST"
+msgid "Contrast"
+msgstr "Contraste"
+
+msgctxt "UI_MENU_COLOR_CONTRAST_DESC"
+msgid "Spreads colours away from mid-grey (above 100 %) or towards it; 100 % leaves them."
+msgstr "Afasta as cores do cinza médio (acima de 100 %) ou as aproxima dele; 100 % não muda nada."
+
+msgctxt "UI_MENU_COLOR_SATURATION"
+msgid "Saturation"
+msgstr "Saturação"
+
+msgctxt "UI_MENU_COLOR_SATURATION_DESC"
+msgid "Colour strength against grey; 100 % leaves it."
+msgstr "Força da cor em relação ao cinza; 100 % não muda nada."
+
+msgctxt "UI_MENU_COLOR_GAMMA"
+msgid "Gamma"
+msgstr "Gama"
+
+msgctxt "UI_MENU_COLOR_GAMMA_DESC"
+msgid "Below 1 brightens dark and middle tones, above 1 darkens them; 1 leaves them."
+msgstr "Abaixo de 1 clareia os tons escuros e médios, acima de 1 os escurece; 1 não muda nada."
+
+msgctxt "UI_MENU_HDR_GROUP"
+msgid "HDR"
+msgstr "HDR"
+
+msgctxt "UI_MENU_HDR"
+msgid "HDR output"
+msgstr "Saída HDR"
+
+msgctxt "UI_MENU_HDR_DESC"
+msgid "Bright highlights on an HDR display. Needs HDR turned on in Windows (\"Use HDR\") or in a Wayland compositor with colour management; without it the picture stays SDR. Applies after a restart. The colour profile above is for SDR and is not used in HDR."
+msgstr "Realces brilhantes em uma tela HDR. Precisa do HDR ligado no Windows (\"Usar HDR\") ou num compositor Wayland com gerenciamento de cor; sem isso a imagem continua SDR. Vale após reiniciar. O perfil de cor acima é para SDR e não é usado em HDR."
+
+msgctxt "UI_MENU_HDR_PEAK"
+msgid "Peak brightness"
+msgstr "Brilho máximo"
+
+msgctxt "UI_MENU_HDR_PEAK_DESC"
+msgid "Your display's peak in nits; the brightest highlights stop there."
+msgstr "O pico da sua tela em nits; os realces mais claros param aí."
+
+msgctxt "UI_MENU_HDR_GAME"
+msgid "Game brightness"
+msgstr "Brilho do jogo"
+
+msgctxt "UI_MENU_HDR_GAME_DESC"
+msgid "Nits of the picture's white (paper white). 203 is the HDR reference; raise it in a bright room."
+msgstr "Nits do branco da imagem (branco de papel). 203 é a referência de HDR; aumente num ambiente claro."
+
+msgctxt "UI_MENU_HDR_UI"
+msgid "HUD and menu brightness"
+msgstr "Brilho do HUD e do menu"
+
+msgctxt "UI_MENU_HDR_UI_DESC"
+msgid "Nits of the HUD's and this menu's white."
+msgstr "Nits do branco do HUD e deste menu."
+
+msgctxt "UI_MENU_HDR_HUE"
+msgid "Highlight hue correction"
+msgstr "Correção de matiz dos realces"
+
+msgctxt "UI_MENU_HDR_HUE_DESC"
+msgid "Bright colours such as fire and sparks turn towards white as in the game's own SDR picture, matching the light they cast; 0 keeps them fully saturated."
+msgstr "Cores intensas, como fogo e faíscas, tendem ao branco como na imagem SDR do próprio jogo, combinando com a luz que emitem; 0 as mantém totalmente saturadas."
+
+msgctxt "UI_MENU_SHADOW_SCALE"
+msgid "Shadow resolution"
+msgstr "Resolução das sombras"
+
+msgctxt "UI_MENU_SHADOW_SCALE_DESC"
+msgid "Draws the sun's shadow map this many times larger on each side than the game's 2048x2048: sharper shadow edges and leaf shadows, for more video memory (about 85 to 130 MiB at 2x, 340 to 520 MiB at 4x). Takes effect at the next start."
+msgstr "Desenha o mapa de sombras do sol essa quantidade de vezes maior em cada lado que os 2048x2048 do jogo: bordas de sombra e sombras de folhas mais nítidas, com mais memória de vídeo (85 a 130 MiB em 2x, 340 a 520 MiB em 4x). Vale no próximo início."
+
+msgctxt "UI_MENU_AO"
+msgid "Ambient occlusion"
+msgstr "Oclusão de ambiente"
+
+msgctxt "UI_MENU_AO_DESC"
+msgid "Darkens creases, corners and the ground under characters and objects, where little of the surrounding light reaches. High + bounce light also adds the light the surfaces on screen send back to each other: a lit wall or floor brightens and tints what faces it, even from far away. Computed on the screen after the world is lit; the game has none of its own. Each level costs more GPU time than the one before; High + bounce light is demanding, so on a weak graphics card prefer High. Takes effect at once."
+msgstr "Escurece dobras, cantos e o chão sob personagens e objetos, onde chega pouca luz ao redor. Alta + luz indireta também adiciona a luz que as superfícies na tela refletem umas nas outras: uma parede ou um chão iluminado clareia e tinge o que está à sua frente, mesmo de longe. Calculada na tela depois da iluminação; o jogo não tem a sua. Cada nível custa mais tempo de GPU que o anterior; Alta + luz indireta é pesada, então em uma placa de vídeo fraca prefira Alta. Vale na hora."
+
+msgctxt "UI_MENU_AO_OFF"
+msgid "Off"
+msgstr "Desligada"
+
+msgctxt "UI_MENU_AO_LOW"
+msgid "Low"
+msgstr "Baixa"
+
+msgctxt "UI_MENU_AO_HIGH"
+msgid "High"
+msgstr "Alta"
+
+msgctxt "UI_MENU_AO_GI"
+msgid "High + bounce light (demanding)"
+msgstr "Alta + luz indireta (pesada)"
+
+msgctxt "UI_MENU_UPSCALING"
+msgid "Upscaler"
+msgstr "Upscaler"
+
+msgctxt "UI_MENU_UPSCALING_DESC"
+msgid "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less shimmer, and with a mode below Native more frames per second. NVIDIA DLSS needs an NVIDIA RTX GPU and nvngx_dlss.dll next to astralchain.exe, Intel XeSS a recent GPU and libxess.dll next to astralchain.exe; AMD FSR 3 runs on any GPU, AMD FSR 4 on a Radeon RX 6000 or newer. Automatic takes DLSS where it can run and FSR 3 elsewhere. DLSS, XeSS and FSR 4 chosen here take effect after a restart. The HUD is not touched."
+msgstr "Um upscaler temporal no lugar do antisserrilhado do jogo: bordas mais suaves e menos cintilação e, com um modo abaixo de Nativo, mais quadros por segundo. NVIDIA DLSS precisa de uma placa NVIDIA RTX e do nvngx_dlss.dll ao lado do astralchain.exe, Intel XeSS de uma placa recente e do libxess.dll ao lado do astralchain.exe; AMD FSR 3 roda em qualquer placa, AMD FSR 4 em uma Radeon RX 6000 ou mais recente. Automático usa o DLSS onde ele pode rodar e o FSR 3 nos outros casos. DLSS, XeSS e FSR 4 escolhidos aqui valem após reiniciar. O HUD não é afetado."
+
+msgctxt "UI_MENU_UPSCALING_DESC_OTHER"
+msgid "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less shimmer, and with a mode below Native more frames per second. AMD FSR 3 runs on any GPU, AMD FSR 4 on a Radeon RX 6000 or newer; Automatic is FSR 3 here (NVIDIA DLSS and Intel XeSS are Windows only). FSR 4 chosen here takes effect after a restart. The HUD is not touched."
+msgstr "Um upscaler temporal no lugar do antisserrilhado do jogo: bordas mais suaves e menos cintilação e, com um modo abaixo de Nativo, mais quadros por segundo. AMD FSR 3 roda em qualquer placa, AMD FSR 4 em uma Radeon RX 6000 ou mais recente; Automático é o FSR 3 aqui (NVIDIA DLSS e Intel XeSS são somente no Windows). FSR 4 escolhido aqui vale após reiniciar. O HUD não é afetado."
+
+msgctxt "UI_MENU_UPSCALING_OFF"
+msgid "Off"
+msgstr "Desligado"
+
+msgctxt "UI_MENU_UPSCALING_AUTO"
+msgid "Automatic"
+msgstr "Automático"
+
+msgctxt "UI_MENU_UPSCALING_UNAVAILABLE"
+msgid "not available here"
+msgstr "indisponível aqui"
+
+msgctxt "UI_MENU_UPSCALING_INSTEAD"
+msgid "not available here: %s in use"
+msgstr "indisponível aqui: %s em uso"
+
+msgctxt "UI_MENU_UPSCALING_MISSING"
+msgid "%s is missing: %s in use"
+msgstr "%s não encontrado: %s em uso"
+
+msgctxt "UI_MENU_UPSCALING_UNTIL"
+msgid "%s until a restart"
+msgstr "%s até reiniciar"
+
+msgctxt "UI_MENU_UPSCALING_QUALITY"
+msgid "Upscaler mode"
+msgstr "Modo do upscaler"
+
+msgctxt "UI_MENU_UPSCALING_QUALITY_DESC"
+msgid "The size the 3D scene is drawn at before the upscaler brings it to the game resolution (shown under the value). Native draws it at full size, the sharpest (DLAA under DLSS). Quality, Balanced, Performance and Ultra performance draw it at about 67, 58, 50 and 33 % for more frames per second; Ultra performance is meant for 3840 x 2160. Takes effect after a restart."
+msgstr "O tamanho em que a cena 3D é desenhada antes que o upscaler a leve à resolução do jogo (mostrado sob o valor). Nativo a desenha no tamanho cheio, o mais nítido (DLAA no DLSS). Qualidade, Equilibrado, Desempenho e Ultradesempenho a desenham em cerca de 67, 58, 50 e 33 % para mais quadros por segundo; Ultradesempenho é pensado para 3840 × 2160. Vale após reiniciar."
+
+msgctxt "UI_MENU_UPSCALING_NATIVE"
+msgid "Native"
+msgstr "Nativo"
+
+msgctxt "UI_MENU_DLSS_QUALITY"
+msgid "Quality"
+msgstr "Qualidade"
+
+msgctxt "UI_MENU_DLSS_BALANCED"
+msgid "Balanced"
+msgstr "Equilibrado"
+
+msgctxt "UI_MENU_DLSS_PERFORMANCE"
+msgid "Performance"
+msgstr "Desempenho"
+
+msgctxt "UI_MENU_UPSCALING_ULTRA"
+msgid "Ultra performance"
+msgstr "Ultradesempenho"
+
+msgctxt "UI_MENU_UPSCALING_MODE_OFF"
+msgid "no upscaler"
+msgstr "sem upscaler"
+
+msgctxt "UI_MENU_AA"
+msgid "Game anti-aliasing"
+msgstr "Antisserrilhado do jogo"
+
+msgctxt "UI_MENU_AA_DESC"
+msgid "The game's own anti-aliasing, SMAA, for when no upscaler runs. Off leaves the edges jagged."
+msgstr "O antisserrilhado do próprio jogo, SMAA, para quando nenhum upscaler roda. Desligado deixa as bordas serrilhadas."
+
+msgctxt "UI_MENU_AA_OFF"
+msgid "Off"
+msgstr "Desligado"
+
+msgctxt "UI_MENU_AA_BY_UPSCALER"
+msgid "the upscaler smooths the edges"
+msgstr "o upscaler suaviza as bordas"
+
+msgctxt "UI_MENU_OUTPUT_RES_AUTO"
+msgid "Automatic"
+msgstr "Automático"
+
+msgctxt "UI_MENU_OUTPUT_RES_NEXT"
+msgid ", %s after restart"
+msgstr ", %s após reiniciar"
+
+msgctxt "UI_MENU_FPS_LIMIT"
+msgid "Frame rate"
+msgstr "Taxa de quadros"
+
+msgctxt "UI_MENU_FPS_LIMIT_DESC"
+msgid "60 FPS runs the game's 60 fps patch; 30 FPS switches it off. Read live."
+msgstr "60 FPS usa o patch de 60 fps do jogo; 30 FPS o desliga. Lido na hora."
+
+msgctxt "UI_MENU_FPS_30"
+msgid "30 FPS"
+msgstr "30 FPS"
+
+msgctxt "UI_MENU_FPS_60"
+msgid "60 FPS"
+msgstr "60 FPS"
+
+msgctxt "UI_MENU_REALTIME"
+msgid "Game speed follows the clock"
+msgstr "Velocidade do jogo pelo relógio"
+
+msgctxt "UI_MENU_REALTIME_DESC"
+msgid "Steps the game by real time, so a slow frame does not slow the game down."
+msgstr "Avança o jogo pelo tempo real, para que um quadro lento não deixe o jogo mais lento."
+
+msgctxt "UI_MENU_CLOTH_REALTIME"
+msgid "Cloth on the clock"
+msgstr "Tecidos pelo relógio"
+
+msgctxt "UI_MENU_CLOTH_REALTIME_DESC"
+msgid "Steps cloth and hair by real time as well."
+msgstr "Avança tecidos e cabelos pelo tempo real também."
+
+msgctxt "UI_MENU_HIGHFPS_FIX"
+msgid "High frame rate fixes"
+msgstr "Correções para alta taxa de quadros"
+
+msgctxt "UI_MENU_HIGHFPS_FIX_DESC"
+msgid "Corrects physics that misbehave above 30 frames per second, and objects that stay see-through or invisible above 60."
+msgstr "Corrige a física que se comporta mal acima de 30 quadros por segundo e objetos que ficam transparentes ou invisíveis acima de 60."
+
+msgctxt "UI_MENU_GAME_LANG"
+msgid "Game language"
+msgstr "Idioma do jogo"
+
+msgctxt "UI_MENU_GAME_LANG_DESC"
+msgid "Language of the game's text and voices."
+msgstr "Idioma dos textos e das vozes do jogo."
+
+msgctxt "UI_MENU_GAME_LANG_AUTO"
+msgid "Automatic"
+msgstr "Automático"
+
+msgctxt "UI_MENU_OPERATION_MODE"
+msgid "Console mode"
+msgstr "Modo do console"
+
+msgctxt "UI_MENU_OPERATION_MODE_DESC"
+msgid "Whether the game thinks it runs docked or handheld."
+msgstr "Se o jogo acha que está no modo TV ou no modo portátil."
+
+msgctxt "UI_MENU_MODE_DOCKED"
+msgid "Docked"
+msgstr "Modo TV"
+
+msgctxt "UI_MENU_MODE_HANDHELD"
+msgid "Handheld"
+msgstr "Modo portátil"
+
+msgctxt "UI_MENU_ASSUME_FOCUS"
+msgid "Keep running out of focus"
+msgstr "Continuar rodando fora de foco"
+
+msgctxt "UI_MENU_ASSUME_FOCUS_DESC"
+msgid "On (the default), the game keeps running while you are in another window, and the keyboard stays quiet until the window is in front again. Off, the whole game, sound included, pauses while its window is out of focus, as on the Switch when Home is pressed."
+msgstr "Ligado (o padrão), o jogo continua rodando enquanto você está em outra janela, e o teclado fica sem efeito até a janela voltar para a frente. Desligado, o jogo inteiro, inclusive o som, fica pausado enquanto a janela está sem foco, como no Switch ao apertar Home."
+
+msgctxt "UI_MENU_HUD"
+msgid "HUD"
+msgstr "HUD"
+
+msgctxt "UI_MENU_HUD_DESC"
+msgid "Off, the game's HUD is not drawn during play; the menus stay. F12 toggles it."
+msgstr "Desligado, o HUD do jogo não é desenhado durante a partida; os menus continuam. F12 alterna."
+
+msgctxt "UI_MENU_MODS_INSTALLED"
+msgid "Installed mods"
+msgstr "Mods instalados"
+
+msgctxt "UI_MENU_MODS_NONE"
+msgid "No mods yet. Unpack a mod into the mods folder, one folder per mod with its romfs folder inside, and restart the game. TKMM can export its merged mods into a folder there too."
+msgstr "Nenhum mod ainda. Descompacte um mod na pasta mods, uma pasta por mod com a pasta romfs dentro, e reinicie o jogo. O TKMM também pode exportar os mods mesclados para uma pasta ali."
+
+msgctxt "UI_MENU_MODS_OPEN"
+msgid "Open mods folder"
+msgstr "Abrir pasta de mods"
+
+msgctxt "UI_MENU_MODS_OPEN_DESC"
+msgid "Shows the folder the game loads mods from. It is created if it is missing."
+msgstr "Mostra a pasta de onde o jogo carrega os mods. Ela é criada se não existir."
+
+msgctxt "UI_MENU_DLC_GROUP"
+msgid "Downloadable content"
+msgstr "Conteúdo adicional"
+
+msgctxt "UI_MENU_DLC"
+msgid "Load DLC"
+msgstr "Carregar DLC"
+
+msgctxt "UI_MENU_DLC_DESC"
+msgid "Loads the DLCs of the dlc folder next to astralchain.exe: trainings, texts and tutorial windows written by players as XML. They are built into the game's archives from your own game files at start and kept in your profile. Off: the game runs exactly as it is."
+msgstr "Carrega os DLCs da pasta dlc ao lado do astralchain.exe: treinos, textos e janelas de tutorial escritos por jogadores em XML. Eles são montados nos arquivos do jogo a partir dos seus próprios arquivos do jogo ao iniciar e guardados no seu perfil. Desligado: o jogo funciona exatamente como é."
+
+msgctxt "UI_MENU_DLC_LOADED"
+msgid "Loaded at this start: %s."
+msgstr "Carregados neste início: %s."
+
+msgctxt "UI_MENU_DLC_NONE"
+msgid "No DLC was found in the dlc folder at this start."
+msgstr "Nenhum DLC foi encontrado na pasta dlc neste início."
+
+msgctxt "UI_MENU_DLC_OPEN"
+msgid "Open DLC folder"
+msgstr "Abrir pasta de DLC"
+
+msgctxt "UI_MENU_DLC_OPEN_DESC"
+msgid "Shows the folder the game loads DLCs from, one folder per DLC with its dlc.xml. It is created if it is missing."
+msgstr "Mostra a pasta de onde o jogo carrega os DLCs, uma pasta por DLC com o seu dlc.xml. Ela é criada se não existir."
+
+msgctxt "UI_MENU_MODS_ROW_DESC"
+msgid "Game files it replaces: %u. New files it adds: %u."
+msgstr "Arquivos do jogo que substitui: %u. Arquivos novos que adiciona: %u."
+
+msgctxt "UI_MENU_MODS_OVERRIDDEN"
+msgid "%u of its files come from %s, which is higher in the list."
+msgstr "%u dos seus arquivos vêm de %s, que está acima na lista."
+
+msgctxt "UI_MENU_MODS_MOVE_HINT"
+msgid "The top face button or Ctrl+Up moves it up, the left face button or Ctrl+Down moves it down. When two mods change the same file, the higher one wins. Changes apply after a restart."
+msgstr "O botão de cima ou Ctrl+Cima sobe o mod, o botão da esquerda ou Ctrl+Baixo desce. Quando dois mods mudam o mesmo arquivo, vale o de cima. As mudanças valem após reiniciar."
+
+msgctxt "UI_MENU_MODS_EMPTY"
+msgid "This folder has no romfs, exefs or cheats files."
+msgstr "Esta pasta não tem arquivos romfs, exefs ou cheats."
+
+msgctxt "UI_MENU_MODS_SUBSDK"
+msgid "This mod brings its own game code (a subsdk plugin or a replaced main). The port cannot load code modules, so the whole mod stays off."
+msgstr "Este mod traz código próprio do jogo (um plugin subsdk ou um main substituído). O port não carrega módulos de código, então o mod inteiro fica desligado."
+
+msgctxt "UI_MENU_MODS_EXEFS_LATER"
+msgid "This mod patches the game code (exefs). The game builds the patches in when it starts next (a rebuild of a few minutes); until then the whole mod stays off."
+msgstr "Este mod altera o código do jogo (exefs). O jogo compila esses patches na próxima vez que iniciar (uma recompilação de alguns minutos); até lá o mod inteiro fica desligado."
+
+msgctxt "UI_MENU_MODS_BAD_NAME"
+msgid "The folder name contains |, which the mod list uses between names. Rename the folder."
+msgstr "O nome da pasta contém |, que a lista de mods usa entre os nomes. Renomeie a pasta."
+
+msgctxt "UI_MENU_MODS_EXEFS_UNSUPPORTED"
+msgid "This mod patches the game code (exefs) in a way the port cannot apply, so the whole mod stays off. %s"
+msgstr "Este mod altera o código do jogo (exefs) de um jeito que o port não consegue aplicar, então o mod inteiro fica desligado. %s"
+
+msgctxt "UI_MENU_MODS_EXEFS_OTHER"
+msgid "Its code patches (exefs) are made for another game version."
+msgstr "Os patches de código dele (exefs) são para outra versão do jogo."
+
+msgctxt "UI_MENU_MODS_EXEFS_ON"
+msgid "Code patches in use: %d files."
+msgstr "Patches de código em uso: %d arquivos."
+
+msgctxt "UI_MENU_MODS_REPLACES_BUILTIN"
+msgid "Code patches in use: %d files. They replace the port's own patch %s, which stays off while this mod is on."
+msgstr "Patches de código em uso: %d arquivos. Eles substituem o patch do próprio port %s, que fica desligado enquanto este mod está ligado."
+
+msgctxt "UI_MENU_MODS_OTHER_VERSION"
+msgid "%u of its files are made for another game version and are left out. Look for a version of this mod made for your game version."
+msgstr "%u dos seus arquivos são de outra versão do jogo e ficam de fora. Procure uma versão deste mod feita para a sua versão do jogo."
+
+msgctxt "UI_MENU_MODS_UNUSED"
+msgid "not used"
+msgstr "não usado"
+
+msgctxt "UI_MENU_MODS_CHEATS"
+msgid "Cheats: %d."
+msgstr "Cheats: %d."
+
+msgctxt "UI_MENU_MODS_CHEATS_FILE"
+msgid "Cheats for this game version are read at start from cheats\\%s in this mod."
+msgstr "Os cheats desta versão do jogo são lidos ao iniciar de cheats\\%s neste mod."
+
+msgctxt "UI_MENU_VOLUME"
+msgid "Volume"
+msgstr "Volume"
+
+msgctxt "UI_MENU_VOLUME_DESC"
+msgid "Master volume of the game."
+msgstr "Volume geral do jogo."
+
+msgctxt "UI_MENU_AUDIO_OUTPUT"
+msgid "Audio output"
+msgstr "Saída de áudio"
+
+msgctxt "UI_MENU_AUDIO_OUTPUT_DESC"
+msgid "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output. Elsewhere the 5.1 mix is folded down to stereo. Automatic picks 5.1 when the output takes it at start, stereo otherwise."
+msgstr "O que o jogo mixa. Em 5.1 o canal central (as vozes) e os surrounds têm canais próprios; requer uma saída 5.1 ou 7.1. Caso contrário, a mixagem 5.1 é convertida para estéreo. Automático escolhe 5.1 quando a saída o aceita ao iniciar, e estéreo caso contrário."
+
+msgctxt "UI_MENU_AUDIO_OUTPUT_DESC_WIN"
+msgid "What the game mixes. In 5.1 the centre (the voices) and the surrounds get channels of their own; it needs a 5.1 or 7.1 output, or a headset with spatial sound on: Windows Sonic for Headphones, Dolby Atmos for Headphones or DTS Headphone:X, in the device's properties in the Windows sound settings. Elsewhere the 5.1 mix is folded down to stereo. Automatic picks 5.1 when the output takes it at start, stereo otherwise."
+msgstr "O que o jogo mixa. Em 5.1 o canal central (as vozes) e os surrounds têm canais próprios; requer uma saída 5.1 ou 7.1, ou um headset com som espacial ativado: Windows Sonic for Headphones, Dolby Atmos for Headphones ou DTS Headphone:X, nas propriedades do dispositivo nas configurações de som do Windows. Caso contrário, a mixagem 5.1 é convertida para estéreo. Automático escolhe 5.1 quando a saída o aceita ao iniciar, e estéreo caso contrário."
+
+msgctxt "UI_MENU_AUDIO_AUTO"
+msgid "Automatic"
+msgstr "Automático"
+
+msgctxt "UI_MENU_AUDIO_STEREO"
+msgid "Stereo"
+msgstr "Estéreo"
+
+msgctxt "UI_MENU_AUDIO_51"
+msgid "5.1"
+msgstr "5.1"
+
+msgctxt "UI_MENU_AUDIO_TAKES_51_SPATIAL"
+msgid "%s: Windows spatial sound is on and turns 5.1 into surround on headphones."
+msgstr "%s: o som espacial do Windows está ativado e transforma o 5.1 em surround nos fones."
+
+msgctxt "UI_MENU_AUDIO_TAKES_51"
+msgid "%s: %d channels, 5.1 goes out as it is."
+msgstr "%s: %d canais, o 5.1 sai como está."
+
+msgctxt "UI_MENU_AUDIO_FOLDS_51"
+msgid "%s: %d channels, no 5.1: a 5.1 mix is folded down to stereo."
+msgstr "%s: %d canais, sem 5.1: a mixagem 5.1 é convertida para estéreo."
+
+msgctxt "UI_MENU_AUDIO_SONIC_HINT"
+msgid "With headphones, turn on Windows Sonic for Headphones (or Dolby Atmos, DTS Headphone:X) in the device's properties."
+msgstr "Com fones, ative o Windows Sonic for Headphones (ou Dolby Atmos, DTS Headphone:X) nas propriedades do dispositivo."
+
+msgctxt "UI_MENU_AUDIO_SENDING"
+msgid "The game sends %d channels."
+msgstr "O jogo envia %d canais."
+
+msgctxt "UI_MENU_AUDIO_NO_DEVICE"
+msgid "No audio output found."
+msgstr "Nenhuma saída de áudio encontrada."
+
+msgctxt "UI_MENU_AUDIO_MIX_HINT"
+msgid "Choose 5.1 above and restart the game to set each speaker."
+msgstr "Escolha 5.1 acima e reinicie o jogo para ajustar cada caixa."
+
+msgctxt "UI_MENU_AUDIO_GROUP_OUTPUT"
+msgid "Speakers and headphones"
+msgstr "Caixas de som e fones"
+
+msgctxt "UI_MENU_AUDIO_GROUP_MIX"
+msgid "Speaker mix"
+msgstr "Mixagem das caixas"
+
+msgctxt "UI_MENU_AUDIO_RESTART_DESC"
+msgid "Closes the game and starts it again with the new audio output. Progress since your last save is lost."
+msgstr "Fecha o jogo e o abre de novo com a nova saída de áudio. O progresso desde o último salvamento é perdido."
+
+msgctxt "UI_MENU_AUDIO_TEST"
+msgid "Test speakers"
+msgstr "Testar caixas"
+
+msgctxt "UI_MENU_AUDIO_TEST_DESC"
+msgid "Plays a noise on each speaker in turn, as an A/V receiver does: check that every speaker works and sits where the diagram shows it. The game's sound is muted meanwhile. Press again to stop."
+msgstr "Toca um ruído em cada caixa por vez, como um receiver A/V: confira se cada caixa funciona e está onde o diagrama mostra. O som do jogo fica mudo enquanto isso. Pressione de novo para parar."
+
+msgctxt "UI_MENU_AUDIO_TEST_START"
+msgid "Start"
+msgstr "Iniciar"
+
+msgctxt "UI_MENU_AUDIO_TEST_STOP"
+msgid "press to stop"
+msgstr "pressione para parar"
+
+msgctxt "UI_MENU_AUDIO_PRESET"
+msgid "Mix"
+msgstr "Mixagem"
+
+msgctxt "UI_MENU_AUDIO_PRESET_DESC"
+msgid "Ready-made mixes. Balanced: the recommended mix. Clear voices: the dialogue in front, softer surrounds. Immersive: stronger surrounds, and the bass to the subwoofer. Moving any speaker below makes it Custom."
+msgstr "Mixagens prontas. Equilibrada: a recomendada. Vozes claras: diálogos à frente, surrounds mais suaves. Imersiva: surrounds mais fortes e graves no subwoofer. Mexer em qualquer caixa abaixo a torna Personalizada."
+
+msgctxt "UI_MENU_AUDIO_PRESET_BALANCED"
+msgid "Balanced"
+msgstr "Equilibrada"
+
+msgctxt "UI_MENU_AUDIO_PRESET_VOICES"
+msgid "Clear voices"
+msgstr "Vozes claras"
+
+msgctxt "UI_MENU_AUDIO_PRESET_IMMERSIVE"
+msgid "Immersive"
+msgstr "Imersiva"
+
+msgctxt "UI_MENU_AUDIO_PRESET_CUSTOM"
+msgid "Custom"
+msgstr "Personalizada"
+
+msgctxt "UI_MENU_AUDIO_FRONT_LEFT"
+msgid "Front left"
+msgstr "Frontal esquerda"
+
+msgctxt "UI_MENU_AUDIO_FRONT_RIGHT"
+msgid "Front right"
+msgstr "Frontal direita"
+
+msgctxt "UI_MENU_AUDIO_CENTER"
+msgid "Centre (voices)"
+msgstr "Central (vozes)"
+
+msgctxt "UI_MENU_AUDIO_SURROUND_LEFT"
+msgid "Surround left"
+msgstr "Surround esquerda"
+
+msgctxt "UI_MENU_AUDIO_SURROUND_RIGHT"
+msgid "Surround right"
+msgstr "Surround direita"
+
+msgctxt "UI_MENU_AUDIO_SUBWOOFER"
+msgid "Subwoofer"
+msgstr "Subwoofer"
+
+msgctxt "UI_MENU_AUDIO_FRONT_DESC"
+msgid "Level of this front speaker. The fronts carry mostly the music, which the game mixes in stereo, and the sounds in front of you; lowering them lowers the music most. For the music alone, use the game's own music volume."
+msgstr "Nível desta caixa frontal. As frontais levam principalmente a música, que o jogo mixa em estéreo, e os sons à sua frente; diminuí-las diminui sobretudo a música. Para a música sozinha, use o volume de música do próprio jogo."
+
+msgctxt "UI_MENU_AUDIO_CENTER_DESC"
+msgid "Level of the centre speaker, where the voices and the interface sounds are. Lower it if voices or beeps are too loud; -2 dB keeps them near their level in stereo."
+msgstr "Nível da caixa central, onde ficam as vozes e os sons da interface. Diminua se as vozes ou os bipes estiverem altos demais; -2 dB os mantém perto do nível em estéreo."
+
+msgctxt "UI_MENU_AUDIO_SURROUND_DESC"
+msgid "Level of this surround speaker. The surrounds carry the ambience, the reverb and the sounds beside and behind you."
+msgstr "Nível desta caixa surround. As surrounds levam o ambiente, a reverberação e os sons ao seu lado e atrás de você."
+
+msgctxt "UI_MENU_AUDIO_SUBWOOFER_DESC"
+msgid "Level of the subwoofer. The game sends it nothing of its own: turn on Bass to subwoofer to give it the low end of the other speakers."
+msgstr "Nível do subwoofer. O jogo não envia nada próprio para ele: ative Graves no subwoofer para mandar os graves das outras caixas."
+
+msgctxt "UI_MENU_AUDIO_BASS"
+msgid "Bass to subwoofer"
+msgstr "Graves no subwoofer"
+
+msgctxt "UI_MENU_AUDIO_BASS_DESC"
+msgid "Sends the bass (below 120 Hz) of the other five speakers to the subwoofer. Leave it off with headphones, or when your receiver already manages the bass."
+msgstr "Envia os graves (abaixo de 120 Hz) das outras cinco caixas para o subwoofer. Deixe desligado com fones, ou quando o seu receiver já gerencia os graves."
+
+msgctxt "UI_MENU_SPK_LEFT"
+msgid "Left"
+msgstr "Esquerda"
+
+msgctxt "UI_MENU_SPK_RIGHT"
+msgid "Right"
+msgstr "Direita"
+
+msgctxt "UI_MENU_SPK_CENTER"
+msgid "Centre"
+msgstr "Central"
+
+msgctxt "UI_MENU_SPK_SURROUND_LEFT"
+msgid "Surround L"
+msgstr "Surround E"
+
+msgctxt "UI_MENU_SPK_SURROUND_RIGHT"
+msgid "Surround R"
+msgstr "Surround D"
+
+msgctxt "UI_MENU_SPK_SUB"
+msgid "Sub"
+msgstr "Sub"
+
+msgctxt "UI_MENU_SPK_YOU"
+msgid "You"
+msgstr "Você"
+
+msgctxt "UI_MENU_MOTION"
+msgid "Motion controls"
+msgstr "Controles de movimento"
+
+msgctxt "UI_MENU_MOTION_DESC"
+msgid "Aiming with the controller's gyroscope."
+msgstr "Mirar com o giroscópio do controle."
+
+msgctxt "UI_MENU_RUMBLE_STRENGTH"
+msgid "Vibration strength"
+msgstr "Intensidade da vibração"
+
+msgctxt "UI_MENU_RUMBLE_STRENGTH_DESC"
+msgid "How strong the controller vibrates."
+msgstr "Quão forte o controle vibra."
+
+msgctxt "UI_MENU_RUMBLE_CURVE"
+msgid "Vibration curve"
+msgstr "Curva da vibração"
+
+msgctxt "UI_MENU_RUMBLE_CURVE_DESC"
+msgid "Lower values make weak vibration stronger."
+msgstr "Valores menores deixam a vibração fraca mais forte."
+
+msgctxt "UI_MENU_RUMBLE_TRIGGERS"
+msgid "Trigger vibration (Xbox)"
+msgstr "Vibração dos gatilhos (Xbox)"
+
+msgctxt "UI_MENU_RUMBLE_TRIGGERS_DESC"
+msgid "Vibrates the triggers of an Xbox controller too."
+msgstr "Também vibra os gatilhos de um controle de Xbox."
+
+msgctxt "UI_MENU_PAD_LAYOUT"
+msgid "Button layout"
+msgstr "Layout dos botões"
+
+msgctxt "UI_MENU_PAD_LAYOUT_DESC"
+msgid "Which button is A. Nintendo: the right one, as on a Switch. Xbox: the bottom one, as labelled on an Xbox controller. PlayStation: the bottom one as labelled (cross) and the rest by position, to match the PlayStation button mod. Automatic picks Nintendo for controllers with Nintendo labels, PlayStation for PlayStation controllers and Xbox for the others. Which controller the game's prompts show is set under Button prompts."
+msgstr "Qual botão é o A. Nintendo: o da direita, como no Switch. Xbox: o de baixo, como indicado no controle de Xbox. PlayStation: o de baixo como indicado (cruz) e os demais pela posição, para acompanhar o mod de botões de PlayStation. Automático escolhe Nintendo para controles com os rótulos da Nintendo, PlayStation para os de PlayStation e Xbox para os demais. Os botões que os ícones do jogo mostram estão em Ícones de botões."
+
+msgctxt "UI_MENU_PAD_LAYOUT_AUTO"
+msgid "Automatic"
+msgstr "Automático"
+
+msgctxt "UI_MENU_PAD_LAYOUT_NINTENDO"
+msgid "Nintendo (A right)"
+msgstr "Nintendo (A à direita)"
+
+msgctxt "UI_MENU_PAD_LAYOUT_XBOX"
+msgid "Xbox (A bottom)"
+msgstr "Xbox (A embaixo)"
+
+msgctxt "UI_MENU_PAD_LAYOUT_PLAYSTATION"
+msgid "PlayStation (A bottom)"
+msgstr "PlayStation (A embaixo)"
+
+msgctxt "UI_MENU_PAD_LAYOUT_IN_USE"
+msgid "in use: %s"
+msgstr "em uso: %s"
+
+msgctxt "UI_MENU_PROMPTS"
+msgid "Button prompts"
+msgstr "Ícones de botões"
+
+msgctxt "UI_MENU_PROMPTS_DESC"
+msgid "Which controller's buttons the game's prompts show. Automatic follows the controller in use (the Xbox or PlayStation mod when built, else Nintendo). Nintendo: the game's own. Xbox and PlayStation: button mods drawn for one layout each (a loaded mod forces its layout: Xbox for the Xbox mod, PlayStation for the PlayStation mod). The game reads its prompts at start, so they change after a restart."
+msgstr "Os botões de qual controle os ícones do jogo mostram. Automático segue o controle em uso (o mod de Xbox ou PlayStation quando instalado, senão Nintendo). Nintendo: os do próprio jogo. Xbox e PlayStation: mods de botões desenhados cada um para um layout (um mod carregado força seu layout: Xbox para o mod de Xbox, PlayStation para o de PlayStation). O jogo lê os ícones ao iniciar, então eles mudam depois de reiniciar."
+
+msgctxt "UI_MENU_PROMPTS_AUTO"
+msgid "Automatic"
+msgstr "Automático"
+
+msgctxt "UI_MENU_PROMPTS_NINTENDO"
+msgid "Nintendo"
+msgstr "Nintendo"
+
+msgctxt "UI_MENU_PROMPTS_XBOX"
+msgid "Xbox"
+msgstr "Xbox"
+
+msgctxt "UI_MENU_PROMPTS_PLAYSTATION"
+msgid "PlayStation"
+msgstr "PlayStation"
+
+msgctxt "UI_MENU_PROMPTS_MISSING"
+msgid "prompt files missing: run the setup again"
+msgstr "faltam os arquivos dos ícones: execute a instalação de novo"
+
+msgctxt "UI_MENU_PROMPTS_FAILED"
+msgid "prompt files damaged: run the setup again"
+msgstr "arquivos dos ícones danificados: execute a instalação de novo"
+
+msgctxt "UI_MENU_PROMPTS_RESTART"
+msgid "prompts change after restart"
+msgstr "os ícones mudam após reiniciar"
+
+msgctxt "UI_MENU_PROMPTS_OFF_SHAPE"
+msgid "off at a game resolution not 16:9"
+msgstr "desligados numa resolução de jogo que não é 16:9"
+
+msgctxt "UI_MENU_PROMPTS_OFF_MODS"
+msgid "off: a RomFS mod replaces their files"
+msgstr "desligados: um mod de RomFS substitui os arquivos deles"
+
+msgctxt "UI_MENU_PROMPTS_OFF_PATCHES"
+msgid "off while AC_ROMFS_PATCHES is set"
+msgstr "desligados enquanto AC_ROMFS_PATCHES está definido"
+
+msgctxt "UI_MENU_RESTART"
+msgid "Restart now"
+msgstr "Reiniciar agora"
+
+msgctxt "UI_MENU_RESTART_DESC"
+msgid "Closes the game and starts it again with the new prompts. Progress since your last save is lost."
+msgstr "Fecha o jogo e o abre de novo com os novos ícones. O progresso desde o último salvamento é perdido."
+
+msgctxt "UI_MENU_RESTART_CONFIRM"
+msgid "Restart the game now? Progress since your last save is lost."
+msgstr "Reiniciar o jogo agora? O progresso desde o último salvamento é perdido."
+
+msgctxt "UI_MENU_RESTART_YES"
+msgid "Restart"
+msgstr "Reiniciar"
+
+msgctxt "UI_MENU_RESTART_SAVING"
+msgid "The game is saving: Restart is possible in a moment."
+msgstr "O jogo está salvando: dá para reiniciar em um instante."
+
+msgctxt "UI_MENU_LSTICK_DEADZONE"
+msgid "Left stick dead zone"
+msgstr "Zona morta do analógico esquerdo"
+
+msgctxt "UI_MENU_RSTICK_DEADZONE"
+msgid "Right stick dead zone"
+msgstr "Zona morta do analógico direito"
+
+msgctxt "UI_MENU_STICK_DEADZONE_DESC"
+msgid "How far a gamepad stick moves before the game sees it. Raise it if the character or the camera moves on its own: let go of the stick, read \"stick now\" and set the dead zone a few percent above it."
+msgstr "Quanto um analógico do controle precisa se mover antes que o jogo perceba. Aumente se o personagem ou a câmera se moverem sozinhos: solte o analógico, leia \"analógico agora\" e coloque a zona morta alguns por cento acima."
+
+msgctxt "UI_MENU_STICK_DEADZONE_NOW"
+msgid "stick now: %.0f %%"
+msgstr "analógico agora: %.0f %%"
+
+msgctxt "UI_MENU_TRIGGER_THRESHOLD"
+msgid "Trigger threshold"
+msgstr "Limiar dos gatilhos"
+
+msgctxt "UI_MENU_TRIGGER_THRESHOLD_DESC"
+msgid "How far a gamepad trigger (ZL, ZR) is pulled before the game sees it pressed. 0 reacts to the slightest pull. Raise it if a trigger presses on its own: let go of it, read \"triggers now\" and set the threshold a few percent above it."
+msgstr "Quanto um gatilho do controle (ZL, ZR) precisa ser puxado antes que o jogo o veja pressionado. 0 reage ao menor toque. Aumente se um gatilho pressionar sozinho: solte-o, leia \"gatilhos agora\" e coloque o limiar alguns por cento acima."
+
+msgctxt "UI_MENU_TRIGGER_THRESHOLD_NOW"
+msgid "triggers now: L %.0f %%, R %.0f %%"
+msgstr "gatilhos agora: L %.0f %%, R %.0f %%"
+
+msgctxt "UI_MENU_STICK_SENS"
+msgid "Stick camera speed"
+msgstr "Velocidade da câmera (analógico)"
+
+msgctxt "UI_MENU_STICK_SENS_DESC"
+msgid "Multiplies the game's own right-stick camera speed, top speed included, at each of the game's five camera sensitivities. The mouse keeps its own setting."
+msgstr "Multiplica a velocidade da câmera do analógico direito do jogo, incluindo a máxima, em cada uma das cinco sensibilidades de câmera do jogo. O mouse mantém a própria configuração."
+
+msgctxt "UI_MENU_MOUSE_SENS"
+msgid "Mouse camera sensitivity"
+msgstr "Sensibilidade da câmera no mouse"
+
+msgctxt "UI_MENU_MOUSE_SENS_DESC"
+msgid "How fast the mouse turns the camera."
+msgstr "Quão rápido o mouse gira a câmera."
+
+msgctxt "UI_MENU_WALK_KEY"
+msgid "Walk key"
+msgstr "Tecla de andar"
+
+msgctxt "UI_MENU_WALK_KEY_DESC"
+msgid "Hold it to tilt the keyboard's sticks part of the way, so the keyboard walks instead of runs. The walk scale sets how far. A controller and the mouse are not affected."
+msgstr "Segure para inclinar os analógicos do teclado só em parte, assim o teclado anda em vez de correr. A intensidade do andar define quanto. Controle e mouse não são afetados."
+
+msgctxt "UI_MENU_WALK_KEY_TAKEN"
+msgid "also %s"
+msgstr "também %s"
+
+msgctxt "UI_MENU_WALK_SCALE"
+msgid "Walk scale"
+msgstr "Intensidade do andar"
+
+msgctxt "UI_MENU_WALK_SCALE_DESC"
+msgid "The tilt the keyboard's sticks get while the walk key is held. Half is a walk, the full tilt a run."
+msgstr "A inclinação dos analógicos do teclado enquanto a tecla de andar está segura. Metade é andar, a inclinação total é correr."
+
+msgctxt "UI_BINDS_HELP"
+msgid "Select a cell and press A or Enter, then the key, mouse button or controller button. Delete or X clears a cell. A key in use moves here; a controller button swaps with the one it replaces."
+msgstr "Selecione uma célula e aperte A ou Enter, depois a tecla, o botão do mouse ou o botão do controle. Delete ou X limpa a célula. Uma tecla já em uso vem para cá; um botão do controle troca de lugar com o que ele substitui."
+
+msgctxt "UI_BINDS_COL_KEY1"
+msgid "Key 1"
+msgstr "Tecla 1"
+
+msgctxt "UI_BINDS_COL_KEY2"
+msgid "Key 2"
+msgstr "Tecla 2"
+
+msgctxt "UI_BINDS_COL_PAD"
+msgid "Controller"
+msgstr "Controle"
+
+msgctxt "UI_BINDS_GROUP_BUTTONS"
+msgid "Buttons"
+msgstr "Botões"
+
+msgctxt "UI_BINDS_GROUP_MOVE"
+msgid "Movement"
+msgstr "Movimento"
+
+msgctxt "UI_BINDS_GROUP_CAMERA"
+msgid "Camera"
+msgstr "Câmera"
+
+msgctxt "UI_BINDS_PRESS_KEY"
+msgid "Press a key or mouse button for %s"
+msgstr "Aperte uma tecla ou um botão do mouse para %s"
+
+msgctxt "UI_BINDS_PRESS_PAD"
+msgid "Press a controller button for %s"
+msgstr "Aperte um botão do controle para %s"
+
+msgctxt "UI_BINDS_CANCEL_HINT"
+msgid "Esc cancels, or wait %d s"
+msgstr "Esc cancela, ou aguarde %d s"
+
+msgctxt "UI_BINDS_TAKEN"
+msgid "%s was taken from %s"
+msgstr "%s saiu de %s"
+
+msgctxt "UI_BINDS_SWAPPED"
+msgid "%s swapped with %s"
+msgstr "%s trocou de lugar com %s"
+
+msgctxt "UI_BINDS_RESET"
+msgid "Reset all buttons"
+msgstr "Restaurar todos os botões"
+
+msgctxt "UI_BINDS_RESET_DESC"
+msgid "Back to the default keys and controller buttons. The button layout above applies again: remapped controller buttons stay where you put them until this reset."
+msgstr "Volta às teclas e aos botões do controle padrão. O layout dos botões acima volta a valer: os botões do controle remapeados ficam onde você os colocou até esta restauração."
+
+msgctxt "UI_BIND_A"
+msgid "A"
+msgstr "A"
+
+msgctxt "UI_BIND_B"
+msgid "B"
+msgstr "B"
+
+msgctxt "UI_BIND_X"
+msgid "X"
+msgstr "X"
+
+msgctxt "UI_BIND_Y"
+msgid "Y"
+msgstr "Y"
+
+msgctxt "UI_BIND_LCLICK"
+msgid "Left stick click"
+msgstr "Clique do analógico esquerdo"
+
+msgctxt "UI_BIND_RCLICK"
+msgid "Right stick click"
+msgstr "Clique do analógico direito"
+
+msgctxt "UI_BIND_L"
+msgid "L"
+msgstr "L"
+
+msgctxt "UI_BIND_R"
+msgid "R"
+msgstr "R"
+
+msgctxt "UI_BIND_ZL"
+msgid "ZL"
+msgstr "ZL"
+
+msgctxt "UI_BIND_ZR"
+msgid "ZR"
+msgstr "ZR"
+
+msgctxt "UI_BIND_PLUS"
+msgid "Plus"
+msgstr "Mais"
+
+msgctxt "UI_BIND_MINUS"
+msgid "Minus"
+msgstr "Menos"
+
+msgctxt "UI_BIND_LEFT"
+msgid "D-pad left"
+msgstr "Direcional para a esquerda"
+
+msgctxt "UI_BIND_UP"
+msgid "D-pad up"
+msgstr "Direcional para cima"
+
+msgctxt "UI_BIND_RIGHT"
+msgid "D-pad right"
+msgstr "Direcional para a direita"
+
+msgctxt "UI_BIND_DOWN"
+msgid "D-pad down"
+msgstr "Direcional para baixo"
+
+msgctxt "UI_BIND_LSTICK_LEFT"
+msgid "Move left"
+msgstr "Mover para a esquerda"
+
+msgctxt "UI_BIND_LSTICK_UP"
+msgid "Move forward"
+msgstr "Mover para a frente"
+
+msgctxt "UI_BIND_LSTICK_RIGHT"
+msgid "Move right"
+msgstr "Mover para a direita"
+
+msgctxt "UI_BIND_LSTICK_DOWN"
+msgid "Move back"
+msgstr "Mover para trás"
+
+msgctxt "UI_BIND_RSTICK_LEFT"
+msgid "Camera left"
+msgstr "Câmera para a esquerda"
+
+msgctxt "UI_BIND_RSTICK_UP"
+msgid "Camera up"
+msgstr "Câmera para cima"
+
+msgctxt "UI_BIND_RSTICK_RIGHT"
+msgid "Camera right"
+msgstr "Câmera para a direita"
+
+msgctxt "UI_BIND_RSTICK_DOWN"
+msgid "Camera down"
+msgstr "Câmera para baixo"
+
+msgctxt "UI_BIND_DESC_A"
+msgid "Interact, pick up, talk."
+msgstr "Interagir, pegar, conversar."
+
+msgctxt "UI_BIND_DESC_B"
+msgid "Run, cancel, go back."
+msgstr "Correr, cancelar, voltar."
+
+msgctxt "UI_BIND_DESC_X"
+msgid "Jump."
+msgstr "Pular."
+
+msgctxt "UI_BIND_DESC_Y"
+msgid "Attack."
+msgstr "Atacar."
+
+msgctxt "UI_BIND_DESC_LCLICK"
+msgid "Crouch."
+msgstr "Agachar."
+
+msgctxt "UI_BIND_DESC_RCLICK"
+msgid "First-person view."
+msgstr "Visão em primeira pessoa."
+
+msgctxt "UI_BIND_DESC_L"
+msgid "Abilities."
+msgstr "Habilidades."
+
+msgctxt "UI_BIND_DESC_R"
+msgid "Throw a weapon."
+msgstr "Arremessar a arma."
+
+msgctxt "UI_BIND_DESC_ZL"
+msgid "Shield, lock on."
+msgstr "Escudo, travar a mira."
+
+msgctxt "UI_BIND_DESC_ZR"
+msgid "Bow."
+msgstr "Arco."
+
+msgctxt "UI_BIND_DESC_PLUS"
+msgid "Menu, inventory."
+msgstr "Menu, inventário."
+
+msgctxt "UI_BIND_DESC_MINUS"
+msgid "Map."
+msgstr "Mapa."
+
+msgctxt "UI_BIND_DESC_DPAD"
+msgid "Quick-select."
+msgstr "Seleção rápida."
+
+msgctxt "UI_BIND_DESC_MOVE"
+msgid "Moves Link like the left stick. The controller's left stick always works too."
+msgstr "Move o Link como o analógico esquerdo. O analógico esquerdo do controle também sempre funciona."
+
+msgctxt "UI_BIND_DESC_CAMERA"
+msgid "Turns the camera like the right stick. The mouse and the controller's right stick always work too."
+msgstr "Gira a câmera como o analógico direito. O mouse e o analógico direito do controle também sempre funcionam."
+
+msgctxt "UI_KEY_SPACE"
+msgid "Space"
+msgstr "Espaço"
+
+msgctxt "UI_KEY_TAB"
+msgid "Tab"
+msgstr "Tab"
+
+msgctxt "UI_KEY_LSHIFT"
+msgid "Left Shift"
+msgstr "Shift esquerdo"
+
+msgctxt "UI_KEY_LCTRL"
+msgid "Left Ctrl"
+msgstr "Ctrl esquerdo"
+
+msgctxt "UI_KEY_UP"
+msgid "Up arrow"
+msgstr "Seta para cima"
+
+msgctxt "UI_KEY_DOWN"
+msgid "Down arrow"
+msgstr "Seta para baixo"
+
+msgctxt "UI_KEY_LEFT"
+msgid "Left arrow"
+msgstr "Seta para a esquerda"
+
+msgctxt "UI_KEY_RIGHT"
+msgid "Right arrow"
+msgstr "Seta para a direita"
+
+msgctxt "UI_KEY_MOUSE_L"
+msgid "Left mouse"
+msgstr "Mouse esquerdo"
+
+msgctxt "UI_KEY_MOUSE_R"
+msgid "Right mouse"
+msgstr "Mouse direito"
+
+msgctxt "UI_KEY_MOUSE_M"
+msgid "Middle mouse"
+msgstr "Mouse do meio"
+
+msgctxt "UI_KEY_MOUSE_X1"
+msgid "Mouse 4"
+msgstr "Mouse 4"
+
+msgctxt "UI_KEY_MOUSE_X2"
+msgid "Mouse 5"
+msgstr "Mouse 5"
+
+msgctxt "UI_KEY_ENTER"
+msgid "Enter"
+msgstr "Enter"
+
+msgctxt "UI_KEY_BACKSPACE"
+msgid "Backspace"
+msgstr "Backspace"
+
+msgctxt "UI_KEY_RSHIFT"
+msgid "Right Shift"
+msgstr "Shift direito"
+
+msgctxt "UI_KEY_RCTRL"
+msgid "Right Ctrl"
+msgstr "Ctrl direito"
+
+msgctxt "UI_KEY_LALT"
+msgid "Alt"
+msgstr "Alt"
+
+msgctxt "UI_KEY_CAPSLOCK"
+msgid "Caps Lock"
+msgstr "Caps Lock"
+
+msgctxt "UI_KEY_INSERT"
+msgid "Insert"
+msgstr "Insert"
+
+msgctxt "UI_KEY_DELETE"
+msgid "Delete"
+msgstr "Delete"
+
+msgctxt "UI_KEY_HOME"
+msgid "Home"
+msgstr "Home"
+
+msgctxt "UI_KEY_END"
+msgid "End"
+msgstr "End"
+
+msgctxt "UI_KEY_PAGEUP"
+msgid "Page Up"
+msgstr "Page Up"
+
+msgctxt "UI_KEY_PAGEDOWN"
+msgid "Page Down"
+msgstr "Page Down"
+
+msgctxt "UI_KEY_NUM_FMT"
+msgid "Num %s"
+msgstr "Num %s"
+
+msgctxt "UI_PAD_SOUTH"
+msgid "Bottom button"
+msgstr "Botão de baixo"
+
+msgctxt "UI_PAD_EAST"
+msgid "Right button"
+msgstr "Botão da direita"
+
+msgctxt "UI_PAD_WEST"
+msgid "Left button"
+msgstr "Botão da esquerda"
+
+msgctxt "UI_PAD_NORTH"
+msgid "Top button"
+msgstr "Botão de cima"
+
+msgctxt "UI_PAD_LSTICK"
+msgid "Left stick"
+msgstr "Analógico esquerdo"
+
+msgctxt "UI_PAD_RSTICK"
+msgid "Right stick"
+msgstr "Analógico direito"
+
+msgctxt "UI_PAD_L"
+msgid "Left bumper"
+msgstr "Bumper esquerdo"
+
+msgctxt "UI_PAD_R"
+msgid "Right bumper"
+msgstr "Bumper direito"
+
+msgctxt "UI_PAD_START"
+msgid "Start"
+msgstr "Start"
+
+msgctxt "UI_PAD_BACK"
+msgid "Back"
+msgstr "Back"
+
+msgctxt "UI_PAD_DPAD_LEFT"
+msgid "D-pad left"
+msgstr "Direcional para a esquerda"
+
+msgctxt "UI_PAD_DPAD_UP"
+msgid "D-pad up"
+msgstr "Direcional para cima"
+
+msgctxt "UI_PAD_DPAD_RIGHT"
+msgid "D-pad right"
+msgstr "Direcional para a direita"
+
+msgctxt "UI_PAD_DPAD_DOWN"
+msgid "D-pad down"
+msgstr "Direcional para baixo"
+
+msgctxt "UI_PAD_ZL"
+msgid "Left trigger"
+msgstr "Gatilho esquerdo"
+
+msgctxt "UI_PAD_ZR"
+msgid "Right trigger"
+msgstr "Gatilho direito"
+
+msgctxt "UI_PAD_LPADDLE1"
+msgid "Left back button"
+msgstr "Botão traseiro esquerdo"
+
+msgctxt "UI_PAD_RPADDLE1"
+msgid "Right back button"
+msgstr "Botão traseiro direito"
+
+msgctxt "UI_PAD_LPADDLE2"
+msgid "Left back button 2"
+msgstr "Botão traseiro esquerdo 2"
+
+msgctxt "UI_PAD_RPADDLE2"
+msgid "Right back button 2"
+msgstr "Botão traseiro direito 2"
+
+msgctxt "UI_PAD_CROSS"
+msgid "Cross"
+msgstr "Cruz"
+
+msgctxt "UI_PAD_CIRCLE"
+msgid "Circle"
+msgstr "Círculo"
+
+msgctxt "UI_PAD_SQUARE"
+msgid "Square"
+msgstr "Quadrado"
+
+msgctxt "UI_PAD_TRIANGLE"
+msgid "Triangle"
+msgstr "Triângulo"
+
+msgctxt "UI_MENU_MENU_LANG"
+msgid "Menu language"
+msgstr "Idioma do menu"
+
+msgctxt "UI_MENU_MENU_LANG_DESC"
+msgid "Language of this menu and the overlay."
+msgstr "Idioma deste menu e do indicador."
+
+msgctxt "UI_MENU_MENU_LANG_AUTO"
+msgid "Automatic (from Windows)"
+msgstr "Automático (do Windows)"
+
+msgctxt "UI_MENU_LANGNAME_EN"
+msgid "English"
+msgstr "English"
+
+msgctxt "UI_MENU_LANGNAME_JA"
+msgid "日本語"
+msgstr "日本語"
+
+msgctxt "UI_MENU_LANGNAME_FR"
+msgid "Français"
+msgstr "Français"
+
+msgctxt "UI_MENU_LANGNAME_DE"
+msgid "Deutsch"
+msgstr "Deutsch"
+
+msgctxt "UI_MENU_LANGNAME_IT"
+msgid "Italiano"
+msgstr "Italiano"
+
+msgctxt "UI_MENU_LANGNAME_ES"
+msgid "Español"
+msgstr "Español"
+
+msgctxt "UI_MENU_LANGNAME_NL"
+msgid "Nederlands"
+msgstr "Nederlands"
+
+msgctxt "UI_MENU_LANGNAME_RU"
+msgid "Русский"
+msgstr "Русский"
+
+msgctxt "UI_MENU_LANGNAME_ZH_HANS"
+msgid "简体中文"
+msgstr "简体中文"
+
+msgctxt "UI_MENU_LANGNAME_ZH_HANT"
+msgid "繁體中文"
+msgstr "繁體中文"
+
+msgctxt "UI_MENU_LANGNAME_KO"
+msgid "한국어"
+msgstr "한국어"
+
+msgctxt "UI_MENU_LANGNAME_PT_BR"
+msgid "Português (Brasil)"
+msgstr "Português (Brasil)"
+
+msgctxt "UI_MENU_ADV_WARNING"
+msgid "These settings are for testing and troubleshooting. Change them only when you know why."
+msgstr "Estas configurações são para testes e solução de problemas. Altere-as só quando souber por quê."
+
+msgctxt "UI_MENU_GROUP_SCHED"
+msgid "Scheduling"
+msgstr "Agendamento"
+
+msgctxt "UI_MENU_GROUP_SHADERS"
+msgid "Shaders and pipelines"
+msgstr "Shaders e pipelines"
+
+msgctxt "UI_MENU_GROUP_TEXMEM"
+msgid "Textures and memory"
+msgstr "Texturas e memória"
+
+msgctxt "UI_MENU_GROUP_FIXES"
+msgid "Render fixes"
+msgstr "Correções de renderização"
+
+msgctxt "UI_MENU_GROUP_VULKAN"
+msgid "Vulkan"
+msgstr "Vulkan"
+
+msgctxt "UI_MENU_GROUP_DIAG"
+msgid "Diagnostics"
+msgstr "Diagnóstico"
+
+msgctxt "UI_MENU_ASYNC_PREEMPT"
+msgid "Virtual core preemption"
+msgstr "Preempção de núcleo virtual"
+
+msgctxt "UI_MENU_ASYNC_PREEMPT_DESC"
+msgid "Lets a game thread interrupt another one on the same virtual core."
+msgstr "Deixa uma thread do jogo interromper outra no mesmo núcleo virtual."
+
+msgctxt "UI_MENU_PREEMPT_OFF"
+msgid "Off"
+msgstr "Desligado"
+
+msgctxt "UI_MENU_PREEMPT_ON"
+msgid "On"
+msgstr "Ligado"
+
+msgctxt "UI_MENU_PREEMPT_INHERIT"
+msgid "Inheritance only"
+msgstr "Só herança"
+
+msgctxt "UI_MENU_REPLAY_ASYNC"
+msgid "GPU frame prep on its own thread"
+msgstr "Preparo de quadro da GPU em thread própria"
+
+msgctxt "UI_MENU_REPLAY_ASYNC_DESC"
+msgid "Prepares frames for the GPU on a separate thread instead of the game thread. Adds up to one frame of latency."
+msgstr "Prepara os quadros para a GPU numa thread separada em vez da thread do jogo. Adiciona até um quadro de latência."
+
+msgctxt "UI_MENU_TIMER_1MS"
+msgid "1 ms Windows timer"
+msgstr "Timer do Windows de 1 ms"
+
+msgctxt "UI_MENU_TIMER_1MS_DESC"
+msgid "Raises the system timer resolution to 1 ms for steadier frame pacing."
+msgstr "Aumenta a resolução do timer do sistema para 1 ms, para um ritmo de quadros mais estável."
+
+msgctxt "UI_MENU_PIPE_WAIT"
+msgid "Waiting draw handling"
+msgstr "Tratamento de desenhos em espera"
+
+msgctxt "UI_MENU_PIPE_WAIT_DESC"
+msgid "Default keeps the current scheduling with a reserved worker for waiting draws; Old (draw) uses the previous scheduling."
+msgstr "Padrão mantém o agendamento atual, com um worker reservado para desenhos em espera; Antigo (draw) usa o agendamento anterior."
+
+msgctxt "UI_MENU_PIPE_WAIT_DEFAULT"
+msgid "Default"
+msgstr "Padrão"
+
+msgctxt "UI_MENU_PIPE_WAIT_DRAW"
+msgid "Old (draw)"
+msgstr "Antigo (draw)"
+
+msgctxt "UI_MENU_PIPE_SKIP"
+msgid "Draws skipped while a pipeline builds"
+msgstr "Desenhos pulados ao montar pipeline"
+
+msgctxt "UI_MENU_PIPE_SKIP_DESC"
+msgid "Which draws are dropped instead of waiting for their pipeline."
+msgstr "Quais desenhos são descartados em vez de esperar pelo seu pipeline."
+
+msgctxt "UI_MENU_PIPE_SKIP_STRICT"
+msgid "Strict"
+msgstr "Estrito"
+
+msgctxt "UI_MENU_PIPE_SKIP_ANY"
+msgid "Any"
+msgstr "Qualquer"
+
+msgctxt "UI_MENU_PIPE_SKIP_FULLSCREEN"
+msgid "Fullscreen passes"
+msgstr "Passes de tela cheia"
+
+msgctxt "UI_MENU_LIB_PREBUILD"
+msgid "Stage library prebuild"
+msgstr "Pré-montagem das bibliotecas de estágio"
+
+msgctxt "UI_MENU_LIB_PREBUILD_DESC"
+msgid "Builds shader stage libraries ahead of time in the background."
+msgstr "Monta antes, em segundo plano, as bibliotecas de estágio dos shaders."
+
+msgctxt "UI_MENU_LIB_PREBUILD_THREADS"
+msgid "Stage library prebuild threads"
+msgstr "Threads da pré-montagem das bibliotecas"
+
+msgctxt "UI_MENU_LIB_PREBUILD_THREADS_DESC"
+msgid "Threads used for the prebuild; Automatic picks a number from your CPU."
+msgstr "Threads usadas na pré-montagem; Automático escolhe um número pela sua CPU."
+
+msgctxt "UI_MENU_PIPE_PREBUILD"
+msgid "Pipeline prebuild"
+msgstr "Pré-montagem de pipelines"
+
+msgctxt "UI_MENU_PIPE_PREBUILD_DESC"
+msgid "Builds known pipelines ahead of time."
+msgstr "Monta antes os pipelines conhecidos."
+
+msgctxt "UI_MENU_PREWARM_XLATE"
+msgid "Translator prewarm"
+msgstr "Pré-aquecimento do tradutor"
+
+msgctxt "UI_MENU_PREWARM_XLATE_DESC"
+msgid "Threads that translate known shaders at start; Automatic takes half the CPU threads, at most 16."
+msgstr "Threads que traduzem os shaders conhecidos ao iniciar; Automático usa metade das threads da CPU, no máximo 16."
+
+msgctxt "UI_MENU_GPL"
+msgid "Graphics pipeline library"
+msgstr "Biblioteca de pipelines gráficos"
+
+msgctxt "UI_MENU_GPL_DESC"
+msgid "Uses the Vulkan pipeline library extension; turn off if your driver misbehaves with it."
+msgstr "Usa a extensão de biblioteca de pipelines do Vulkan; desligue se o seu driver tiver problemas com ela."
+
+msgctxt "UI_MENU_ASTC"
+msgid "ASTC texture decoding"
+msgstr "Decodificação de texturas ASTC"
+
+msgctxt "UI_MENU_ASTC_DESC"
+msgid "Where compressed ASTC textures are decoded."
+msgstr "Onde as texturas comprimidas em ASTC são decodificadas."
+
+msgctxt "UI_MENU_ASTC_AUTO"
+msgid "Automatic"
+msgstr "Automático"
+
+msgctxt "UI_MENU_ASTC_GPU"
+msgid "GPU shader"
+msgstr "Shader da GPU"
+
+msgctxt "UI_MENU_ASTC_NATIVE"
+msgid "Native"
+msgstr "Nativo"
+
+msgctxt "UI_MENU_ASTC_CPU"
+msgid "CPU"
+msgstr "CPU"
+
+msgctxt "UI_MENU_MEMORY"
+msgid "GPU memory mode"
+msgstr "Modo de memória da GPU"
+
+msgctxt "UI_MENU_MEMORY_DESC"
+msgid "How game memory is shared with the GPU."
+msgstr "Como a memória do jogo é compartilhada com a GPU."
+
+msgctxt "UI_MENU_MEMORY_AUTO"
+msgid "Automatic"
+msgstr "Automático"
+
+msgctxt "UI_MENU_MEMORY_IMPORT"
+msgid "Import"
+msgstr "Importar"
+
+msgctxt "UI_MENU_MEMORY_MIRROR"
+msgid "Mirror"
+msgstr "Espelhar"
+
+msgctxt "UI_MENU_MEMORY_VERIFY"
+msgid "Verify"
+msgstr "Verificar"
+
+msgctxt "UI_MENU_TEX_ALIAS"
+msgid "Texture aliasing"
+msgstr "Aliasing de texturas"
+
+msgctxt "UI_MENU_TEX_ALIAS_DESC"
+msgid "A new texture created over a live texture's memory starts with that content instead of empty."
+msgstr "Uma textura nova criada sobre a memória de uma textura viva começa com esse conteúdo em vez de vazia."
+
+msgctxt "UI_MENU_TEX_VRAM_PRESSURE"
+msgid "Texture memory limit"
+msgstr "Limite de memória de texturas"
+
+msgctxt "UI_MENU_TEX_VRAM_PRESSURE_DESC"
+msgid "Percent of video memory above which textures the game released are dropped (they come back from storage when used again). 0 keeps them."
+msgstr "Porcentagem da memória de vídeo acima da qual as texturas liberadas pelo jogo são descartadas (voltam do armazenamento quando usadas de novo). 0 mantém todas."
+
+msgctxt "UI_MENU_ASTC_BC"
+msgid "Compress ASTC to BC"
+msgstr "Comprimir ASTC em BC"
+
+msgctxt "UI_MENU_ASTC_BC_DESC"
+msgid "With the GPU decoder: re-encodes decoded ASTC textures to BC1 when the alpha scan proves them opaque, BC3 otherwise — a quarter to an eighth of the video memory. For GPUs with 4 GB or less; textures look slightly blockier."
+msgstr "Com o decodificador da GPU: texturas sem transparência são recodificadas em BC1, as demais em BC3 — de um oitavo a um quarto da memória de vídeo. Para GPUs com 4 GB ou menos; as texturas ficam um pouco mais quadriculadas."
+
+msgctxt "UI_MENU_LOD_GUARD"
+msgid "LOD guard"
+msgstr "Proteção de LOD"
+
+msgctxt "UI_MENU_LOD_GUARD_DESC"
+msgid "Prevents objects flashing in the wrong place or a flat far field for a frame, by waiting for the game to finish rewriting level-of-detail data before the GPU reads it."
+msgstr "Evita que objetos pisquem no lugar errado ou que o plano distante fique achatado por um quadro, esperando o jogo terminar de reescrever os dados de nível de detalhe antes que a GPU os leia."
+
+msgctxt "UI_MENU_FIX_C0"
+msgid "Constant buffer fix"
+msgstr "Correção do buffer de constantes"
+
+msgctxt "UI_MENU_FIX_C0_DESC"
+msgid "Fills the driver-reserved constant bank c0 (storage sizes, dispatch size, point size, base instance) instead of reading zeros."
+msgstr "Preenche o banco de constantes c0 reservado ao driver (tamanhos de armazenamento, tamanho do dispatch, tamanho do ponto, instância base) em vez de ler zeros."
+
+msgctxt "UI_MENU_FIX_ZERO"
+msgid "Zero new GPU memory"
+msgstr "Zerar memória nova da GPU"
+
+msgctxt "UI_MENU_FIX_ZERO_DESC"
+msgid "New GPU memory pools start zero-filled, as Switch memory does."
+msgstr "Novos pools de memória da GPU começam zerados, como a memória do Switch."
+
+msgctxt "UI_MENU_BIND_SKIP"
+msgid "Skip repeated binds"
+msgstr "Pular bindings repetidos"
+
+msgctxt "UI_MENU_BIND_SKIP_DESC"
+msgid "Optimisation: skips bindings that did not change."
+msgstr "Otimização: pula bindings que não mudaram."
+
+msgctxt "UI_MENU_SHADER_MEMO"
+msgid "Shader memo"
+msgstr "Memória de shaders"
+
+msgctxt "UI_MENU_SHADER_MEMO_DESC"
+msgid "Optimisation: remembers shader lookups."
+msgstr "Otimização: lembra as buscas de shaders."
+
+msgctxt "UI_MENU_PIPE_MEMO"
+msgid "Pipeline memo"
+msgstr "Memória de pipeline"
+
+msgctxt "UI_MENU_PIPE_MEMO_DESC"
+msgid "Optimisation: reuses the previous draw's pipeline when its state repeats."
+msgstr "Otimização: reaproveita o pipeline do desenho anterior quando o estado se repete."
+
+msgctxt "UI_MENU_TEX_MEMO"
+msgid "Texture binding memo"
+msgstr "Memória de bindings de textura"
+
+msgctxt "UI_MENU_TEX_MEMO_DESC"
+msgid "Optimisation: remembers texture descriptors between draws."
+msgstr "Otimização: lembra os descritores de textura entre desenhos."
+
+msgctxt "UI_MENU_DESC_TEMPLATE"
+msgid "Descriptor templates"
+msgstr "Templates de descritores"
+
+msgctxt "UI_MENU_DESC_TEMPLATE_DESC"
+msgid "Optimisation: updates descriptors in bulk."
+msgstr "Otimização: atualiza os descritores em lote."
+
+msgctxt "UI_MENU_PUSH_SKIP"
+msgid "Skip repeated push constants"
+msgstr "Pular push constants repetidas"
+
+msgctxt "UI_MENU_PUSH_SKIP_DESC"
+msgid "Optimisation: skips push constants that did not change."
+msgstr "Otimização: pula push constants que não mudaram."
+
+msgctxt "UI_MENU_SPLIT_DRAWS"
+msgid "Early GPU submission"
+msgstr "Envio antecipado à GPU"
+
+msgctxt "UI_MENU_SPLIT_DRAWS_DESC"
+msgid "Submits GPU work in parts every N draws between passes so the GPU starts earlier; 0 turns it off."
+msgstr "Envia o trabalho da GPU em partes a cada N desenhos entre passes, para a GPU começar mais cedo; 0 desliga."
+
+msgctxt "UI_MENU_VK_VALIDATION"
+msgid "Validation layer"
+msgstr "Camada de validação"
+
+msgctxt "UI_MENU_VK_VALIDATION_DESC"
+msgid "Checks every Vulkan call and slows the game down a lot."
+msgstr "Verifica cada chamada Vulkan e deixa o jogo muito mais lento."
+
+msgctxt "UI_MENU_VK_VALIDATION_MISSING"
+msgid "The validation layer is not installed."
+msgstr "A camada de validação não está instalada."
+
+msgctxt "UI_MENU_VK_DYN_VERTEX"
+msgid "Dynamic vertex state"
+msgstr "Estado dinâmico de vértices"
+
+msgctxt "UI_MENU_VK_DYN_VERTEX_DESC"
+msgid "Forces dynamic vertex input on or off; the default depends on the GPU."
+msgstr "Força a entrada dinâmica de vértices ligada ou desligada; o padrão depende da GPU."
+
+msgctxt "UI_MENU_VK_DYN_A2C"
+msgid "Dynamic alpha to coverage"
+msgstr "Alpha to coverage dinâmico"
+
+msgctxt "UI_MENU_VK_DYN_A2C_DESC"
+msgid "Forces dynamic alpha to coverage on or off. Default: off on AMD's driver for RDNA 2 and older, which draws characters black with it, on elsewhere."
+msgstr "Força o alpha to coverage dinâmico ligado ou desligado. Padrão: desligado no driver da AMD para RDNA 2 e anteriores, que com ele desenha os personagens pretos, ligado nos demais."
+
+msgctxt "UI_MENU_VK_SUBGROUP_PIN"
+msgid "Pin subgroup size"
+msgstr "Fixar tamanho do subgrupo"
+
+msgctxt "UI_MENU_VK_SUBGROUP_PIN_DESC"
+msgid "Fixes the shader subgroup size."
+msgstr "Fixa o tamanho do subgrupo dos shaders."
+
+msgctxt "UI_MENU_TRACE"
+msgid "Performance log"
+msgstr "Registro de desempenho"
+
+msgctxt "UI_MENU_TRACE_DESC"
+msgid "Writes frame timings to a file."
+msgstr "Grava os tempos de quadro num arquivo."
+
+msgctxt "UI_MENU_FLIGHT"
+msgid "Flight recorder"
+msgstr "Caixa-preta"
+
+msgctxt "UI_MENU_FLIGHT_DESC"
+msgid "Keeps a short history and saves it when a frame freezes."
+msgstr "Guarda um histórico curto e o salva quando um quadro trava."
+
+msgctxt "UI_MENU_FLIGHT_SPIKE_MS"
+msgid "Freeze threshold (ms)"
+msgstr "Limite de travamento (ms)"
+
+msgctxt "UI_MENU_FLIGHT_SPIKE_MS_DESC"
+msgid "Frame time that counts as a freeze."
+msgstr "Tempo de quadro que conta como travamento."
+
+msgctxt "UI_MENU_INPUT_RECORD"
+msgid "Input recording"
+msgstr "Gravação de comandos"
+
+msgctxt "UI_MENU_INPUT_RECORD_DESC"
+msgid "Writes your inputs to a file for bug reports."
+msgstr "Grava os seus comandos num arquivo para relatórios de bug."
+
+msgctxt "UI_MENU_OPEN_LOG"
+msgid "Open log folder"
+msgstr "Abrir pasta de logs"
+
+msgctxt "UI_MENU_OPEN_LOG_DESC"
+msgid "Shows the folder with the log files."
+msgstr "Mostra a pasta com os arquivos de log."
+
+msgctxt "UI_MENU_COPY_INFO"
+msgid "Copy system info"
+msgstr "Copiar informações do sistema"
+
+msgctxt "UI_MENU_COPY_INFO_DESC"
+msgid "Copies GPU, driver, CPU, RAM and changed settings to the clipboard."
+msgstr "Copia GPU, driver, CPU, RAM e as configurações alteradas para a área de transferência."
+
+msgctxt "UI_MENU_COPY_INFO_DONE"
+msgid "Copied"
+msgstr "Copiado"
+
+msgctxt "UI_MENU_ACTION_FAILED"
+msgid "did not work"
+msgstr "não funcionou"
+
+msgctxt "UI_MENU_RESET"
+msgid "Reset all settings to defaults"
+msgstr "Restaurar todas as configurações"
+
+msgctxt "UI_MENU_RESET_DESC"
+msgid "Applies to every tab."
+msgstr "Vale para todas as abas."
+
+msgctxt "UI_MENU_RESET_CONFIRM"
+msgid "Reset every setting to its default?"
+msgstr "Restaurar todas as configurações para o padrão?"
+
+msgctxt "UI_MENU_RESET_YES"
+msgid "Reset"
+msgstr "Restaurar"
+
+msgctxt "UI_MENU_RESET_NO"
+msgid "Cancel"
+msgstr "Cancelar"
+
+msgctxt "UI_MENU_OV_FPS"
+msgid "%.0f FPS"
+msgstr "%.0f FPS"
+
+msgctxt "UI_MENU_OV_FRAME_MS"
+msgid "%.1f ms"
+msgstr "%.1f ms"
+
+msgctxt "UI_MENU_OV_GAME_PCT"
+msgid "game %.0f%%"
+msgstr "jogo %.0f%%"
+
+msgctxt "UI_MENU_OV_MAX_MS"
+msgid "max %.1f ms"
+msgstr "máx. %.1f ms"
+
+msgctxt "UI_MENU_OV_GPU"
+msgid "GPU"
+msgstr "GPU"
+
+msgctxt "UI_MENU_OV_CPU"
+msgid "CPU"
+msgstr "CPU"
+
+msgctxt "UI_MENU_OV_RAM"
+msgid "RAM"
+msgstr "RAM"
+
+msgctxt "UI_MENU_OV_VRAM"
+msgid "VRAM"
+msgstr "VRAM"
+
+msgctxt "UI_MENU_OV_TEMP"
+msgid "Temperature"
+msgstr "Temperatura"
+
+msgctxt "UI_MENU_OV_POWER"
+msgid "Power"
+msgstr "Consumo"
+
+msgctxt "UI_MENU_OV_CLOCK"
+msgid "Clock"
+msgstr "Frequência"
+
+msgctxt "UI_MENU_OV_NONE"
+msgid "-"
+msgstr "-"
+
+msgctxt "UI_MENU_OV_REPLAY"
+msgid "GPU frame prep"
+msgstr "Preparo de quadro da GPU"
+
+msgctxt "UI_MENU_OV_GPU_TIME"
+msgid "GPU busy per frame"
+msgstr "GPU ocupada por quadro"
+
+msgctxt "UI_MENU_OV_PIPE_WAIT"
+msgid "Pipeline waits"
+msgstr "Esperas de pipeline"
+
+msgctxt "UI_MENU_OV_SHADER_WAIT"
+msgid "Shader waits"
+msgstr "Esperas de shader"
+
+msgctxt "UI_MENU_OV_TEX_UPLOADS"
+msgid "Texture uploads"
+msgstr "Envios de textura"
+
+msgctxt "UI_MENU_OV_FMT_PCT"
+msgid "%.0f%%"
+msgstr "%.0f%%"
+
+msgctxt "UI_MENU_OV_FMT_TEMP"
+msgid "%.0f °C"
+msgstr "%.0f °C"
+
+msgctxt "UI_MENU_OV_FMT_POWER"
+msgid "%.0f W"
+msgstr "%.0f W"
+
+msgctxt "UI_MENU_OV_FMT_MHZ"
+msgid "%.0f MHz"
+msgstr "%.0f MHz"
+
+msgctxt "UI_MENU_OV_FMT_GB"
+msgid "%.1f GB"
+msgstr "%.1f GB"
+
+msgctxt "UI_MENU_OV_FMT_GB_OF"
+msgid "/ %.1f GB"
+msgstr "/ %.1f GB"
+
+msgctxt "UI_MENU_OV_GAME_GB"
+msgid "game %.1f GB"
+msgstr "jogo %.1f GB"
+
+msgctxt "UI_MENU_OV_FMT_MS"
+msgid "%.2f ms"
+msgstr "%.2f ms"
+
+msgctxt "UI_MENU_OV_PER_FRAME"
+msgid "%.1f per frame"
+msgstr "%.1f por quadro"
+
+msgctxt "UI_MENU_OV_WINDOW"
+msgid "Window"
+msgstr "Janela"
+
+msgctxt "UI_MENU_OV_OUTPUT"
+msgid "Game image"
+msgstr "Imagem do jogo"
+
+msgctxt "UI_MENU_OV_SCENE"
+msgid "3D scene"
+msgstr "Cena 3D"
+
+msgctxt "UI_MENU_OV_SCALING"
+msgid "Scaling"
+msgstr "Escala"
+
+msgctxt "UI_MENU_OV_LIMIT"
+msgid "Frame limit"
+msgstr "Limite de quadros"
+
+msgctxt "UI_MENU_OV_PRESENT"
+msgid "Presentation"
+msgstr "Apresentação"
+
+msgctxt "UI_MENU_OV_TEX"
+msgid "Texture compression"
+msgstr "Compressão de texturas"
+
+msgctxt "UI_MENU_OV_OS"
+msgid "OS"
+msgstr "SO"
+
+msgctxt "UI_MENU_OV_FMT_SIZE"
+msgid "%ux%u"
+msgstr "%ux%u"
+
+msgctxt "UI_MENU_OV_FMT_SCENE"
+msgid "%ux%u, %.0f%%"
+msgstr "%ux%u, %.0f%%"
+
+msgctxt "UI_MENU_OV_FMT_FSR"
+msgid "AMD FSR 1, sharpness %d%%"
+msgstr "AMD FSR 1, nitidez %d%%"
+
+msgctxt "UI_MENU_OV_FMT_AREA"
+msgid "area average, sharpness %d%%"
+msgstr "média por área, nitidez %d%%"
+
+msgctxt "UI_MENU_OV_FMT_PRESHARP"
+msgid "RCAS before the HUD, sharpness %d%%"
+msgstr "RCAS antes do HUD, nitidez %d%%"
+
+msgctxt "UI_MENU_OV_SCALE_NONE"
+msgid "none (1:1)"
+msgstr "nenhuma (1:1)"
+
+msgctxt "UI_MENU_OV_SCALE_BILINEAR"
+msgid "bilinear"
+msgstr "bilinear"
+
+msgctxt "UI_MENU_TAB_CHEATS"
+msgid "Cheats"
+msgstr "Cheats"
+
+msgctxt "UI_MENU_CHEATS_NONE"
+msgid "No cheats for this game version. A mod's cheats are an Atmosphere cheat file in its cheats folder, named after the game's build: mods\\<mod>\\cheats\\%s. Restart the game to read them. For cheats that change the game's code, the game rebuilds itself at start (a few minutes)."
+msgstr "Nenhum cheat para esta versão do jogo. Os cheats de um mod são um arquivo de cheats do Atmosphere na pasta cheats dele, com o nome da build do jogo: mods\\<mod>\\cheats\\%s. Reinicie o jogo para lê-los. Para cheats que alteram o código do jogo, o jogo se recompila sozinho ao iniciar (alguns minutos)."
+
+msgctxt "UI_MENU_CHEATS_MOD"
+msgid "%s: %d cheats"
+msgstr "%s: %d cheats"
+
+msgctxt "UI_MENU_CHEATS_REBUILD"
+msgid "Rebuild the game now"
+msgstr "Recompilar o jogo agora"
+
+msgctxt "UI_MENU_CHEATS_REBUILD_DESC"
+msgid "Some cheats change the game's code and are not built into it: they are new or edited, or their last rebuild failed or was cancelled. Closes the game; the setup builds them in (a few minutes) and starts the game again. Progress since your last save is lost."
+msgstr "Alguns cheats alteram o código do jogo e ainda não foram compilados nele: são novos ou editados, ou a última recompilação falhou ou foi cancelada. Fecha o jogo; o instalador os compila (alguns minutos) e inicia o jogo de novo. O progresso desde o último salvamento é perdido."
+
+msgctxt "UI_MENU_CHEAT_CODE_DESC"
+msgid "Changes the game's code. Switches at once."
+msgstr "Altera o código do jogo. Liga e desliga na hora."
+
+msgctxt "UI_MENU_CHEAT_KEY_DESC"
+msgid "Changes the game's code while you hold %s. Switches at once."
+msgstr "Altera o código do jogo enquanto você segura %s. Liga e desliga na hora."
+
+msgctxt "UI_MENU_CHEAT_DATA_DESC"
+msgid "Writes the game's memory every frame while it is on."
+msgstr "Escreve na memória do jogo a cada quadro enquanto está ligado."
+
+msgctxt "UI_MENU_CHEAT_MASTER"
+msgid "always on"
+msgstr "sempre ligado"
+
+msgctxt "UI_MENU_CHEAT_MASTER_DESC"
+msgid "The file's master code: it is always on."
+msgstr "O código mestre do arquivo: está sempre ligado."
+
+msgctxt "UI_MENU_CHEAT_RESTORE"
+msgid "not needed"
+msgstr "desnecessário"
+
+msgctxt "UI_MENU_CHEAT_RESTORE_DESC"
+msgid "It only writes the game's own code back. Switching a cheat off already does that."
+msgstr "Ele só escreve de volta o código original do jogo. Desligar um cheat já faz isso."
+
+msgctxt "UI_MENU_CHEAT_REBUILD"
+msgid "after the rebuild"
+msgstr "após recompilar"
+
+msgctxt "UI_MENU_CHEAT_REBUILD_DESC"
+msgid "This cheat changes the game's code and is new or edited since the game was built. The game builds it in when it starts next (a few minutes), or use Rebuild the game now."
+msgstr "Este cheat altera o código do jogo e é novo ou foi editado depois que o jogo foi compilado. O jogo o compila na próxima vez que iniciar (alguns minutos), ou use Recompilar o jogo agora."
+
+msgctxt "UI_MENU_CHEAT_UNSUPPORTED"
+msgid "not supported"
+msgstr "não suportado"
+
+msgctxt "UI_MENU_CHEAT_UNSUPPORTED_DESC"
+msgid "This cheat cannot be used with this version of the game:"
+msgstr "Este cheat não pode ser usado com esta versão do jogo:"
+

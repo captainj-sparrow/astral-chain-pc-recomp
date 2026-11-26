@@ -32,6 +32,7 @@
 #include "host.h"
 #include "platform/platform.h"
 #include "sha256.h"
+#include "ui_text.h"
 
 #define MAX_MODULES 16
 
@@ -567,6 +568,7 @@ int main(int argc, char **argv) {
     if (cfg.shot && !cfg.seconds) return usage(argv[0]);
     if (cfg.seconds && mode) return usage(argv[0]);
     log_open(!mode);
+    ui_text_init();
     if (!mode) {
         cfg.boot = cfg.seconds > 0;   // --seconds starts the game like --boot, with its checkpoints
         hostfn_count_calls((rt_trace & RT_TRACE_HOSTCALL) != 0);   // per function only for the AC_TRACE=host report

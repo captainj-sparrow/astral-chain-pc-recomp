@@ -313,9 +313,12 @@
 # lang = en-US
 # System mode reported to the game: docked or handheld (handheld by default on a Steam Deck).
 # operation_mode = docked
-# Language of the settings menu and the overlay: en, ru, pt-BR or zh-Hans. Default: the Windows display language, English if
-# it is none of them.
+# Language of the settings menu and the overlay: any tag with a lang/<tag>.mo catalog that has menu text. English is
+# built in; `pt` uses the `pt-BR` catalog. Default: the Windows display language, English if it has no menu catalog.
 # menu_lang = en
+# Folder with the compiled UI catalogs (lang/*.mo). Default: lang beside astralchain.exe, then lang in the working
+# folder. Adding a compiled catalog needs no rebuild; restart the game to pick it up.
+# lang_dir = /path/to/lang
 
 [audio]
 # none mixes without opening an audio device.

@@ -50,6 +50,8 @@ The install folder (`main.c` `portable_paths()` reads this layout; it stays port
   shader-cache/                         the translated shaders, packed into one shader-cache.pack
   shader-prepared.bin                   the variants prepared ahead of play (read at boot to warm the driver)
   shader-prepared-driver.txt            the GPU driver caches that hold them (a start with another one rebuilds it)
+  lang/*.mo, messages.pot               compiled UI catalogs and the translator template; precompiled .mo drop-ins are
+                                        picked up at the next game start
   profile/                              saves
   mods/                                 the player's mods, one folder per mod (created by the menu's "Open mods folder")
   dlc/                                  the DLCs' XML sources (docs/dlc.md) and their guide, copied from the release
@@ -160,10 +162,10 @@ python -m installer --base FILE --update FILE --keys FILE --lang CODE --dest DIR
 - Window (`python -m installer.gui`, `installer/gui.py` draws, `installer/guilogic.py` decides): a first screen with
   the two choices (first install, update), one form for each, step list with progress, space line, collapsible log,
   Cancel (Ctrl+Break to the CLI's process group, then it waits for the exit), finish screen with Play, Open folder and,
-  after a failure, Open the log. English, Russian, Brazilian Portuguese or Simplified Chinese, chosen from the Windows
-  display language (zh-CN and zh-SG give Chinese; the Traditional Chinese regions give English), switchable in the
-  window; every sentence is an id in `installer/text/<en|ru|pt-BR|zh-Hans>.json`. `--selftest [--shots DIR]` builds every screen in every language and
-  closes itself.
+  after a failure, Open the log. English, Italian, Russian, Brazilian Portuguese or Simplified Chinese, chosen from the
+  Windows display language (zh-CN and zh-SG give Chinese; the Traditional Chinese regions give English), switchable in
+  the window; every sentence is an id in `installer/text/<en|it|ru|pt-BR|zh-Hans>.json`. `--selftest [--shots DIR]`
+  builds every screen in every language and closes itself.
 - `tests/installer_gui_test.py`: event model, form, catalogs, cancel, the self-closing window and one end-to-end run of
   the CLI in `--verify` mode (needs `build/install-test`; see its docstring).
 - `tests/installer_test.py`: bookkeeping with fake steps, the progress lines, `--lang auto` and the tools ending
@@ -185,6 +187,8 @@ runtime/              libacrt.a, libacrt-v2.a, the headers the generated code an
 bin/                  ac_xlate.exe (+ .id), hactool.exe, SDL3.dll, libopus-0.dll, libxess.dll, ninja.exe, and AMD FSR 4:
                       amd_fidelityfx_loader_vk.dll and amd_fidelityfx_upscaler_vk.dll (the Linux release has the same
                       two DLLs with libffx_vk_linux.so, which runs them)
+lang/                 the compiled UI catalogs copied beside astralchain.exe at prepare; players may add more .mo files
+                      there (`msgfmt -o xx.mo xx.po` on their own machine)
 licenses/             the licence files of everything bundled
 THIRD_PARTY_NOTICES.md
 dlc/                  the DLCs (docs/dlc.md): XML and their guide, copied into the install folder by the last step
