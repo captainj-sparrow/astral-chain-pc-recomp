@@ -539,8 +539,9 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   shows them one refresh apart from its queue. The first pad read to the host present of the game's frame, same run:
   10.5-12.9 ms with Reflex and no frame generation, 16-18 ms with Reflex and 4x, 46 ms with 4x and low latency off or
   the built-in sleep (which does not sleep there: the replay one frame behind leaves a frame's measured work at two
-  periods). Not with HDR output: its present composes the PQ picture from the window texture and the float scene, which
-  generated frames do not have; frame generation stays off with an HDR10 swapchain and the log and the menu say so.
+  periods). With HDR output the present's PQ encode (window texture plus float scene, `vk_hdr.c`) runs before NGX,
+  on the picture and on the HUD-less picture each, into A2B10G10R10 images of PQ code values; NGX reads those with
+  `DLSSG.ColorBuffersHDR` set, and its frames and the game's go to the swapchain without a second encode.
   Not run on Windows, other NVIDIA GPUs or in a long play session.
 - Ambient occlusion (`vk_ao.c`, `ao = off | low | high | gi`, live; off by default): the game has none.
   The first light-target pass with the scene depth after the game's R32F linear-depth pass that writes colour is the

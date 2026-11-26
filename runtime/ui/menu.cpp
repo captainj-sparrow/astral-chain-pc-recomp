@@ -70,7 +70,7 @@ extern "C" int vk_fsr4_offered(void);                   // vk_fsr4.h: an AMD RDN
 extern "C" const char *vk_fsr4_missing(void);           // vk_fsr4.h: the file FSR 4 needs that is not there, or NULL
 extern "C" int vk_lowlat_backend(void);                 // vk.h: 0 off, 1 Reflex, 2 Anti-Lag 2, 3 built-in
 extern "C" const char *vk_dlssg_running(void);          // vk_dlssg.h: "2x".."6x" while generated frames show, or NULL
-extern "C" int vk_dlssg_choice_state(void);             // vk_dlssg.h: 0 runs, 1 restart, 2 not here, 3 no upscaler, 4 HDR
+extern "C" int vk_dlssg_choice_state(void);             // vk_dlssg.h: 0 runs, 1 restart, 2 not here, 3 no upscaler
 extern "C" int vk_dlssg_max_multiplier(void);           // vk_dlssg.h: 2..6, 0 not offered here
 bool tab_cheats(float scale);        // ui/cheats_tab.cpp; true: restart into the rebuild
 int audout_mix_channels(void);       // ov_audout.c: what the game mixes, 2 or 6; 0 before it opened its output
@@ -661,7 +661,6 @@ static void rows_upscaling(void) {
         case 1: fnote = menu_text(UI_MENU_AFTER_RESTART); break;
         case 2: fnote = menu_text(UI_MENU_UPSCALING_UNAVAILABLE); break;
         case 3: fnote = menu_text(UI_MENU_FRAMEGEN_NEEDS_TAA); break;
-        case 4: fnote = menu_text(UI_MENU_FRAMEGEN_NO_HDR); break;
         default:
             if (const char *on = vk_dlssg_running())
                 snprintf(note_fg, sizeof note_fg, menu_text(UI_MENU_PRESENT_IN_USE), on), fnote = note_fg;

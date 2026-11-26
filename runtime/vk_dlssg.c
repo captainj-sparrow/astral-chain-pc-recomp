@@ -32,9 +32,14 @@
 // frames show the game's frame too, so the picture holds still and the vectors sit on the surfaces they belong to.
 // AC_DLSSG_MVDEBUG_SCALE: the motion in render pixels that saturates the colour (default 8). Read at each present.
 //
-// Not with HDR output (yet): its present composes the PQ picture from the window texture and the float scene, which
-// the generated frames do not have. With AC_HDR=1 and an HDR10 swapchain, frame generation stays off and the log and
-// the menu say so.
+// With HDR output (an HDR10 swapchain): the present shows the window texture's PQ encode (vk_hdr.c vk_hdr_encode: the
+// scene's pixels from the float scene, highlights and all, the HUD's at the HUD's white). NGX gets that encode instead
+// of the 8-bit pictures: the window texture and the HUD-less picture are copied into images of ours and each encoded
+// with the frame's scene (vk_hdr_encode_fg) into an A2B10G10R10 image of PQ code values, what the present would show of
+// it. The HUD-less one's pixels are all scene, so the two differ only under the HUD, as in SDR. NGX is told the
+// pictures are HDR (DLSSG.ColorBuffersHDR) and writes its frames in the same format, and the present sends them and the
+// game's frame to the swapchain without encoding them again (vk_dlssg_encoded). UI recomposition's alpha comes from the
+// 8-bit copy (the HDR10 alpha has 2 bits).
 #include "vk_dlssg.h"
 
 #include <stdio.h>
@@ -51,6 +56,7 @@
 #include "platform/platform.h"
 
 #define MAX_GEN 5   // generated frames per game frame: NGX's MultiFrameCountMax on the RTX 50 series
+#define HDR_FMT VK_FORMAT_A2B10G10R10_UNORM_PACK32   // the pictures with an HDR10 swapchain: PQ code values
 
 typedef struct { VkImage img; VmaAllocation mem; VkImageView view; } Img;
 
@@ -60,12 +66,18 @@ static struct {
     // present thread
     void *feat;               // NGX's feature, for:
     uint32_t w, h, rw, rh;    // the picture's size and the scene's
-    VkFormat fmt;
+    VkFormat fmt;             // the pictures NGX reads and writes: the window texture's, HDR_FMT with HDR output
+    VkFormat wfmt;            // the window texture's
+    int hdr;                  // this job's swapchain is HDR10: the pictures are encoded before NGX (vk_hdr_encode_fg)
+    VkFormat img_fmt, img_wfmt;   // the formats the images below were made in
     Img gen[MAX_GEN], hud, real;
+    Img sdr, hud8;            // HDR output: the window texture and the HUD-less picture in its format, the encode's input
     Img dbg;                  // AC_DLSSG_MVDEBUG: a copy of the game's frame the overlay reads
     Img uia;                  // AC_DLSSG_UI_ALPHA: the HUD's coverage from the picture's alpha (R8)
     int uir;                  // the feature was made with UI recomposition
-    int fmt_ok;               // -1 not checked
+    int fmt_ok;               // -1 not checked, else for ok_wfmt and ok_hdr
+    VkFormat ok_wfmt;
+    int ok_hdr;
     int armed, made, n;       // this job: the hook is set, generated frames made, asked for
     int evaluated;            // this job: NGX evaluated the frame (its history now ends with it)
     int prev_shown;           // the previous job showed frame generation's frames: its history follows on
@@ -125,12 +137,6 @@ void vk_dlssg_collect(VkFgFrame *f) {
         G.last_on = 0;
         return;
     }
-    if (vk_hdr_active()) {
-        static int logged;
-        if (!logged) logged = 1, rt_log("dlssg: frame generation does not run with HDR output yet: off");
-        G.last_on = 0;
-        return;
-    }
     if (!vk_lowlat_oob_ok()) {   // Reflex without frame generation's own present queue (set after the start)
         static int logged;
         if (!logged)
@@ -146,15 +152,24 @@ void vk_dlssg_collect(VkFgFrame *f) {
 
 // ---------------------------------------------------------------- the present thread
 
-static int format_ok(VkFormat f) {
-    if (f != VK_FORMAT_R8G8B8A8_UNORM && f != VK_FORMAT_B8G8R8A8_UNORM) return 0;
-    if (G.fmt_ok < 0 || G.fmt != f) {
-        VkFormatProperties fp;
-        vkGetPhysicalDeviceFormatProperties(vk_ctx()->phys, f, &fp);
+static int has_features(VkFormat f, VkFormatFeatureFlags need) {
+    VkFormatProperties fp;
+    vkGetPhysicalDeviceFormatProperties(vk_ctx()->phys, f, &fp);
+    return (fp.optimalTilingFeatures & need) == need;
+}
+
+// The window texture's format wf, and with HDR output the HDR10 pictures', usable for frame generation's images.
+static int format_ok(VkFormat wf, int hdr) {
+    if (wf != VK_FORMAT_R8G8B8A8_UNORM && wf != VK_FORMAT_B8G8R8A8_UNORM) return 0;
+    if (G.fmt_ok < 0 || G.ok_wfmt != wf || G.ok_hdr != hdr) {
         VkFormatFeatureFlags need = VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
                                     VK_FORMAT_FEATURE_BLIT_DST_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
-        G.fmt_ok = (fp.optimalTilingFeatures & need) == need;
-        if (!G.fmt_ok) rt_log("dlssg: the window texture's format %d cannot be a storage image here: off", (int)f);
+        G.ok_wfmt = wf, G.ok_hdr = hdr;
+        G.fmt_ok = has_features(wf, need);
+        if (!G.fmt_ok) rt_log("dlssg: the window texture's format %d cannot be a storage image here: off", (int)wf);
+        else if (hdr && !(G.fmt_ok = has_features(HDR_FMT, need | VK_FORMAT_FEATURE_BLIT_SRC_BIT)))
+            rt_log("dlssg: HDR10 pictures (format %d) cannot be storage images here: off with HDR output",
+                   (int)HDR_FMT);
     }
     return G.fmt_ok;
 }
@@ -327,7 +342,7 @@ static void free_all(int wait) {
     if (G.feat) vk_ngx_fg_release(G.feat);
     G.feat = NULL;
     for (int i = 0; i < MAX_GEN; i++) img_free(&G.gen[i]);
-    img_free(&G.hud), img_free(&G.real), img_free(&G.dbg), img_free(&G.uia);
+    img_free(&G.hud), img_free(&G.real), img_free(&G.dbg), img_free(&G.uia), img_free(&G.sdr), img_free(&G.hud8);
     G.w = G.h = G.rw = G.rh = 0;
 }
 
@@ -351,14 +366,23 @@ static void fail(const char *what) {
 static int ensure(VkCommandBuffer cb, int *fresh) {
     const VkFgFrame *f = &G.fr;
     *fresh = 0;
-    if (G.real.img && (G.w != G.pw || G.h != G.ph || G.rw != f->rw || G.rh != f->rh)) free_all(1);
+    // another size, or HDR output turned on or off (the pictures' format, and NGX's feature made for it)
+    if (G.real.img && (G.w != G.pw || G.h != G.ph || G.rw != f->rw || G.rh != f->rh || G.img_fmt != G.fmt ||
+                       G.img_wfmt != G.wfmt))
+        free_all(1);
     if (!G.real.img) {
-        G.w = G.pw, G.h = G.ph, G.rw = f->rw, G.rh = f->rh;
+        G.w = G.pw, G.h = G.ph, G.rw = f->rw, G.rh = f->rh, G.img_fmt = G.fmt, G.img_wfmt = G.wfmt;
         if (!img_make(cb, &G.real, G.w, G.h, G.fmt) || !img_make(cb, &G.hud, G.w, G.h, G.fmt)) {
             free_all(0);
             fail("image creation");
             return 0;
         }
+    }
+    if (G.hdr && !G.sdr.img &&
+        (!img_make(cb, &G.sdr, G.w, G.h, G.wfmt) || !img_make(cb, &G.hud8, G.w, G.h, G.wfmt))) {
+        free_all(0);
+        fail("image creation");
+        return 0;
     }
     for (int i = 0; i < G.n; i++)
         if (!G.gen[i].img && !img_make(cb, &G.gen[i], G.w, G.h, G.fmt)) {
@@ -511,29 +535,37 @@ static void mvdebug(VkCommandBuffer cb, int mode) {
 
 // vk_present_pre_record's hook: at the start of the blit's command buffer, before anything reads src. Returns the
 // image the blit shows: the first generated frame, or src when none was made.
-static VkImage record(VkCommandBuffer cb, VkImage src) {
+static VkImage record(VkCommandBuffer cb, VkImage src, unsigned slot, VkFormat *fmt) {
     if (!G.armed || src != G.win) return src;
     G.armed = 0;
     int fresh = 0;
     if (!ensure(cb, &fresh)) return src;
     const VkFgFrame *f = &G.fr;
     barrier(cb);   // the game's writes to the window texture, its scene, depth and motion vectors
-    // the HUD-less scene in the picture's format and size (a blit converts the float and scales a smaller scene of the
-    // picture's shape), and the picture itself, kept for its own present after the generated ones
+    // the HUD-less scene in the window texture's format and size (a blit converts the float and scales a smaller scene
+    // of the picture's shape), and the picture itself, kept for its own present after the generated ones. With HDR
+    // output both go into 8-bit images of ours first and are encoded from there, with the frame's scene, into the HDR10
+    // pictures NGX reads (vk_hdr.c vk_hdr_encode_fg: what the present would show of each).
     VkImageCopy cp = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
                       .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .extent = {G.w, G.h, 1}};
-    vkCmdCopyImage(cb, src, VK_IMAGE_LAYOUT_GENERAL, G.real.img, VK_IMAGE_LAYOUT_GENERAL, 1, &cp);
+    vkCmdCopyImage(cb, src, VK_IMAGE_LAYOUT_GENERAL, G.hdr ? G.sdr.img : G.real.img, VK_IMAGE_LAYOUT_GENERAL, 1, &cp);
     barrier(cb);
     VkImageBlit b = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
                      .srcOffsets = {{0, 0, 0}, {(int32_t)f->hw, (int32_t)f->hh, 1}},
                      .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
                      .dstOffsets = {{0, 0, 0}, {(int32_t)G.w, (int32_t)G.h, 1}}};
-    vkCmdBlitImage(cb, f->hudless, VK_IMAGE_LAYOUT_GENERAL, G.hud.img, VK_IMAGE_LAYOUT_GENERAL, 1, &b, VK_FILTER_LINEAR);
+    vkCmdBlitImage(cb, f->hudless, VK_IMAGE_LAYOUT_GENERAL, G.hdr ? G.hud8.img : G.hud.img, VK_IMAGE_LAYOUT_GENERAL, 1,
+                   &b, VK_FILTER_LINEAR);
     barrier(cb);
+    if (G.hdr) {
+        VkImageView in[2] = {G.sdr.view, G.hud8.view}, out[2] = {G.real.view, G.hud.view};
+        if (!vk_hdr_encode_fg(cb, slot, in, out, 2, G.wfmt, G.w, G.h)) return src;   // the present's encode fails too
+        barrier(cb);
+    }
     if (G.uir) {   // the HUD's coverage the picture's alpha holds (vk_exec_draw.c), as NGX's single channel
         static const VkDescriptorType t[2] = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
         if (pass_init(&ua_pass, "UI alpha extraction", dlssg_uialpha_spv, sizeof dlssg_uialpha_spv, t, 2)) {
-            VkImageView v[2] = {G.real.view, G.uia.view};
+            VkImageView v[2] = {G.hdr ? G.sdr.view : G.real.view, G.uia.view};
             VkSampler sm[2] = {nearest, VK_NULL_HANDLE};
             int32_t pc[2] = {(int32_t)G.w, (int32_t)G.h};
             pass_run(cb, &ua_pass, v, sm, 2, 1, pc, sizeof pc, G.w, G.h);
@@ -545,7 +577,8 @@ static VkImage record(VkCommandBuffer cb, VkImage src) {
         VkFgEval e = {.back = G.real.img, .back_view = G.real.view, .hudless = G.hud.img, .hudless_view = G.hud.view,
                       .out = G.gen[k - 1].img, .out_view = G.gen[k - 1].view, .format = G.fmt, .w = G.w, .h = G.h,
                       .f = f, .count = (uint32_t)G.n, .index = (uint32_t)k, .reset = reset && k == 1,
-                      .ui_alpha = G.uir ? G.uia.img : VK_NULL_HANDLE, .ui_alpha_view = G.uia.view};
+                      .ui_alpha = G.uir ? G.uia.img : VK_NULL_HANDLE, .ui_alpha_view = G.uia.view,
+                      .hdr = G.hdr};
         int r = vk_ngx_fg_evaluate(cb, G.feat, &e);
         if (!r || ((unsigned)r & 0xFFF00000u) == 0xBAD00000u) {   // NVSDK_NGX_Result: 1 success, 0xBAD0xxxx failures
             char what[64];
@@ -558,6 +591,7 @@ static VkImage record(VkCommandBuffer cb, VkImage src) {
     G.evaluated = 1;
     int dm = mvdebug_mode();
     if (dm) mvdebug(cb, dm);
+    *fmt = G.fmt;
     // a new history gives no frame between the last one and this: only the game's frame is shown, at its delayed time
     if (reset) return G.real.img;
     G.made = G.n;
@@ -567,8 +601,8 @@ static VkImage record(VkCommandBuffer cb, VkImage src) {
 int vk_dlssg_begin(const VkFgFrame *f, VkImage win, VkFormat fmt, uint32_t w, uint32_t h, uint64_t period_ns) {
     G.armed = 0, G.made = 0, G.evaluated = 0;
     int s = f->on && !plat_cas32(&G.failed, 0, 0) ? setting() : 0;
-    int max = s ? vk_dlssg_max_multiplier() : 0;
-    if (!s || !max || !format_ok(fmt)) {
+    int max = s ? vk_dlssg_max_multiplier() : 0, hdr = vk_hdr_active();
+    if (!s || !max || !format_ok(fmt, hdr)) {
         G.prev_shown = 0;
         vk_present_pre_record(NULL);
         return 0;
@@ -584,7 +618,7 @@ int vk_dlssg_begin(const VkFgFrame *f, VkImage win, VkFormat fmt, uint32_t w, ui
         vk_present_pre_record(NULL);
         return 0;
     }
-    G.fr = *f, G.win = win, G.fmt = fmt, G.n = m - 1, G.pw = w, G.ph = h;
+    G.fr = *f, G.win = win, G.wfmt = fmt, G.hdr = hdr, G.fmt = hdr ? HDR_FMT : fmt, G.n = m - 1, G.pw = w, G.ph = h;
     G.armed = 1;
     vk_present_pre_record(record);
     return G.n;
@@ -604,6 +638,13 @@ int vk_dlssg_end(void) {
 
 VkImage vk_dlssg_image(int k) { return k <= 0 ? G.real.img : k <= G.n ? G.gen[k - 1].img : VK_NULL_HANDLE; }
 VkFormat vk_dlssg_format(void) { return G.fmt; }
+
+int vk_dlssg_encoded(VkImage img) {
+    if (!G.hdr || !img) return 0;
+    int hit = img == G.real.img;
+    for (int i = 0; i < MAX_GEN; i++) hit |= img == G.gen[i].img;
+    return hit;
+}
 
 void vk_dlssg_release(void) {
     free_all(0);
@@ -625,7 +666,6 @@ int vk_dlssg_choice_state(void) {
     if (!vk_dlaa_wanted()) return 1;   // NGX was not loaded at start
     if (!vk_dlssg_max_multiplier() || plat_cas32(&G.failed, 0, 0)) return 2;
     if (!vk_lowlat_oob_ok()) return 1;   // Reflex without frame generation's present queue: made at the next start
-    if (vk_hdr_active()) return 4;
     if (!vk_dlaa_running()) return 3;
     return 0;
 }

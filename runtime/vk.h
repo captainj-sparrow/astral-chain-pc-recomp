@@ -113,9 +113,10 @@ void vk_present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w, in
 // queues it. The next blit or a swapchain rebuild queues a waiting present first.
 void vk_present_blit(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4]);
 // The present thread, before a vk_present_blit: fn runs once at the start of that blit's command buffer, before
-// anything reads src, records into it and returns the image the blit shows in src's place (of src's format, size
-// and layout); NULL clears it (vk_dlssg.c: frame generation's evaluations).
-void vk_present_pre_record(VkImage (*fn)(VkCommandBuffer cb, VkImage src));
+// anything reads src, records into it and returns the image the blit shows in src's place (of src's size and layout;
+// *fmt its format, src's unless fn sets another); NULL clears it (vk_dlssg.c: frame generation's evaluations). slot:
+// the blit's command buffer slot (of 8 in flight), whose earlier use has finished.
+void vk_present_pre_record(VkImage (*fn)(VkCommandBuffer cb, VkImage src, unsigned slot, VkFormat *fmt));
 // The present thread, before a vk_present_blit: its present goes out on the out-of-band queue (vk_oob_present_queue,
 // when the device has one), which NVIDIA Reflex leaves out of its latency tracking: frame generation's frames.
 void vk_present_out_of_band(int on);
@@ -157,6 +158,9 @@ int vk_hdr_active(void);
 VkImage vk_hdr_encode(VkCommandBuffer cb, unsigned slot, VkImage src, VkFormat fmt, const int crop[4]);
 VkImageView vk_hdr_ui_target(VkCommandBuffer cb, uint32_t w, uint32_t h);
 void vk_hdr_ui_compose(VkCommandBuffer cb, VkImageView dst_view, VkFormat fmt, uint32_t w, uint32_t h);
+// Frame generation's HDR10 pictures (vk_dlssg.c): src[i] (w x h, src_fmt) into dst[i] (A2B10G10R10, PQ, alpha kept)
+int vk_hdr_encode_fg(VkCommandBuffer cb, unsigned slot, const VkImageView *src, const VkImageView *dst, int n,
+                     VkFormat src_fmt, uint32_t w, uint32_t h);
 void vk_hdr_to_srgb8(const uint8_t *in, uint8_t *out, size_t px, int a2r);
 void vk_hdr_release(void);   // before the device goes away
 // The support buffer's HDR parameters (vk_exec_draw.c support_fill, read by shaders/hdr_tonemap.frag).

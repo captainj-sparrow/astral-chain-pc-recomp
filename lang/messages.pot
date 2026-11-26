@@ -526,10 +526,6 @@ msgctxt "UI_MENU_FRAMEGEN_NEEDS_TAA"
 msgid "needs an upscaler"
 msgstr ""
 
-msgctxt "UI_MENU_FRAMEGEN_NO_HDR"
-msgid "not with HDR output yet"
-msgstr ""
-
 msgctxt "UI_MENU_OUTPUT_RES_AUTO"
 msgid "Automatic"
 msgstr ""

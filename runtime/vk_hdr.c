@@ -284,7 +284,7 @@ uint32_t vk_hdr_hud_targets(const VkExec *ex) {
     return m;
 }
 
-// Also for frame generation (vk_dlssg.c) without HDR output: fg, when not NULL, gets the fresh scene whether or not the
+// Also for frame generation (vk_dlssg.c), with or without HDR output: fg, when not NULL, gets the fresh scene whether or not the
 // swapchain is HDR10 (its HUD-less picture), with its format and size.
 void vk_hdr_present_source(const VkTexImage *win, VkImage *scene, VkFormat *format, VkFgScene *fg) {
     *scene = VK_NULL_HANDLE;
@@ -452,6 +452,7 @@ static struct {
     Img menu;                       // the in-game menu, RGBA8
     VkImageView src_view[SLOTS];
     VkImageView scene_view[SLOTS];  // the frame's scene beside the window texture (the window texture when none)
+    VkImageView fg_scene_view[SLOTS];   // the same for frame generation's encodes (vk_hdr_encode_fg)
 } H;
 
 static VkShaderModule module(VkCtx *c, const uint32_t *code, size_t size) {
@@ -577,6 +578,58 @@ VkImage vk_hdr_encode(VkCommandBuffer cb, unsigned slot, VkImage src, VkFormat f
     return H.out.img;
 }
 
+// Frame generation (vk_dlssg.c) with an HDR10 swapchain: NGX makes its frames from HDR10 pictures, so the encode
+// runs before it, on images of frame generation's: src[i] (the window texture's copy, or the HUD-less picture, both
+// w x h of src_fmt) into dst[i] (A2B10G10R10, PQ code values, w x h, its alpha kept for UI recomposition), all against
+// the scene vk_hdr_set_scene gave this present. The scene stays set (the present's own encode, should frame generation
+// give up after this, still has it). The caller orders its images before and after; the scene is ordered here.
+// slot: the present's slot, whose command buffer the earlier use of its view has finished with.
+int vk_hdr_encode_fg(VkCommandBuffer cb, unsigned slot, const VkImageView *src, const VkImageView *dst, int n,
+                     VkFormat src_fmt, uint32_t w, uint32_t h) {
+    VkCtx *c = vk_ctx();
+    if (!H.tried) init(c);
+    if (!H.ok) return 0;
+    slot %= SLOTS;
+    VkImage scene = g_scene;
+    VkFormat scene_fmt = g_scene_fmt;
+    if (H.fg_scene_view[slot]) vkDestroyImageView(c->device, H.fg_scene_view[slot], NULL);
+    H.fg_scene_view[slot] = VK_NULL_HANDLE;
+    if (scene) {
+        VkImageViewCreateInfo vi = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = scene,
+                                    .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = scene_fmt,
+                                    .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+        if (vkCreateImageView(c->device, &vi, NULL, &H.fg_scene_view[slot]) != VK_SUCCESS)
+            H.fg_scene_view[slot] = VK_NULL_HANDLE, scene = VK_NULL_HANDLE;
+    }
+    const VkPipelineStageFlags2 CS = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ALL = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    if (scene)
+        barrier(cb, scene, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, ALL, VK_ACCESS_2_MEMORY_WRITE_BIT, CS,
+                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    Nits nt = nits();
+    int decode = src_fmt == VK_FORMAT_R8G8B8A8_UNORM || src_fmt == VK_FORMAT_B8G8R8A8_UNORM;
+    struct { int32_t offset[2], size[2]; float p[4], q[4]; } pc = {
+        {0, 0}, {(int32_t)w, (int32_t)h}, {nt.ui, nt.peak, decode ? 1.0f : 0.0f, scene ? 1.0f : 0.0f},
+        {nt.game, 1.0f, 0, 0}};
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, H.enc);
+    for (int i = 0; i < n; i++) {
+        VkDescriptorImageInfo ii = {H.sampler, src[i], VK_IMAGE_LAYOUT_GENERAL},
+                              oi = {VK_NULL_HANDLE, dst[i], VK_IMAGE_LAYOUT_GENERAL},
+                              si = {H.linear, scene ? H.fg_scene_view[slot] : src[i], VK_IMAGE_LAYOUT_GENERAL};
+        VkWriteDescriptorSet wr[3] = {
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 0, .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &ii},
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 1, .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .pImageInfo = &oi},
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 2, .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &si}};
+        rec_push(H.push, cb, VK_PIPELINE_BIND_POINT_COMPUTE, H.enc_layout, 0, 3, wr);
+        vkCmdPushConstants(cb, H.enc_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
+        vkCmdDispatch(cb, (w + 7) / 8, (h + 7) / 8, 1);
+    }
+    if (scene) barrier(cb, scene, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, CS, 0, ALL, 0);
+    return 1;
+}
+
 // The in-game menu's target: an RGBA8 image of the swapchain's size in COLOR_ATTACHMENT_OPTIMAL (its old content
 // dropped); the caller renders the menu into the view with a clear to 0.
 VkImageView vk_hdr_ui_target(VkCommandBuffer cb, uint32_t w, uint32_t h) {
@@ -680,6 +733,9 @@ void vk_hdr_release(void) {
         if (H.src_view[i]) vkDestroyImageView(c->device, H.src_view[i], NULL), H.src_view[i] = VK_NULL_HANDLE;
     for (int i = 0; i < SLOTS; i++)
         if (H.scene_view[i]) vkDestroyImageView(c->device, H.scene_view[i], NULL), H.scene_view[i] = VK_NULL_HANDLE;
+    for (int i = 0; i < SLOTS; i++)
+        if (H.fg_scene_view[i])
+            vkDestroyImageView(c->device, H.fg_scene_view[i], NULL), H.fg_scene_view[i] = VK_NULL_HANDLE;
     img_free(c, &H.out);
     img_free(c, &H.menu);
     if (H.enc) vkDestroyPipeline(c->device, H.enc, NULL);

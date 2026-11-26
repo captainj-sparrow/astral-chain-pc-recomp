@@ -522,10 +522,6 @@ msgctxt "UI_MENU_FRAMEGEN_NEEDS_TAA"
 msgid "needs an upscaler"
 msgstr "需要超分辨率"
 
-msgctxt "UI_MENU_FRAMEGEN_NO_HDR"
-msgid "not with HDR output yet"
-msgstr "暂不支持 HDR"
-
 msgctxt "UI_MENU_OUTPUT_RES_AUTO"
 msgid "Automatic"
 msgstr "自动"

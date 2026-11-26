@@ -1097,7 +1097,8 @@ int vk_ngx_fg_evaluate(VkCommandBuffer cb, void *feat, const VkFgEval *e) {
     p_setf(p, "DLSSG.CameraFar", f->far_z);
     p_setf(p, "DLSSG.CameraFOV", f->fov_y);
     p_setf(p, "DLSSG.CameraAspectRatio", f->rh ? (float)f->rw / (float)f->rh : 16.0f / 9.0f);
-    p_setu(p, "DLSSG.ColorBuffersHDR", 0);   // the 8-bit picture the game presents, and its scene in that range
+    // the 8-bit picture the game presents, or with HDR output its HDR10 encode (PQ code values, vk_dlssg.c)
+    p_setu(p, "DLSSG.ColorBuffersHDR", e->hdr ? 1u : 0u);
     p_setu(p, "DLSSG.DepthInverted", 0);     // 0 near .. 1 far
     p_setu(p, "DLSSG.CameraMotionIncluded", 1);
     p_setu(p, "DLSSG.Reset", e->reset ? 1u : 0u);

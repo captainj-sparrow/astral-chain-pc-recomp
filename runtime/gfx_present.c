@@ -621,8 +621,10 @@ void gfx_fit_rect(int cw, int ch, int dw, int dh, int out[4]) {
 }
 
 // vk_present_pre_record: set and taken on the present thread only (vk_backend.c present_main)
-static VkImage (*g_pre_record)(VkCommandBuffer cb, VkImage src);
-void vk_present_pre_record(VkImage (*fn)(VkCommandBuffer cb, VkImage src)) { g_pre_record = fn; }
+static VkImage (*g_pre_record)(VkCommandBuffer cb, VkImage src, unsigned slot, VkFormat *fmt);
+void vk_present_pre_record(VkImage (*fn)(VkCommandBuffer cb, VkImage src, unsigned slot, VkFormat *fmt)) {
+    g_pre_record = fn;
+}
 void vk_present_out_of_band(int on) {
     plat_rmutex_lock(&g_pl);
     g_blit_oob = on && vk_oob_present_queue() != VK_NULL_HANDLE;
@@ -690,9 +692,9 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
     uint64_t crumb = __atomic_load_n(&gfx_counters.frames, __ATOMIC_RELAXED);
     vk_crumb(cb, VK_CRUMB_PRESENT, crumb);
     if (g_pre_record && general) {   // frame generation (vk_dlssg.c): its evaluations, and the frame shown in src's place
-        VkImage (*fn)(VkCommandBuffer, VkImage) = g_pre_record;
+        VkImage (*fn)(VkCommandBuffer, VkImage, unsigned, VkFormat *) = g_pre_record;
         g_pre_record = NULL;
-        src = fn(cb, src);
+        src = fn(cb, src, slot, &fmt);
     }
     VkImage dst = g_sc_img[idx];
     sync_barrier(cb, dst, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_TRANSFER_BIT, 0,
@@ -709,9 +711,13 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
                      VK_ACCESS_2_TRANSFER_WRITE_BIT);
     }
     // Colour adjustment (AC_COLOR_*, vk_color.c), or on an HDR10 swapchain the PQ encode (vk_hdr.c; the adjustment is
-    // for SDR): a copy of the crop takes the game image's place below
-    VkImage graded = !general ? VK_NULL_HANDLE : g_sc_hdr ? vk_hdr_encode(cb, slot, src, fmt, rect)
-                                                         : vk_color_record(cb, slot, src, fmt, rect);
+    // for SDR): a copy of the crop takes the game image's place below. Frame generation's pictures on an HDR10
+    // swapchain hold PQ code values already (vk_dlssg.c encodes before NGX): they go out as they are.
+    int pq = general && g_sc_hdr && vk_dlssg_encoded(src);
+    if (pq) vk_hdr_set_scene(VK_NULL_HANDLE, VK_FORMAT_UNDEFINED);   // the encode that would have read it
+    VkImage graded = !general || pq ? VK_NULL_HANDLE
+                     : g_sc_hdr     ? vk_hdr_encode(cb, slot, src, fmt, rect)
+                                    : vk_color_record(cb, slot, src, fmt, rect);
     const int grect[4] = {0, 0, cw, ch};
     VkImage psrc = graded ? graded : src;
     VkFormat pfmt = graded ? VK_FORMAT_R16G16B16A16_SFLOAT : fmt;

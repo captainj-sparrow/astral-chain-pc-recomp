@@ -50,12 +50,14 @@ void vk_dlssg_collect(VkFgFrame *f);
 int vk_dlssg_begin(const VkFgFrame *f, VkImage win, VkFormat fmt, uint32_t w, uint32_t h, uint64_t period_ns);
 int vk_dlssg_end(void);
 VkImage vk_dlssg_image(int k);
-VkFormat vk_dlssg_format(void);
+VkFormat vk_dlssg_format(void);       // of vk_dlssg_image's images: the window texture's, or HDR10 (A2B10G10R10)
+// gfx_present.c: img is one of frame generation's HDR10 pictures (made with an HDR10 swapchain), which hold the
+// present's PQ encode already
+int vk_dlssg_encoded(VkImage img);
 void vk_dlssg_release(void);          // vk_dlaa_release, the device idle, before NGX shuts down
 // For the menu and the overlay: the multiplier in use ("2x" .. "6x") while generated frames were shown in the last
 // presents, else NULL. vk_dlssg_choice_state: 0 runs or can, 1 after a restart (NGX was not loaded at start), 2 not
-// here (no NVIDIA GPU or driver with it, its library missing, or it failed), 3 waits for a temporal upscaler, 4 not
-// with HDR output.
+// here (no NVIDIA GPU or driver with it, its library missing, or it failed), 3 waits for a temporal upscaler.
 const char *vk_dlssg_running(void);
 int vk_dlssg_choice_state(void);
 int vk_dlssg_max_multiplier(void);    // 2 .. 6, from NGX's MultiFrameCountMax; 0 before NGX answered or without it
@@ -71,6 +73,7 @@ typedef struct VkFgEval {
     int reset;
     VkImage ui_alpha;                      // AC_DLSSG_UI_ALPHA: the HUD's coverage (R8, w x h), or VK_NULL_HANDLE
     VkImageView ui_alpha_view;
+    int hdr;                               // the pictures are HDR10 (PQ code values): DLSSG.ColorBuffersHDR
 } VkFgEval;
 int vk_ngx_fg_caps(unsigned *max_count);   // 1: NGX is up and offers frame generation; *max_count its MultiFrameCountMax
 // uir: UI recomposition (DLSSG.UserInterfaceRecompositionEnabled): each evaluation gives the HUD's alpha (ui_alpha)
