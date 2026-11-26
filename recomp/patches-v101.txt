@@ -342,6 +342,15 @@ site fps60 main 49ed98 1e3e1001 @fn:rt_fps_neg_step_s1
 site fps60 main 49eed8 1e3e1001 @fn:rt_fps_neg_step_s1
 site fps60 main 49ef4c 1e3e1001 @fn:rt_fps_neg_step_s1
 # same form, not reached in the measured scene, left as is: ffd0 1145bc 1a8904 1b7854 1c0470 5d5d28 5d5ebc 5eada0 6c0f18 95b228 970fa4 97e218
+# cloth sway (main+0x556d10, the player's hair among it): the phase gain and wind push are per call; now times the step
+site fps60 main 556e14 1e200920 @fn:rt_fps_sway_s0      # fmul s0,s9,s0 -> s0 = s9 * s0 * step
+site fps60 main 556e84 4ea81d00 @fn:rt_fps_push_s0      # mov v0.16b,v8.16b -> s0 = s8 * step
+# time while paused: the clock-scale getter (main+0x91D6F0) and fixed 1.0 times are per call; now times the step
+site fps60 main 91d6f8 bd401d00 @fn:rt_fps_scale_s0       # ldr s0,[x8,#0x1c] -> s0 = scale * step
+site fps60 main 91d700 1e2e1000 @fn:rt_fps_step_s0        # fmov s0,#1.0 (no clock) -> s0 = step
+site fps60 main 3be5d0 1e2e1000 @fn:rt_fps_step_s0        # fmov s0,#1.0 (ignore-pause flag) -> s0 = step
+site fps60 main 443ef4 1e220800 @fn:rt_fps_talk_scale_s0  # fmul s0,s0,s2 -> s0 = scale * s2 * (ticks in a cutscene at 60, else step)
+# r2 bank of buffer counters (sub w8,w8,#1, no flags)
 site fps60 main 283044 51000508 @fn:rt_fps_sub_w8
 site fps60 main 283054 51000508 @fn:rt_fps_sub_w8
 site fps60 main 283064 51000508 @fn:rt_fps_sub_w8

@@ -64,6 +64,11 @@ uint64_t rt_fps_hs_w10w9(Cpu *c);   // subs w9,w10,#1 scaled (r5 second-tap); re
 uint64_t rt_fps_hs_w8w9(Cpu *c);    // subs w9,w8,#1 scaled; returns NZCV, updates x9
 void rt_fps_sector_str(Cpu *c);     // stick gesture sector stamp, only on frames with a whole tick
 void rt_fps_neg_step_s1(Cpu *c);    // s1 = -step (a float frame countdown's -1.0)
+void rt_fps_sway_s0(Cpu *c);        // cloth sway: s0 = s9 * s0 * step (a phase gain per call)
+void rt_fps_push_s0(Cpu *c);        // cloth sway: s0 = s8 * step (the velocity push per call)
+void rt_fps_scale_s0(Cpu *c);       // clock scale getter: s0 = [x8+0x1c] * step (a scale per call)
+void rt_fps_step_s0(Cpu *c);        // s0 = step (a fixed 1.0 time per call)
+void rt_fps_talk_scale_s0(Cpu *c);  // talk countdown: s0 = global clock scale * s2 * (ticks in a cutscene at 60, else step)
 void rt_fps_sub_w8(Cpu *c);         // sub w8,w8,#1 scaled (no flags), r2 bank of buffer counters
 void rt_fps_up_w9(Cpu *c);          // add w9,w9,#1 scaled (no flags), pad auto-repeat count
 void rt_fps_up_w8(Cpu *c);          // add w8,w8,#1 scaled (no flags), hitstop freeze phase count
