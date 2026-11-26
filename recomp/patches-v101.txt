@@ -316,6 +316,39 @@ site fps60 main 282fd0 71000529 @fnz:rt_fps_hs_w9   # +0x46B570
 site fps60 main 282fec 71000529 @fnz:rt_fps_hs_w9   # +0x46B590
 site fps60 main 2832e4 71000529 @fnz:rt_fps_hs_w9   # +0x46AE5C press-repeat window (5 frames)
 site fps60 main 2833a0 1e3e1001 @fn:rt_fps_neg_step_s1   # +0x46ADB4 countdown: fmov s1,#-1.0 -> s1 = -step
+# item button (main+0x323e60): a press sets two float countdowns to 9 frames (+0x1438 tap window, +0x143c menu delay),
+# each loses 1.0 a call, and the item menu opens when the menu delay runs out while the button is held; a release
+# while both are above 0 uses the item. At one call a frame the hold that opens the menu was 300 ms at 30 fps, 150 ms at
+# 60 and 75 ms at 120, so taps opened the menu at higher rates. Minus the step keeps both at nine 30 fps frames.
+site fps60 main 3242c0 1e3e1001 @fn:rt_fps_neg_step_s1   # +0x1438 tap window: fmov s1,#-1.0 -> s1 = -step
+site fps60 main 3242d8 1e3e1001 @fn:rt_fps_neg_step_s1   # +0x143c menu delay: fmov s1,#-1.0 -> s1 = -step
+# Float frame countdowns of the same form (`fmov s1,#-1.0; fadd s0,s0,s1; str s0`, then a test against 0 or a limit)
+# in functions that run once a frame in gameplay: counted with execution breakpoints at 60 fps, each was called 60
+# times a second (49e630 and 54c130 once per object, 16 and about 72 a frame). At one call a frame each ran out twice as
+# fast at 60 and four times as fast at 120; minus the step keeps it at its 30 fps length.
+site fps60 main 29d528 1e3e1001 @fn:rt_fps_neg_step_s1   # player +0x46ACC8, while flag bit 19 is set; tested against 25 and 10
+site fps60 main 2a96f8 1e3e1001 @fn:rt_fps_neg_step_s1   # player +0x46AE24
+site fps60 main 3273bc 1e3e1001 @fn:rt_fps_neg_step_s1   # player +0x46AD40, input update
+site fps60 main 3275c8 1e3e1001 @fn:rt_fps_neg_step_s1   # player +0x46AD48
+site fps60 main 331138 1e3e1001 @fn:rt_fps_neg_step_s1   # player +0x1424
+site fps60 main 331150 1e3e1001 @fn:rt_fps_neg_step_s1   # player +0x1428
+site fps60 main 3a71f0 1e3e1001 @fn:rt_fps_neg_step_s1   # camera +0x648
+site fps60 main 3fc640 1e3e1001 @fn:rt_fps_neg_step_s1   # main+0x3fbb00 countdown
+site fps60 main 4e60bc 1e3e1001 @fn:rt_fps_neg_step_s1   # +0xC0
+site fps60 main 54c15c 1e3e1001 @fn:rt_fps_neg_step_s1   # +0xE0, per object
+site fps60 main 5d742c 1e3e1001 @fn:rt_fps_neg_step_s1   # +0x84 in state 2, then +0x24 = 0
+site fps60 main 605f94 1e3e1001 @fn:rt_fps_neg_step_s1   # +0x84 in state 2, then +0x24 = 0
+site fps60 main 8ee914 1e3e1001 @fn:rt_fps_neg_step_s1   # global countdown (GOT 0xdc1150)
+site fps60 main 8eea14 1e3e1001 @fn:rt_fps_neg_step_s1   # global countdown (GOT 0xdc1140)
+site fps60 main 49e7bc 1e3e1001 @fn:rt_fps_neg_step_s1   # slot timers +0x80 .. +0x1D0, stride 0x38
+site fps60 main 49e8b0 1e3e1001 @fn:rt_fps_neg_step_s1
+site fps60 main 49ea50 1e3e1001 @fn:rt_fps_neg_step_s1
+site fps60 main 49eb4c 1e3e1001 @fn:rt_fps_neg_step_s1
+site fps60 main 49ed98 1e3e1001 @fn:rt_fps_neg_step_s1
+site fps60 main 49eed8 1e3e1001 @fn:rt_fps_neg_step_s1
+site fps60 main 49ef4c 1e3e1001 @fn:rt_fps_neg_step_s1
+# Same form, not reached in the scene measured (left as they are until one is): ffd0 1145bc 1a8904 1b7854 1c0470
+# 5d5d28 5d5ebc 5eada0 6c0f18 95b228 970fa4 97e218.
 # r2 bank of buffer counters (sub w8,w8,#1, no flags)
 site fps60 main 283044 51000508 @fn:rt_fps_sub_w8
 site fps60 main 283054 51000508 @fn:rt_fps_sub_w8
