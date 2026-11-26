@@ -352,9 +352,9 @@ static int core_allowed(const RtThread *t, int c) { return (int)((t->mask >> c) 
 // stretch of game code with neither keeps it (AC_CORE_DIAG: 0.5-1.1 ms of thread-time per frame, waits to 16 ms and
 // more). With it on, three parts, all of which MacNativeGames found necessary:
 // - The waiter interrupts the owner (plat_intr_stop) when it has waited AP_FIRST_NS, then every
-//   millisecond: if the owner's host rip is in the lifted modules' code (g_gen_lo..g_gen_hi), so not in a host call or
-//   SVC, and its host depth is 0 (not in game code a host call runs: hostfn.c rt_call, rt_original), it holds no host
-//   lock, so its rip is moved to kern_ap_stub, which saves every volatile register, gives the core up like a
+//   millisecond: if the owner's host rip is in lifted code (ap_in_lifted, the lifted function starts), so not in a host
+//   call or SVC, and its host depth is 0 (not in game code a host call runs: hostfn.c rt_call, rt_original), it holds
+//   no host lock, so its rip is moved to kern_ap_stub, which saves every volatile register, gives the core up like a
 //   checkpoint (kern_ap_yield) and jumps back. Otherwise it is only marked, as before.
 // - Priority inheritance (eff_prio): a thread owning a guest mutex counts at the priority of the best thread blocked on
 //   it, for granting, kicking, preempting and yielding. Without it MacNativeGames' game stopped at its first
@@ -371,9 +371,49 @@ static int core_allowed(const RtThread *t, int c) { return (int)((t->mask >> c) 
 static int g_ap = -1, g_ap_int;   // g_ap_int: interrupt owners (AC_ASYNC_PREEMPT=2: inheritance and disable only)
 static int g_ap_log;              // redirects logged so far (AP_LOG_N)
 #define AP_LOG_N 40
-static uintptr_t g_gen_lo, g_gen_hi;   // host code of the lifted modules: first and last function start
+static uintptr_t *ap_starts;   // this executable's lifted function starts, ascending, without repeats
+static int ap_nstarts, ap_nbands;   // their count, and the dense runs they fall in (see ap_in_lifted)
 static uint64_t g_ap_sent, g_ap_taken, g_ap_host, g_ap_pc, g_ap_deferred, g_ap_fail, g_ap_spin_ok;
 void kern_ap_stub(void);
+
+// A gap of more than this between two adjacent lifted function starts is not inside a lifted function: it is another
+// part of the executable. The same margin answers the other question, whether a rip is past the end of the function
+// whose start precedes it.
+//
+// Measured on the 1.0.1 link map (--Map, tools/build_game.py). A plain build places the runtime above the lifted
+// code, so one range answers both questions and the widest gap between two adjacent starts is 283 KiB (one lifted
+// function). The build the installer and the release use (--release-opt: PGO and ThinLTO over the generated code)
+// splits the lifted code into per-function hot and cold sections, which the linker sorts around the runtime's plain
+// .text: the lifted code falls in two runs 0x1000-0x1208790 and 0x1551e60-0x3851f90, the widest gap that is still one
+// lifted function is 290 KiB, and the run the linker puts between the two - the runtime, its static libraries and the
+// C++ support - is 3.29 MiB wide. Every one of that map's 1966 non-lifted code symbols falls in that run and none in
+// a gap of 1 MiB or less. 1 MiB is 3.6 times the widest function and 3.3 times narrower than the run, so the test
+// names all of the runtime's code host code. It gives up at the end of a run, where no start can tell the end of a
+// lifted function from the start of what follows: the tail of the last lifted function before a gap, and everything
+// past the last start (a plain build begins the runtime 379 KiB after it), count as host code. That only declines
+// interruptions, of one function per run. A function wider than 1 MiB would be missed the same way; the widest of
+// 1.0.1 is a tenth of it.
+#define AP_HOLE (1u << 20)
+
+static int ap_cmp(const void *a, const void *b) {
+    uint64_t x = *(const uint64_t *)a, y = *(const uint64_t *)b;
+    return x < y ? -1 : x > y;
+}
+
+// Names whether rip is lifted code, which is what may be interrupted: within AP_HOLE past a lifted function start,
+// with no later start between, and not in the part of that run that reaches into a gap of more than AP_HOLE.
+static int ap_in_lifted(uint64_t rip) {
+    int l = 0, h = ap_nstarts - 1, i = -1;   // the last start at or below rip
+    while (l <= h) {
+        int m = l + (h - l) / 2;
+        if (ap_starts[m] <= rip) { i = m; l = m + 1; } else h = m - 1;
+    }
+    // Past the last start there is no next start to bound the function's end with, and a build that places the
+    // runtime after the lifted code has it start within AP_HOLE of that last start: read it as host code.
+    if (i < 0 || i + 1 >= ap_nstarts || rip - (uint64_t)ap_starts[i] > AP_HOLE) return 0;
+    if ((uint64_t)ap_starts[i + 1] - (uint64_t)ap_starts[i] > AP_HOLE) return 0;
+    return 1;
+}
 
 static void ap_init(void) {
     if (g_ap >= 0) return;
@@ -383,31 +423,63 @@ static void ap_init(void) {
     if (g_ap) {
         RtModule m[16];
         int n = rt_linked_modules(m, 16);
-        uintptr_t lo = UINTPTR_MAX, hi = 0;
+        uint64_t total = 0;
+        for (int i = 0; i < n; i++) total += m[i].count;
+        uintptr_t *starts = total ? malloc(total * sizeof *starts) : NULL;
+        if (total && !starts) rt_fatal("kernel: out of memory for the lifted function starts (%llu)",
+                                       (unsigned long long)total);
+        int cnt = 0;
         for (int i = 0; i < n; i++)
-            for (uint64_t k = 0; k < m[i].count; k++) {
-                uintptr_t f = (uintptr_t)m[i].fns[k];
-                if (f < lo) lo = f;
-                if (f > hi) hi = f;
-            }
-        const uintptr_t host[] = {(uintptr_t)kern_ap_stub, (uintptr_t)kern_checkpoint, (uintptr_t)rt_svc,
-                                  (uintptr_t)rt_dispatch, (uintptr_t)rt_call};
-        int bad = !n || lo >= hi;
-        for (unsigned i = 0; i < sizeof host / sizeof *host; i++) bad |= host[i] >= lo && host[i] <= hi;
-        if (bad) {
-            rt_log("kernel: asynchronous preemption off: the lifted code range %#llx-%#llx holds host code",
-                   (unsigned long long)lo, (unsigned long long)hi);
-            g_ap = 0;
+            for (uint64_t k = 0; k < m[i].count; k++)
+                starts[cnt++] = (uintptr_t)m[i].fns[k];
+        if (cnt < 2) {
+            // Off means off: g_ap_int too, or ap_try would still interrupt owners (it runs on g_ap_int alone).
+            free(starts);
+            g_ap = g_ap_int = 0;
+            rt_log("kernel: asynchronous preemption off: no lifted function table to tell lifted code from host code");
         } else {
-            g_gen_lo = lo;
-            g_gen_hi = hi;
-            kern_host_track = 1;
+            // The tables are in guest address order; the host layout is the linker's. A build that thunks two guest
+            // functions to one lifted function repeats its start, which would read as a gap of nil.
+            // 1.7 ms for 61 454 starts on the 1.0.1 build (a 16-thread desktop CPU, at start, once).
+            qsort(starts, cnt, sizeof *starts, ap_cmp);
+            int u = 0;
+            for (int i = 0; i < cnt; i++)
+                if (!u || starts[i] != starts[u - 1]) starts[u++] = starts[i];
+            cnt = u;
+            ap_starts = starts;
+            ap_nstarts = cnt;
+            ap_nbands = 1;
+            for (int i = 1; i < cnt; i++)
+                if ((uint64_t)starts[i] - (uint64_t)starts[i - 1] > AP_HOLE) ap_nbands++;
+            static const char *const hn[] = {"kern_ap_stub", "kern_checkpoint", "rt_svc", "rt_dispatch", "rt_call"};
+            const uintptr_t host[] = {(uintptr_t)kern_ap_stub, (uintptr_t)kern_checkpoint, (uintptr_t)rt_svc,
+                                      (uintptr_t)rt_dispatch, (uintptr_t)rt_call};
+            int bad = -1;
+            for (unsigned i = 0; i < sizeof host / sizeof *host; i++)
+                if (ap_in_lifted((uint64_t)host[i])) { bad = (int)i; break; }
+            if (bad >= 0) {
+                // The runtime's own code reads as lifted code, so the test cannot be trusted: without it an owner
+                // stopped inside one of these would be moved to kern_ap_stub as if it ran game code. Everything goes
+                // off, g_ap_int and the table with it: ap_try runs on g_ap_int alone and would otherwise still
+                // interrupt owners, with kern_host_track never set (the build before this one left g_ap_int on with an
+                // empty range, so its waiters suspended and resumed owners every millisecond to no effect).
+                rt_log("kernel: asynchronous preemption off: %s at exe+%#llx reads as lifted code (%d ranges of %d "
+                       "starts, gaps over %d KiB are other code)", hn[bad],
+                       (unsigned long long)(host[bad] - plat_exe_base()), ap_nbands, ap_nstarts, AP_HOLE / 1024);
+                g_ap = g_ap_int = 0;
+                free(ap_starts);
+                ap_starts = NULL;
+                ap_nstarts = ap_nbands = 0;
+            } else {
+                kern_host_track = 1;
+            }
         }
     }
     rt_log("kernel: asynchronous preemption of virtual cores %s, priority inheritance and preemption disable %s; lifted "
-           "code exe+%#llx-exe+%#llx", g_ap_int ? "on" : "off", g_ap ? "on (AC_ASYNC_PREEMPT=0 turns all off)" : "off",
-           (unsigned long long)(g_gen_lo ? g_gen_lo - plat_exe_base() : 0),
-           (unsigned long long)(g_gen_hi ? g_gen_hi - plat_exe_base() : 0));
+           "code: %d ranges of %d starts, exe+%#llx-exe+%#llx",
+           g_ap && g_ap_int ? "on" : "off", g_ap ? "on (AC_ASYNC_PREEMPT=0 turns all off)" : "off", ap_nbands,
+           ap_nstarts, (unsigned long long)(ap_nstarts ? ap_starts[0] - plat_exe_base() : 0),
+           (unsigned long long)(ap_nstarts ? ap_starts[ap_nstarts - 1] - plat_exe_base() : 0));
 }
 
 // Horizon's priority inheritance: o counts at the priority of the best thread blocked on a guest mutex it owns (the
@@ -631,7 +703,7 @@ static int ap_try(RtThread *o, const RtThread *w) {
     }
     int r = AP_RETRY;
     uint64_t to = 0;
-    if (rip < g_gen_lo || rip > g_gen_hi)
+    if (!ap_in_lifted(rip))
         g_ap_pc++;
     else if (__atomic_load_n(&o->host_depth, __ATOMIC_RELAXED) > 0)
         g_ap_host++;

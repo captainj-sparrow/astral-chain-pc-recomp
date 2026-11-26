@@ -1,6 +1,6 @@
 # Architecture
 
-How the Switch build of *Tears of the Kingdom* becomes a native Windows x86-64 program. The upstream projects it builds on are listed under Credits in the [README](../README.md).
+How the Switch build of *Astral Chain* 1.0.1 becomes a native Windows x86-64 program. The upstream projects it builds on are listed under Credits in the [README](../README.md).
 
 ## Starting points
 
@@ -158,7 +158,22 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   milliseconds with neither (`AC_CORE_DIAG=1` measures it): a waiter that has spun 250 us suspends the holder and,
   if its host rip is in lifted code (not inside a host call or SVC) at host depth 0 (not in guest code that a host
   function runs through `rt_call` or `rt_original`, the only ways host code may enter guest code), moves it to `kern_ap_stub`, which
-  saves the volatile registers and gives the core up there. A holder of a guest mutex counts at the priority of its
+  saves the volatile registers and gives the core up there. Which host addresses are game code comes from the lifted
+  function starts and the gaps between them (`ap_in_lifted`), not from the lowest and highest start: the installer and
+  the release compile the generated code with PGO and ThinLTO (`--release-opt`), which splits it into per-function hot
+  and cold sections that the linker sorts around the runtime's plain `.text`, so the runtime and its static libraries
+  fall *between* two runs of lifted code (the 1.0.1 release link map: starts in `exe+0x1000-exe+0x1208790` and
+  `exe+0x1551e60-exe+0x3851f90`, 3.29 MiB of runtime between them) and a lowest-to-highest range reads all of that
+  runtime as game code. In the same map the widest gap that is still one lifted function is 290 KiB, the 1 MiB margin
+  `ap_in_lifted` uses is 3.6 times it, and every one of the map's 1966 non-lifted code symbols falls in the runtime
+  run, so the test names the runtime's own code (`kern_ap_stub`, `kern_checkpoint`, `rt_svc`, `rt_dispatch`,
+  `rt_call`) host code on both layouts. A lowest-to-highest range decided it before, which turned asynchronous
+  preemption off in every build the installer and the release made and left it on in the development builds - and
+  "off" there switched off only the inheritance, the preemption disable and the range, not the interruption: those
+  builds' waiters still suspended and resumed the owner every millisecond and then declined every one (a player's log:
+  `virtual cores on ... lifted code exe+0-exe+0`). Off now switches off all of it, the interruption included, and the
+  log line names what it found (`lifted code: 2 ranges of 61454 starts` on the release link, 1 range on the plain
+  one). A holder of a guest mutex counts at the priority of its
   best waiter, and one inside an SDK spin lock (TLR+0x100 `disable_count`) is not preempted: its interrupt flag is set
   and the switch happens at SVC 0x36. `AC_ASYNC_PREEMPT=2` keeps those two without interrupting. The interruption is
   Win32 (SuspendThread, SetThreadContext); another host needs a signal handler there, as MacNativeGames has.
