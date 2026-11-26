@@ -37,7 +37,9 @@ Report problems as issues, following [CONTRIBUTING.md](CONTRIBUTING.md).
 - Optional pause while the game's window is out of focus (the menu's Game tab, "Keep running out of focus")
 - No-HUD mode for screenshots and videos: F12 (or the menu's Game tab) hides the gauges, map, prompts and markers
   during play and shows them again; the menus stay
-- In-game menu, overlay and setup installer in English, Italian, Russian, Brazilian Portuguese and Simplified Chinese
+- In-game menu, overlay and setup installer in English, Italian, Russian, Brazilian Portuguese and Simplified Chinese;
+  the menu's translations are plain gettext files in `lang/` that anyone can add to (docs/building.md, "Texts and
+  translations")
 - Keyboard, mouse and gamepad, with remapping, rumble and gyro
 - Xbox and PlayStation button prompts, each with its matching button layout (PlayStation mod from https://gamebanana.com/mods/604666)
 - Shaders prepared at install instead of during play
@@ -88,3 +90,9 @@ Astral Chain Recomp is an independent, non-commercial fan project, not affiliate
 
 [docs/building.md](docs/building.md) lists the toolchain and the steps. Everything the build writes stays under
 `build\` and `generated\`, which git ignores; run `tools/check_content.py` before a commit.
+
+The menu, overlay and keyboard texts are English in `runtime/ui_text.c` plus one gettext catalog per language,
+`lang/<tag>.po`. `tools/build_game.py` updates the catalogs against the English, compiles them into `lang/*.mo`
+(ignored by git) and copies those beside the executable, which reads them at start: a new string is an id in
+`runtime/ui_text.h` and its English in `runtime/ui_text.c`, and a translation is an edit of a `.po` file. The details
+are in [docs/building.md](docs/building.md), "Texts and translations".

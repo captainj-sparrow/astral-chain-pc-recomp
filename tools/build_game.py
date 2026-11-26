@@ -53,8 +53,10 @@ Split build. --make-runtime-lib compiles only runtime/ into <out>/libacrt.a (wha
 then compiles only the generated C and the install-time files (modules.c and INSTALL_SIDE, which bake the player's
 game hashes and version in) and links them with that library. The library holds no game-derived data.
 
-Before compiling, tools/ui_text_catalogs.py regenerates runtime/ui_text_keys.inc and lang/ and validates them; a
-release build does this once before calling build_game.py and passes --skip-ui-catalogs to its internal builds.
+Before compiling, tools/ui_text_catalogs.py updates runtime/ui_text_keys.inc, lang/messages.pot and lang/*.po against
+the English text (a changed English source marks its translations fuzzy, a new id is added untranslated: neither stops
+the build), compiles lang/*.mo and copies them into <out>/lang beside the executable. A release build does this once
+before calling build_game.py and passes --skip-ui-catalogs to its internal builds.
 
 Profile-guided optimisation and ThinLTO, generated code only (the runtime keeps its flags). --pgo-generate DIR builds
 a game that writes a .profraw into DIR when it exits (plat_exit calls the profile runtime's writer: _exit,
@@ -823,12 +825,17 @@ def pgo_profile(arg, version, out):
     return dst
 
 
-def refresh_ui_catalogs(runtime):
-    script = Path(__file__).resolve().parent / 'ui_text_catalogs.py'
-    if not script.is_file() or not (runtime / 'ui_text.c').is_file() or not (runtime / 'ui_text.h').is_file():
+def refresh_ui_catalogs(runtime, out):
+    """Updates and compiles lang/*.po of the checkout runtime/ belongs to (tools/ui_text_catalogs.py) and copies the
+    .mo files into <out>/lang, where the executable reads them. Nothing to do for a release's runtime/ (headers and
+    libacrt.a only): the release ships its compiled catalogs and the installer copies them. Returns the tool's code."""
+    if not (runtime / 'ui_text.c').is_file() or not (runtime / 'ui_text.h').is_file():
         return 0
     import ui_text_catalogs
-    return ui_text_catalogs.refresh(runtime.parent)
+    code = ui_text_catalogs.refresh(runtime.parent)
+    if not code:
+        ui_text_catalogs.install(ui_text_catalogs.paths_for(runtime.parent), out / 'lang')
+    return code
 
 
 def main():
@@ -1003,7 +1010,7 @@ def main():
     global RUNTIME
     RUNTIME = (args.runtime or RUNTIME).resolve()
     if not args.skip_ui_catalogs:
-        code = refresh_ui_catalogs(RUNTIME)
+        code = refresh_ui_catalogs(RUNTIME, out)
         if code:
             sys.exit(code)
     stale = stale_shaders(RUNTIME)

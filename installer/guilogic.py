@@ -128,13 +128,13 @@ def default_game_language(ui):
 
 # Windows primary language ids (the low 10 bits of a LANGID) and the game language of each, for system_game_language.
 # Chinese and Korean are left out: their game text draws with the Switch shared fonts (ini.NEED_SHARED_FONTS).
-PRIMARY_GAME_LANGUAGES = {0x09: 'en-US', 0x0c: 'fr', 0x07: 'de', 0x10: 'it', 0x0a: 'es-419', 0x13: 'nl',
-                          0x16: 'pt-BR', 0x19: 'ru', 0x11: 'ja'}
+PRIMARY_GAME_LANGUAGES = {0x09: 'en-US', 0x0c: 'fr', 0x07: 'de', 0x10: 'it', 0x0a: 'es-419', 0x13: 'nl', 0x16: 'pt',
+                          0x19: 'ru', 0x11: 'ja'}
 # The whole LANGIDs whose region has a game language of its own
 LANGID_GAME_LANGUAGES = {0x0809: 'en-GB', 0x0c0c: 'fr-CA', 0x040a: 'es', 0x0c0a: 'es', 0x0416: 'pt-BR'}
 # The same for a POSIX locale name, lower case with '_': the longest prefix wins
 LOCALE_GAME_LANGUAGES = {'en_gb': 'en-GB', 'en': 'en-US', 'fr_ca': 'fr-CA', 'fr': 'fr', 'de': 'de', 'it': 'it',
-                         'es_es': 'es', 'es': 'es-419', 'nl': 'nl', 'pt_br': 'pt-BR', 'pt': 'pt-BR', 'ru': 'ru',
+                         'es_es': 'es', 'es': 'es-419', 'nl': 'nl', 'pt_br': 'pt-BR', 'pt': 'pt', 'ru': 'ru',
                          'ja': 'ja'}
 
 

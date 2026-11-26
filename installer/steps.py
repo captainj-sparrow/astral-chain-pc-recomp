@@ -115,6 +115,7 @@ def catalog_files(layout):
 
 
 def catalogs_current(ctx):
+    """1 when the install folder's lang/ holds every compiled text catalog of the release, byte for byte."""
     dst = ctx.dest / 'lang'
     for src in catalog_files(ctx.layout):
         target = dst / src.name
@@ -124,6 +125,10 @@ def catalogs_current(ctx):
 
 
 def copy_catalogs(ctx):
+    """The release's compiled text catalogs (lang/*.mo, tools/ui_text_catalogs.py) into the install folder's lang/,
+    where astralchain.exe reads them at start (runtime/ui_text.c). Files the player added there stay. Cleanup runs it
+    on every install and update: a few hundred KiB, so a release that only fixes a translation costs no step of its
+    own (tying it to Prepare would rerun the shader preparation for it)."""
     files = catalog_files(ctx.layout)
     if not files:
         return
@@ -940,14 +945,14 @@ class Prepare(Step):
         xlate_id = layout.xlate.with_suffix('.id')
         tools = [layout.tools / n for n in ('prepare_shaders.py', 'shader_census.py', 'pack_shader_cache.py')]
         # not the compile key: a rebuild for the mods' code cheats keeps the prepared shaders
-        return fingerprint('prepare-3', ctx.keys['extract'], runtime_key(ctx), layout.xlate, xlate_id,
-                           layout.shader_answers, layout.lang, *tools)
+        return fingerprint('prepare-2', ctx.keys['extract'], runtime_key(ctx), layout.xlate, xlate_id,
+                           layout.shader_answers, *tools)
 
     def current(self, ctx, record):
         dest = ctx.dest
         xlate = dest / ctx.layout.xlate.name
         return ((dest / 'shader-prepared.bin').is_file() and (dest / 'shader-cache' / 'shader-cache.pack').is_file()
-                and xlate.is_file() and file_sha256(xlate) == record.get('xlate_sha256') and catalogs_current(ctx))
+                and xlate.is_file() and file_sha256(xlate) == record.get('xlate_sha256'))
 
     def run(self, ctx):
         layout, rep, dest = ctx.layout, ctx.reporter, ctx.dest
@@ -970,7 +975,6 @@ class Prepare(Step):
                 raise InstallError('prepare.xlate_in_use', path=str(xlate.with_suffix('.id'))) from None
         else:
             remove(xlate.with_suffix('.id'))
-        copy_catalogs(ctx)
 
         skipped = [0]
 
@@ -1023,6 +1027,11 @@ class Cleanup(Step):
             install_dlcs(ctx.layout.root / 'dlc', dest / 'dlc')
         except OSError as e:
             rep.warning('warn.dlc_failed', detail=str(e))
+        # The menu's and the keyboard's languages (runtime/ui_text.c). A failure only warns: the game runs in English.
+        try:
+            copy_catalogs(ctx)
+        except OSError as e:
+            rep.warning('warn.lang_failed', detail=str(e))
         rep.progress('cleanup', 'temp', force=True)
         for stale in dest.glob('update-merge-*'):
             remove(stale)

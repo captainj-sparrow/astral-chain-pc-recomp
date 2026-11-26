@@ -129,7 +129,7 @@ class UiCatalogTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_prepare_copies_catalogs_and_keeps_player_files(self):
+    def test_cleanup_copies_catalogs_and_keeps_player_files(self):
         self.assertFalse(steps.catalogs_current(self.ctx))
         steps.copy_catalogs(self.ctx)
         self.assertTrue(steps.catalogs_current(self.ctx))
@@ -327,10 +327,6 @@ class IniTest(unittest.TestCase):
         self.assertEqual(ini.get_language(out), 'zh-Hans')
         self.assertEqual(ini.get_language(ini.set_language(out, 'zh-TW')), 'zh-Hant')
 
-    def test_plain_portuguese_is_written_as_pt_br(self):
-        self.assertEqual(ini.canonical_language('pt'), 'pt-BR')
-        self.assertEqual(ini.get_language(ini.set_language(self.EXAMPLE, 'pt')), 'pt-BR')
-
     def test_write_keeps_user_lines(self):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
@@ -363,7 +359,8 @@ class CleanupTest(unittest.TestCase):
         self.ctx = SimpleNamespace(reporter=Reporter(out=io.StringIO(), log_path=base / 'x.log'), dest=self.dest,
                                    temp=temp, cache=self.dest / 'build-cache', lang='en-US', state={},
                                    layout=SimpleNamespace(ini_example=ROOT / 'astralchain.ini.example', dev=False,
-                                                          python=base / 'python' / 'python.exe', root=base / 'release'))
+                                                          python=base / 'python' / 'python.exe', root=base / 'release',
+                                                          lang=base / 'release' / 'lang'))
         self.saved = steps.expected_game
         steps.expected_game = lambda ctx: self.expected
 
@@ -390,6 +387,13 @@ class CleanupTest(unittest.TestCase):
         lines = (self.dest / 'build-cache' / 'rebuild.txt').read_text(encoding='utf-8').splitlines()
         self.assertEqual(lines[1:], ['-c', steps.REBUILD_BOOT, str(self.ctx.layout.root), '--root',
                                      str(self.ctx.layout.root), '--rebuild', str(self.dest)])
+
+    def test_copies_the_release_catalogs(self):
+        rel = self.ctx.layout.lang
+        rel.mkdir(parents=True)
+        (rel / 'it.mo').write_bytes(b'it')
+        self.assertEqual(self.run_cleanup(), 'ok')
+        self.assertEqual((self.dest / 'lang' / 'it.mo').read_bytes(), b'it')
 
     def test_installs_the_release_dlcs_and_keeps_the_players(self):
         rel = self.ctx.layout.root / 'dlc'
@@ -714,11 +718,11 @@ class AutoLanguageTest(unittest.TestCase):
     def test_the_system_language_maps_to_a_language_of_the_game(self):
         from installer.guilogic import game_language_for_langid, game_language_for_locale
         langids = {0x040c: 'fr', 0x0c0c: 'fr-CA', 0x0407: 'de', 0x0410: 'it', 0x0c0a: 'es', 0x080a: 'es-419',
-                   0x0413: 'nl', 0x0416: 'pt-BR', 0x0816: 'pt-BR', 0x0419: 'ru', 0x0411: 'ja', 0x0409: 'en-US',
+                   0x0413: 'nl', 0x0416: 'pt-BR', 0x0816: 'pt', 0x0419: 'ru', 0x0411: 'ja', 0x0409: 'en-US',
                    0x0809: 'en-GB', 0x0804: 'en-US', 0x0412: 'en-US', 0x041f: 'en-US'}
         self.assertEqual({k: game_language_for_langid(k) for k in langids}, langids)
         locales = {'fr_FR.UTF-8': 'fr', 'fr_CA.UTF-8': 'fr-CA', 'de_AT': 'de', 'es_ES.UTF-8': 'es', 'es_MX': 'es-419',
-                   'pt_BR.UTF-8': 'pt-BR', 'pt_PT': 'pt-BR', 'en_GB.UTF-8': 'en-GB', 'en_US.UTF-8': 'en-US',
+                   'pt_BR.UTF-8': 'pt-BR', 'pt_PT': 'pt', 'en_GB.UTF-8': 'en-GB', 'en_US.UTF-8': 'en-US',
                    'ja_JP.eucJP': 'ja', 'zh_CN.UTF-8': 'en-US', 'ko_KR': 'en-US', 'C': 'en-US', '': 'en-US',
                    'ru_RU@euro': 'ru', 'nl-NL': 'nl'}
         self.assertEqual({k: game_language_for_locale(k) for k in locales}, locales)

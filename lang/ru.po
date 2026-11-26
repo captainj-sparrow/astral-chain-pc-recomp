@@ -418,8 +418,8 @@ msgid "A temporal upscaler in place of the game's anti-aliasing: smoother edges 
 msgstr "Временной апскейлер вместо сглаживания игры: ровнее края и меньше мерцания, а в режиме ниже «Родного» — больше кадров в секунду. NVIDIA DLSS нужна видеокарта NVIDIA RTX и nvngx_dlss.dll рядом с astralchain.exe, Intel XeSS — современная видеокарта и libxess.dll рядом с astralchain.exe; AMD FSR 3 работает на любой видеокарте, AMD FSR 4 — на Radeon RX 6000 и новее. «Автоматически» берёт DLSS, где он может работать, иначе FSR 3. DLSS, XeSS и FSR 4, выбранные здесь, действуют после перезапуска. Интерфейс не затрагивается."
 
 msgctxt "UI_MENU_UPSCALING_DESC_OTHER"
-msgid "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less shimmer, and with a mode below Native more frames per second. AMD FSR 3 runs on any GPU, AMD FSR 4 on a Radeon RX 6000 or newer; Automatic is FSR 3 here (NVIDIA DLSS and Intel XeSS are Windows only). FSR 4 chosen here takes effect after a restart. The HUD is not touched."
-msgstr "Временной апскейлер вместо сглаживания игры: ровнее края и меньше мерцания, а в режиме ниже «Родного» — больше кадров в секунду. AMD FSR 3 работает на любой видеокарте, AMD FSR 4 — на Radeon RX 6000 и новее; «Автоматически» здесь — FSR 3 (NVIDIA DLSS и Intel XeSS — только в Windows). FSR 4, выбранный здесь, действует после перезапуска. Интерфейс не затрагивается."
+msgid "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less shimmer, and with a mode below Native more frames per second. NVIDIA DLSS needs an NVIDIA RTX GPU and libnvidia-ngx-dlss.so next to astralchain, AMD FSR 3 runs on any GPU, AMD FSR 4 on a Radeon RX 6000 or newer; Automatic takes DLSS where it can run and FSR 3 elsewhere (Intel XeSS is Windows only). DLSS and FSR 4 chosen here take effect after a restart. The HUD is not touched."
+msgstr "Временной апскейлер вместо сглаживания игры: ровнее края и меньше мерцания, а в режиме ниже «Родного» — больше кадров в секунду. NVIDIA DLSS нужна видеокарта NVIDIA RTX и libnvidia-ngx-dlss.so рядом с astralchain, AMD FSR 3 работает на любой видеокарте, AMD FSR 4 — на Radeon RX 6000 и новее; «Автоматически» берёт DLSS, где он может работать, иначе FSR 3 (Intel XeSS — только в Windows). DLSS и FSR 4, выбранные здесь, действуют после перезапуска. Интерфейс не затрагивается."
 
 msgctxt "UI_MENU_UPSCALING_OFF"
 msgid "Off"
@@ -1274,8 +1274,8 @@ msgid "Quick-select."
 msgstr "Быстрый выбор."
 
 msgctxt "UI_BIND_DESC_MOVE"
-msgid "Moves Link like the left stick. The controller's left stick always works too."
-msgstr "Двигает Линка, как левый стик. Левый стик контроллера тоже всегда работает."
+msgid "Moves your character like the left stick. The controller's left stick always works too."
+msgstr "Двигает персонажа, как левый стик. Левый стик контроллера тоже всегда работает."
 
 msgctxt "UI_BIND_DESC_CAMERA"
 msgid "Turns the camera like the right stick. The mouse and the controller's right stick always work too."
@@ -2172,4 +2172,3 @@ msgstr "не поддерживается"
 msgctxt "UI_MENU_CHEAT_UNSUPPORTED_DESC"
 msgid "This cheat cannot be used with this version of the game:"
 msgstr "Этот чит нельзя использовать с этой версией игры:"
-

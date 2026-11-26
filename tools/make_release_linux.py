@@ -787,6 +787,7 @@ def prove(out, cpu='v3'):
     for f in ('ac_xlate', 'ac_xlate.id'):
         shutil.copyfile(out / 'bin' / f, chk / f)
     os.chmod(chk / 'ac_xlate', 0o755)
+    mr.copy_catalogs(out / 'lang', chk / 'lang')   # the compiled text catalogs, where the installer puts them
     needed = subprocess.run(['readelf', '-d', str(chk / 'astralchain')], capture_output=True, text=True).stdout
     print('prove: needs', ', '.join(re.findall(r'\[(lib[^\]]+)\]', needed)))
     glibc = sorted(set(re.findall(r'GLIBC_(\d+\.\d+)', subprocess.run(['readelf', '-V', str(chk / 'astralchain')],

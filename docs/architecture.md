@@ -143,14 +143,19 @@ MacNativeGames cannot run on x86-64 as is: its CPU path executes ARM64 code nati
   built: the pieced frames on the host, which would need a host stream per guest stream.
 - Settings and menu: every key with its default is in one table (`cfg.c`), read from `astralchain.ini` and `AC_*`
   variables and written back when the in-game menu changes it. The menu and the performance overlay are Dear ImGui,
-  drawn into the swapchain image (`runtime/ui/`). Their text comes from `lang/*.mo` catalogs compiled from entries whose
-  `msgctxt` is the stable id in `ui_text.h` and whose `msgid` is the English source. English is built in as the final
-  fallback, so no `en.mo` is shipped, and `pt` uses the `pt-BR` catalog. A new compiled language needs no rebuild.
-  `tools/ui_text_catalogs.py` checks the `lang/*.po` sources against `messages.pot` generated from the compiled English,
-  validates contexts, English sources, metadata, formats and lengths, and compiles deterministic `.mo` files the runtime
-  reads. The `.mo` files are local build outputs. `build_game.py` and the release builders run it automatically. Fonts
-  named by a catalog's
-  `X-Astral-Font-Lang` header come from a system font (`plat_font_path`) merged into the font atlas.
+  drawn into the swapchain image (`runtime/ui/`). Their English text is compiled in (`ui_text.c`, the fallback of
+  every id); every other language is a gettext catalog, `lang/<tag>.po` in the repository and `lang/<tag>.mo` beside
+  the executable, read once at start (`msgctxt` the id, `msgid` the English source, `msgstr` the translation). Menu
+  catalogs (Italian, Russian, Brazilian Portuguese, Simplified Chinese) hold every id; keyboard catalogs (Japanese,
+  French, German, Spanish, Dutch, Portugal's Portuguese, Traditional Chinese, Korean) hold the game's name-entry
+  keyboard only. An entry counts only when its `msgid` is the build's English and the runtime's checks pass (UTF-8,
+  the English printf conversions, the keyboard's and the description pane's lengths), so a catalog made for older
+  English or a player's own file cannot show a stale or unsafe string. `tools/ui_text_catalogs.py`, which
+  `build_game.py` and the release builders run, merges the catalogs with the English as gettext's msgmerge does (a
+  changed source goes fuzzy, a new id comes in untranslated) and compiles the `.mo` files; docs/building.md "Texts and
+  translations" has the workflow. The Japanese, Korean and Chinese glyphs come from a system font (Microsoft YaHei and
+  the like, `plat_font_path`) merged into the font atlas, for the language names and for each catalog that names one
+  in its `X-Astral-Font-Lang` header.
 - OS calls the host makes go through `runtime/platform/` (`platform.h`, `win32.c`), so a Linux or macOS host adds one file instead of touching the rest. The split is not finished: `tools/check_platform.py` lists the Win32 uses left in the other files.
 
 #### Threads and cores

@@ -1,117 +1,111 @@
-"""Generate and check the external catalogs of runtime/ui_text.c.
+"""Generate, update and check the external text catalogs of runtime/ui_text.c (lang/*.po -> lang/*.mo).
 
-    python tools/ui_text_catalogs.py
-    python tools/ui_text_catalogs.py --check
-    python tools/ui_text_catalogs.py --root /path/to/checkout
+    python tools/ui_text_catalogs.py            update the catalogs and compile them (build_game.py runs this)
+    python tools/ui_text_catalogs.py --check    validate the committed files without writing anything
+    python tools/ui_text_catalogs.py --root DIR another checkout
 
-The first form rebuilds runtime/ui_text_keys.inc, lang/messages.pot and lang/*.mo from the compiled English
-fallback in runtime/ui_text.c and the lang/*.po files present in the checkout. PO and POT entries use msgctxt for the
-stable id and msgid for the English source; msgstr holds the translation. English is built in, so no en.po is written;
-pt uses pt-BR. The second validates the source files against the enum in runtime/ui_text.h and any generated MO files.
+The English text is compiled into the runtime (text_en in runtime/ui_text.c) and is the fallback of every id; the ids
+are the UiTextId enum of runtime/ui_text.h. Each lang/<tag>.po is one language: msgctxt is the id, msgid the English
+source, msgstr the translation. The runtime reads lang/<tag>.mo, which this tool compiles; the .mo files are build
+outputs (.gitignore), never committed.
+
+An update works like gettext's msgmerge, so that changing the English text never stops a build:
+- runtime/ui_text_keys.inc (the id names the runtime matches msgctxt against) and lang/messages.pot (the template a
+  new language starts from) are written from the enum and the English text;
+- an entry whose English source changed keeps its translation, marked fuzzy with the old source on a `#|` line: the
+  .mo leaves it out, so the menu shows the new English until a translator checks it and removes the flag;
+- an id new in the enum is added with an empty msgstr (English shows until it is translated);
+- an id gone from the enum is dropped; translator comments (`#`, `#.`) stay with their entry.
+A catalog that holds only the software keyboard ids (UI_SWKBD_*) is a keyboard catalog: the game's name-entry keyboard
+uses it in that game language, and the menu does not offer it. Every other catalog gets every id.
+
+Untranslated and fuzzy entries are reported as warnings. Errors, which fail the build: a malformed file, a header
+without Language (equal to the file name), UTF-8 Content-Type or X-Astral-Language-Name, an unknown msgctxt, or a
+translation whose printf conversions or length the runtime would reject (runtime/ui_text.c text_ok checks the same).
 """
 import argparse
 import re
+import shutil
 import struct
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+SKIP_IDS = {'UI_MENU_FIRST', 'UI_MENU_LAST_ID', 'UI_TEXT_COUNT'}
+SWKBD_KEYS = ('UI_SWKBD_TITLE', 'UI_SWKBD_PROMPT', 'UI_SWKBD_DEFAULT_NAME', 'UI_SWKBD_OK', 'UI_SWKBD_CANCEL',
+              'UI_SWKBD_PAD_HINT')
+# The system font each script needs (runtime/ui/menu.cpp fonts_up merges it into the menu's font atlas)
+FONT_LANGUAGES = {'ja': 'ja', 'ko': 'ko', 'zh-Hans': 'zh-Hans', 'zh-Hant': 'zh-Hant'}
+FORMAT = re.compile(r'%[0-9]*(?:\.[0-9]+)?[sdiufxX]')
+MO_MAGIC = 0x950412DE
+# runtime/ui_text.h UI_DESC_BYTES, less the 256 bytes the description pane keeps for a note
+DESC_LIMIT = 2048 - 256
+SWKBD_LIMITS = {'UI_SWKBD_TITLE': 128, 'UI_SWKBD_PROMPT': 258, 'UI_SWKBD_OK': 64, 'UI_SWKBD_CANCEL': 64,
+                'UI_SWKBD_PAD_HINT': 160}
+
 
 class Paths:
     def __init__(self, root):
-        self.root = root.resolve()
+        self.root = Path(root).resolve()
         self.header = self.root / 'runtime' / 'ui_text.h'
         self.source = self.root / 'runtime' / 'ui_text.c'
         self.keys = self.root / 'runtime' / 'ui_text_keys.inc'
         self.lang = self.root / 'lang'
+        self.pot = self.lang / 'messages.pot'
 
     def rel(self, path):
         try:
-            return path.relative_to(self.root)
+            return path.relative_to(self.root).as_posix()
         except ValueError:
-            return path
+            return str(path)
 
 
 def paths_for(root=None):
-    return Paths(ROOT if root is None else Path(root))
-
-SKIP_IDS = {'UI_MENU_FIRST', 'UI_MENU_LAST_ID', 'UI_TEXT_COUNT'}
-SWKBD_KEYS = ('UI_SWKBD_TITLE', 'UI_SWKBD_PROMPT', 'UI_SWKBD_DEFAULT_NAME', 'UI_SWKBD_OK', 'UI_SWKBD_CANCEL',
-              'UI_SWKBD_PAD_HINT')
-C_LANGUAGES = {
-    'text_en': 'en', 'text_it': 'it', 'text_ru': 'ru', 'text_pt_br': 'pt-BR', 'text_zh_hans': 'zh-Hans',
-    'text_ja': 'ja', 'text_fr': 'fr', 'text_de': 'de', 'text_es': 'es', 'text_nl': 'nl',
-    'text_zh_hant': 'zh-Hant', 'text_ko': 'ko',
-}
-FULL_LANGUAGES = ('it', 'ru', 'pt-BR', 'zh-Hans')
-FONT_LANGUAGES = {'ja': 'ja', 'ko': 'ko', 'zh-Hans': 'zh-Hans', 'zh-Hant': 'zh-Hant'}
+    return Paths(ROOT if root is None else root)
 
 
-def catalog_langs(paths):
-    if not paths.lang.is_dir():
-        return ()
-    return tuple(sorted(path.stem for path in paths.lang.glob('*.po')))
-
-
-LANGUAGE_NAME_IDS = {
-    'en': 'UI_MENU_LANGNAME_EN', 'ja': 'UI_MENU_LANGNAME_JA', 'fr': 'UI_MENU_LANGNAME_FR',
-    'de': 'UI_MENU_LANGNAME_DE', 'it': 'UI_MENU_LANGNAME_IT', 'es': 'UI_MENU_LANGNAME_ES',
-    'nl': 'UI_MENU_LANGNAME_NL', 'ru': 'UI_MENU_LANGNAME_RU', 'zh-Hans': 'UI_MENU_LANGNAME_ZH_HANS',
-    'zh-Hant': 'UI_MENU_LANGNAME_ZH_HANT', 'ko': 'UI_MENU_LANGNAME_KO', 'pt-BR': 'UI_MENU_LANGNAME_PT_BR',
-}
-FORMAT = re.compile(r'%[0-9]*(?:\.[0-9]+)?[sdiufxX%]')
-MO_MAGIC = 0x950412DE
-
+# ---- the C sources
 
 def strip_comments(text):
-    out = []
-    i = 0
-    state = None
+    """text without its C comments, string literals kept (a '//' inside a string is text)."""
+    out, i, state = [], 0, None
     while i < len(text):
-        c = text[i]
-        n = text[i + 1] if i + 1 < len(text) else ''
+        c, n = text[i], text[i + 1] if i + 1 < len(text) else ''
         if state == 'line':
             if c == '\n':
                 state = None
                 out.append(c)
             i += 1
-            continue
-        if state == 'block':
+        elif state == 'block':
             if c == '*' and n == '/':
-                state = None
-                i += 2
+                state, i = None, i + 2
             else:
                 if c == '\n':
                     out.append(c)
                 i += 1
-            continue
-        if state == '"':
+        elif state == '"':
             out.append(c)
-            if c == '\\' and i + 1 < len(text):
-                out.append(text[i + 1])
+            if c == '\\' and n:
+                out.append(n)
                 i += 2
                 continue
             if c == '"':
                 state = None
             i += 1
-            continue
-        if c == '/' and n == '/':
-            state = 'line'
-            i += 2
-            continue
-        if c == '/' and n == '*':
-            state = 'block'
-            i += 2
-            continue
-        if c == '"':
-            state = '"'
-        out.append(c)
-        i += 1
+        elif c == '/' and n in '/*' and n:
+            state, i = ('line' if n == '/' else 'block'), i + 2
+        else:
+            if c == '"':
+                state = '"'
+            out.append(c)
+            i += 1
     return ''.join(out)
 
 
 def enum_keys(paths):
+    """The UiTextId names in enum order, without the range markers."""
     text = strip_comments(paths.header.read_text(encoding='utf-8'))
     start = text.index('typedef enum')
     body = text[start:text.index('} UiTextId;', start)]
@@ -122,42 +116,37 @@ def enum_keys(paths):
         if m and m.group(1) not in SKIP_IDS:
             keys.append(m.group(1))
     if len(keys) != len(set(keys)):
-        raise ValueError('duplicate enum keys')
+        raise ValueError(f'{paths.rel(paths.header)}: duplicate UiTextId names')
     return keys
 
 
+C_ESCAPES = {'n': '\n', 't': '\t', 'r': '\r', '"': '"', '\\': '\\'}
+
+
 def read_quoted(text, pos):
+    """The C string literal (adjacent literals joined) at pos, and the position after it."""
     while pos < len(text) and text[pos].isspace():
         pos += 1
     parts = []
     while pos < len(text) and text[pos] == '"':
         pos += 1
         out = []
-        while pos < len(text):
+        while True:
+            if pos >= len(text):
+                raise ValueError('unterminated string')
             c = text[pos]
             if c == '"':
                 pos += 1
                 break
             if c == '\\':
-                if pos + 1 >= len(text):
-                    raise ValueError('truncated escape')
-                n = text[pos + 1]
-                if n == 'n':
-                    out.append('\n')
-                elif n == 't':
-                    out.append('\t')
-                elif n == 'r':
-                    out.append('\r')
-                elif n in ('"', '\\'):
-                    out.append(n)
-                else:
+                n = text[pos + 1] if pos + 1 < len(text) else ''
+                if n not in C_ESCAPES:
                     raise ValueError(f'unknown escape \\{n}')
+                out.append(C_ESCAPES[n])
                 pos += 2
                 continue
             out.append(c)
             pos += 1
-        else:
-            raise ValueError('unterminated string')
         parts.append(''.join(out))
         while pos < len(text) and text[pos].isspace():
             pos += 1
@@ -167,11 +156,7 @@ def read_quoted(text, pos):
 
 
 def split_args(args):
-    parts = []
-    start = 0
-    depth = 0
-    quoted = False
-    i = 0
+    parts, start, depth, quoted, i = [], 0, 0, False, 0
     while i < len(args):
         c = args[i]
         if quoted:
@@ -197,10 +182,7 @@ def split_args(args):
 def call_args(text, pos):
     if text[pos] != '(':
         raise ValueError('expected (')
-    depth = 0
-    start = pos + 1
-    quoted = False
-    i = start
+    depth, quoted, i = 0, False, pos + 1
     while i < len(text):
         c = text[i]
         if quoted:
@@ -215,7 +197,7 @@ def call_args(text, pos):
             depth += 1
         elif c == ')':
             if depth == 0:
-                return split_args(text[start:i]), i + 1
+                return split_args(text[pos + 1:i])
             depth -= 1
         i += 1
     raise ValueError('unterminated call')
@@ -228,202 +210,135 @@ def block_at(text, pos):
             depth += 1
         elif text[i] == '}':
             depth -= 1
-            if depth == 0:
-                return text[pos + 1:i], i + 1
+            if not depth:
+                return text[pos + 1:i]
     raise ValueError('unterminated block')
 
 
-def compiled_catalogs(paths):
+def english_text(paths):
+    """{id: English text} from text_en in runtime/ui_text.c, the language names (LANG_NAMES) and the SWKBD row."""
     text = strip_comments(paths.source.read_text(encoding='utf-8'))
+    entries = {}
     lm = re.search(r'#define\s+LANG_NAMES\b', text)
-    lang_names = {}
     if lm:
-        end = text.index('\n\n', lm.end())
-        macro = text[lm.end():end]
+        macro = text[lm.end():text.index('\n\n', lm.end())]
         for m in re.finditer(r'\[([A-Z0-9_]+)\]\s*=\s*', macro):
-            value, _ = read_quoted(macro, m.end())
-            lang_names[m.group(1)] = value
-
-    catalogs = {}
-    for m in re.finditer(r'static const char \*const (\w+)\[UI_TEXT_COUNT\]\s*=\s*\{', text):
-        name = m.group(1)
-        if name not in C_LANGUAGES:
-            continue
-        body, _ = block_at(text, m.end() - 1)
-        entries = dict(lang_names)
-        sw = re.search(r'\bSWKBD\s*\(', body)
-        if sw:
-            args, _ = call_args(body, sw.end() - 1)
-            if len(args) != len(SWKBD_KEYS):
-                raise ValueError(f'{name}: bad SWKBD arguments')
-            for key, arg in zip(SWKBD_KEYS, args):
-                value, _ = read_quoted(arg, 0)
-                entries[key] = value
-        for dm in re.finditer(r'\[([A-Z0-9_]+)\]\s*=\s*', body):
-            value, _ = read_quoted(body, dm.end())
-            entries[dm.group(1)] = value
-        catalogs[C_LANGUAGES[name]] = {k: v for k, v in entries.items() if v}
-
-    for m in re.finditer(r'\bSWKBD_ONLY\s*\(', text):
-        args, _ = call_args(text, m.end() - 1)
-        name = args[0]
-        if name not in C_LANGUAGES:
-            continue
-        values = args[1:]
-        if len(values) != len(SWKBD_KEYS):
-            raise ValueError(f'{name}: bad SWKBD_ONLY arguments')
-        entries = dict(lang_names)
-        for key, arg in zip(SWKBD_KEYS, values):
-            value, _ = read_quoted(arg, 0)
-            entries[key] = value
-        catalogs[C_LANGUAGES[name]] = {k: v for k, v in entries.items() if v}
-
-    if 'en' not in catalogs:
-        raise ValueError('the compiled English row is missing')
-    return catalogs
+            entries[m.group(1)] = read_quoted(macro, m.end())[0]
+    m = re.search(r'static const char \*const text_en\[UI_TEXT_COUNT\]\s*=\s*\{', text)
+    if not m:
+        raise ValueError(f'{paths.rel(paths.source)}: text_en is missing')
+    body = block_at(text, m.end() - 1)
+    sw = re.search(r'\bSWKBD\s*\(', body)
+    if sw:
+        args = call_args(body, sw.end() - 1)
+        if len(args) != len(SWKBD_KEYS):
+            raise ValueError('text_en: SWKBD takes six strings')
+        for key, arg in zip(SWKBD_KEYS, args):
+            entries[key] = read_quoted(arg, 0)[0]
+    for dm in re.finditer(r'\[([A-Z0-9_]+)\]\s*=\s*', body):
+        entries[dm.group(1)] = read_quoted(body, dm.end())[0]
+    return {k: v for k, v in entries.items() if v}
 
 
-def po_quote(value):
-    out = value.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
-    out = out.replace('\t', '\\t')
-    return f'"{out}"'
+# ---- PO files
+
+@dataclass
+class Entry:
+    msgid: str
+    msgstr: str = ''
+    fuzzy: bool = False
+    previous: str | None = None             # the English source a fuzzy translation was made from (#| msgid)
+    comments: list = field(default_factory=list)   # translator and extracted comment lines, kept as written
 
 
-def header_text(lang, name, font):
-    lines = ['Project-Id-Version: astral-chain-pc-recomp\n', f'Language: {lang}\n',
-             'Content-Type: text/plain; charset=UTF-8\n', f'X-Astral-Language-Name: {name}\n']
-    if font:
-        lines.append(f'X-Astral-Font-Lang: {font}\n')
-    return ''.join(lines)
-
-
-def render_po(lang, entries, keys, metadata, english):
-    out = ['msgid ""\nmsgstr ""\n']
-    for line in metadata.splitlines(keepends=True):
-        out.append(po_quote(line) + '\n')
-    out.append('\n')
-    for key in keys:
-        if key in entries:
-            out.append(f'msgctxt {po_quote(key)}\n')
-            out.append(f'msgid {po_quote(english[key])}\n')
-            out.append(f'msgstr {po_quote(entries[key])}\n\n')
-    return ''.join(out)
-
-
-def render_pot(entries, keys):
-    metadata = 'Content-Type: text/plain; charset=UTF-8\nX-Astral-Language-Name: English\n'
-    out = ['msgid ""\nmsgstr ""\n']
-    for line in metadata.splitlines(keepends=True):
-        out.append(po_quote(line) + '\n')
-    out.append('\n')
-    for key in keys:
-        out.append(f'msgctxt {po_quote(key)}\n')
-        out.append(f'msgid {po_quote(entries[key])}\n')
-        out.append('msgstr ""\n\n')
-    return ''.join(out)
-
-
-def render_keys(keys):
-    return ''.join(f'[{key}] = "{key}",\n' for key in keys)
+def po_unquote(line):
+    """The string of a PO line holding one quoted literal (PO escapes are C's)."""
+    value, pos = read_quoted(line, 0)
+    if pos != len(line):
+        raise ValueError(f'text after the string: {line!r}')
+    return value
 
 
 def parse_po(text):
-    entries = {}
-    header = ''
-    context = None
-    msgid = None
-    buf = []
-    state = None
-    fuzzy = False
-    errors = []
+    """(header, header comments, {msgctxt: Entry} in file order, errors). Flags, `#|` and comments belong to the entry
+    that follows them; a comment or blank line after a msgstr ends that entry."""
+    header, header_comments, entries, errors = None, [], {}, []
+    cur = {}         # the entry being read: ctxt, id, str, and what preceded it
+    pending = {'comments': [], 'fuzzy': False, 'previous': None}
+    state = None     # the field the next continuation string extends
 
     def finish():
-        nonlocal header, context, msgid, buf, state, fuzzy
-        if state is None:
+        nonlocal header, header_comments, state, cur
+        if not cur:
             return
-        value = ''.join(buf)
-        if context is None and msgid == '':
-            header = value
-        elif context is None:
-            errors.append('entry without msgctxt')
-        elif not msgid:
-            errors.append(f'{context}: missing msgid')
-        elif context in entries:
-            errors.append(f'duplicate msgctxt {context}')
-        elif not fuzzy:
-            entries[context] = (msgid, value)
-        context = None
-        msgid = None
-        buf = []
-        state = None
-        fuzzy = False
+        ctxt, msgid, msgstr = cur.get('ctxt'), cur.get('id'), cur.get('str')
+        if msgid is None or msgstr is None:
+            errors.append(f'{ctxt or "entry"}: incomplete entry')
+        elif ctxt is None and msgid == '':
+            if header is not None:
+                errors.append('two headers')
+            header, header_comments = msgstr, cur['comments']
+        elif ctxt is None:
+            errors.append(f'entry without msgctxt: {msgid[:40]!r}')
+        elif ctxt in entries:
+            errors.append(f'duplicate msgctxt {ctxt}')
+        else:
+            entries[ctxt] = Entry(msgid, msgstr, cur['fuzzy'], cur['previous'], cur['comments'])
+        cur, state = {}, None
+
+    def start():
+        nonlocal cur
+        if cur and 'str' in cur:
+            finish()
+        if not cur:
+            cur = {'comments': pending['comments'], 'fuzzy': pending['fuzzy'], 'previous': pending['previous']}
+            pending.update(comments=[], fuzzy=False, previous=None)
 
     for raw in text.splitlines():
         line = raw.strip()
-        if not line:
-            continue
-        if line.startswith('~'):
-            errors.append('obsolete entry')
-            continue
-        if line.startswith('#'):
-            if line.startswith('#,') and 'fuzzy' in line:
-                fuzzy = True
-            continue
-        if line.startswith('msgctxt '):
-            if state in ('id', 'str'):
+        if not line or line.startswith('#'):
+            if 'str' in cur:
                 finish()
-            try:
-                context = read_quoted(line[8:], 0)[0]
-            except ValueError as exc:
-                errors.append(str(exc))
-                continue
-            buf = []
-            state = 'ctxt'
+            if line.startswith('#,'):
+                pending['fuzzy'] |= 'fuzzy' in (f.strip() for f in line[2:].split(','))
+            elif line.startswith('#| msgid '):
+                try:
+                    pending['previous'] = po_unquote(line[9:].strip())
+                except ValueError as exc:
+                    errors.append(str(exc))
+            elif line.startswith('#|') or line.startswith('#~') or line.startswith('#:'):
+                pass   # previous context, obsolete entries and source references are not kept
+            elif line.startswith('#'):
+                pending['comments'].append(line)
             continue
-        if line.startswith('msgid_plural') or line.startswith('msgstr['):
-            errors.append(f'unsupported line {line!r}')
-            continue
-        if line.startswith('msgid '):
-            if state == 'str':
-                finish()
-            try:
-                msgid = read_quoted(line[6:], 0)[0]
-            except ValueError as exc:
-                errors.append(str(exc))
-                continue
-            buf = []
-            state = 'id'
-            continue
-        if line.startswith('msgstr '):
-            if state not in ('ctxt', 'id'):
-                errors.append('msgstr without msgid')
-                continue
-            try:
-                buf = [read_quoted(line[7:], 0)[0]]
-            except ValueError as exc:
-                errors.append(str(exc))
-                continue
-            state = 'str'
-            continue
-        if line.startswith('"'):
-            try:
-                value = read_quoted(line, 0)[0]
-            except ValueError as exc:
-                errors.append(str(exc))
-                continue
-            if state == 'ctxt':
-                context += value
-            elif state == 'id':
-                msgid += value
-            elif state == 'str':
-                buf.append(value)
+        try:
+            if line.startswith('msgctxt '):
+                start()
+                cur['ctxt'], state = po_unquote(line[8:].strip()), 'ctxt'
+            elif line.startswith('msgid_plural') or line.startswith('msgstr['):
+                errors.append(f'plural forms are not used: {line[:40]!r}')
+            elif line.startswith('msgid '):
+                if 'ctxt' not in cur:
+                    start()
+                cur['id'], state = po_unquote(line[6:].strip()), 'id'
+            elif line.startswith('msgstr '):
+                if 'id' not in cur:
+                    errors.append('msgstr without msgid')
+                    continue
+                cur['str'], state = po_unquote(line[7:].strip()), 'str'
+            elif line.startswith('"'):
+                if state is None:
+                    errors.append('string outside an entry')
+                else:
+                    cur[state] += po_unquote(line)
             else:
-                errors.append('string outside an entry')
-            continue
-        errors.append(f'unknown line {line!r}')
-    if state is not None:
-        finish()
-    return header, entries, errors
+                errors.append(f'unknown line {line[:40]!r}')
+        except ValueError as exc:
+            errors.append(str(exc))
+    finish()
+    if header is None:
+        errors.append('no header entry (msgid "")')
+    return header or '', header_comments, entries, errors
 
 
 def parse_header(header):
@@ -435,21 +350,88 @@ def parse_header(header):
     return values
 
 
+def po_quote(value):
+    out = value.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+    return f'"{out}"'
+
+
+def render_header(header, comments):
+    out = [c + '\n' for c in comments]
+    out.append('msgid ""\nmsgstr ""\n')
+    out += [po_quote(line) + '\n' for line in header.splitlines(keepends=True)]
+    return ''.join(out) + '\n'
+
+
+def render_po(header, header_comments, entries, keys):
+    out = [render_header(header, header_comments)]
+    for key in keys:
+        e = entries.get(key)
+        if e is None:
+            continue
+        out += [c + '\n' for c in e.comments]
+        if e.fuzzy:
+            out.append('#, fuzzy\n')
+            if e.previous is not None and e.previous != e.msgid:
+                out.append(f'#| msgid {po_quote(e.previous)}\n')
+        out.append(f'msgctxt {po_quote(key)}\nmsgid {po_quote(e.msgid)}\nmsgstr {po_quote(e.msgstr)}\n\n')
+    return ''.join(out).rstrip('\n') + '\n'   # one newline at the end, as Poedit and msgmerge write
+
+
+def render_pot(english, keys):
+    header = ('Project-Id-Version: astral-chain-pc-recomp\nLanguage: \nMIME-Version: 1.0\n'
+              'Content-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n'
+              'X-Astral-Language-Name: \n')
+    comments = ['# The template of a new language for the in-game menu, the overlay and the game\'s name-entry keyboard.',
+                '# Copy it to lang/<tag>.po, fill in Language and X-Astral-Language-Name (and X-Astral-Font-Lang for',
+                '# ja, ko, zh-Hans or zh-Hant), translate the msgstr lines, and keep msgctxt and msgid as they are.']
+    return render_po(header, comments, {k: Entry(english[k]) for k in keys}, keys)
+
+
+def render_keys(keys):
+    return '// Generated by tools/ui_text_catalogs.py from the UiTextId enum (runtime/ui_text.h); do not edit.\n' + \
+        ''.join(f'[{key}] = "{key}",\n' for key in keys)
+
+
+def is_keyboard_catalog(entries):
+    return bool(entries) and all(k in SWKBD_KEYS for k in entries)
+
+
+def merge(entries, english, keys):
+    """The entries a catalog holds after an update against the English text (msgmerge)."""
+    scope = [k for k in keys if k in SWKBD_KEYS] if is_keyboard_catalog(entries) else keys
+    out = {}
+    for key in scope:
+        e = entries.get(key)
+        src = english[key]
+        if e is None:
+            out[key] = Entry(src)
+        elif e.msgid == src:
+            out[key] = e
+        else:
+            # The English changed under the translation: keep it, flagged, with the source it was made from
+            out[key] = Entry(src, e.msgstr, bool(e.msgstr), e.previous if e.fuzzy and e.previous else e.msgid,
+                             e.comments)
+            if not e.msgstr:
+                out[key].previous = None
+    return out
+
+
+# ---- checks shared with the runtime (runtime/ui_text.c text_ok)
+
 def format_specs(value):
-    specs = []
-    i = 0
+    """The printf conversions of value in order (%% left out), or None for a '%' that starts none."""
+    specs, i = [], 0
     while i < len(value):
         if value[i] != '%':
             i += 1
-            continue
-        if i + 1 < len(value) and value[i + 1] == '%':
+        elif value[i + 1:i + 2] == '%':
             i += 2
-            continue
-        m = FORMAT.match(value, i)
-        if not m:
-            return None
-        specs.append(m.group(0))
-        i = m.end()
+        else:
+            m = FORMAT.match(value, i)
+            if not m:
+                return None
+            specs.append(m.group(0))
+            i = m.end()
     return specs
 
 
@@ -457,233 +439,187 @@ def utf16_units(value):
     return sum(2 if ord(c) > 0xFFFF else 1 for c in value)
 
 
-def validate_entry(key, value, english, errors):
-    expected = format_specs(english)
-    actual = format_specs(value)
-    if expected != actual:
-        errors.append(f'{key}: printf conversions differ from English')
-    if key == 'UI_SWKBD_DEFAULT_NAME':
-        if utf16_units(value) > 9 or any(c in value for c in '@%\\'):
-            errors.append(f'{key}: invalid software keyboard default name')
-    limits = {'UI_SWKBD_TITLE': 128, 'UI_SWKBD_PROMPT': 258, 'UI_SWKBD_OK': 64, 'UI_SWKBD_CANCEL': 64,
-              'UI_SWKBD_PAD_HINT': 160}
-    if key in limits and utf16_units(value) > limits[key]:
-        errors.append(f'{key}: too long for the software keyboard')
-    if key.startswith('UI_MENU_') and len(value.encode('utf-8')) + 256 >= 2048:
-        errors.append(f'{key}: too long for the description pane')
+def entry_errors(key, value, english):
+    """What would make the runtime refuse this translation."""
+    errors = []
+    if format_specs(value) != format_specs(english):
+        errors.append(f'{key}: printf conversions differ from the English {format_specs(english)}')
+    if key == 'UI_SWKBD_DEFAULT_NAME' and (utf16_units(value) > 9 or any(c in value for c in '@%\\')):
+        errors.append(f'{key}: at most 9 UTF-16 units, without @ % \\')
+    if key in SWKBD_LIMITS and utf16_units(value) > SWKBD_LIMITS[key]:
+        errors.append(f'{key}: longer than the software keyboard takes ({SWKBD_LIMITS[key]} UTF-16 units)')
+    if key not in SWKBD_KEYS and len(value.encode('utf-8')) >= DESC_LIMIT:
+        errors.append(f'{key}: too long for the description pane ({DESC_LIMIT} bytes)')
+    return errors
 
 
-def write_if_changed(path, text):
-    if path.is_file() and path.read_text(encoding='utf-8') == text:
-        return False
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding='utf-8', newline='\n')
-    return True
+def header_errors(name, header):
+    meta = parse_header(header)
+    lang = name[:-3]
+    errors = []
+    if meta.get('Language') != lang:
+        errors.append(f'{name}: Language is {meta.get("Language")!r}, not the file name {lang!r}')
+    if 'UTF-8' not in meta.get('Content-Type', '').upper():
+        errors.append(f'{name}: Content-Type is not UTF-8')
+    if not meta.get('X-Astral-Language-Name'):
+        errors.append(f'{name}: no X-Astral-Language-Name')
+    font = meta.get('X-Astral-Font-Lang', '')
+    if font != FONT_LANGUAGES.get(lang, ''):
+        errors.append(f'{name}: X-Astral-Font-Lang should be {FONT_LANGUAGES.get(lang, "absent")!r}, not {font!r}')
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,14}', lang):
+        errors.append(f'{name}: the file name is not a language tag of at most 15 characters')
+    return errors
 
 
-def write_bytes_if_changed(path, data):
-    if path.is_file() and path.read_bytes() == data:
+def compiled(entries, english):
+    """The translations a .mo carries: translated, not fuzzy, made from the current English."""
+    return {k: e.msgstr for k, e in entries.items()
+            if k in english and e.msgstr and not e.fuzzy and e.msgid == english[k]}
+
+
+def render_mo(header, translations, english):
+    """GNU MO, little endian, without a hash table; msgid is msgctxt EOT English, sorted bytewise as gettext does."""
+    pairs = [('', header)] + sorted(((f'{k}\x04{english[k]}', v) for k, v in translations.items()),
+                                    key=lambda kv: kv[0].encode('utf-8'))
+    count = len(pairs)
+    orig, trans = 28, 28 + 8 * count
+    strings = trans + 8 * count
+    table, blob = bytearray(), bytearray()
+    for column in (0, 1):
+        for pair in pairs:
+            value = pair[column].encode('utf-8')
+            table += struct.pack('<II', len(value), strings + len(blob))
+            blob += value + b'\0'
+    return struct.pack('<7I', MO_MAGIC, 0, count, orig, trans, 0, 0) + bytes(table) + bytes(blob)
+
+
+# ---- the steps
+
+def write_if_changed(path, data):
+    old = path.read_bytes() if path.is_file() else None
+    if old == data:
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     return True
 
 
-def render_mo(header, entries, english):
-    pairs = [('', header)]
-    pairs += sorted(((f'{key}\x04{english[key]}', value[1]) for key, value in entries.items()),
-                    key=lambda item: item[0].encode('utf-8'))
-    count = len(pairs)
-    orig_table = 28
-    trans_table = orig_table + 8 * count
-    strings = trans_table + 8 * count
-    table = bytearray()
-    blob = bytearray()
-    for msgid, _ in pairs:
-        value = msgid.encode('utf-8')
-        table += struct.pack('<II', len(value), strings + len(blob))
-        blob += value + b'\0'
-    for _, msgstr in pairs:
-        value = msgstr.encode('utf-8')
-        table += struct.pack('<II', len(value), strings + len(blob))
-        blob += value + b'\0'
-    head = struct.pack('<7I', MO_MAGIC, 0, count, orig_table, trans_table, 0, strings)
-    return head + bytes(table) + bytes(blob)
-
-
-def compile_catalogs(paths):
-    changed = False
-    english = compiled_catalogs(paths)['en']
-    langs = catalog_langs(paths)
-    expected = {f'{lang}.mo' for lang in langs}
-    for path in sorted(paths.lang.glob('*.mo')):
-        if path.name not in expected:
-            path.unlink()
-            changed = True
-    for lang in langs:
-        po = paths.lang / f'{lang}.po'
-        mo = paths.lang / f'{lang}.mo'
-        if not po.is_file():
-            if mo.is_file():
-                mo.unlink()
-                changed = True
-            continue
-        header, entries, errors = parse_po(po.read_text(encoding='utf-8'))
-        if errors:
-            raise ValueError(f'{po.name}: {errors[0]}')
-        changed = write_bytes_if_changed(mo, render_mo(header, entries, english)) or changed
-    return changed
-
-
-def validate(keys, paths, check_mo=True):
-    errors = []
-    keys_file = render_keys(keys)
-    if not paths.keys.is_file() or paths.keys.read_text(encoding='utf-8') != keys_file:
-        errors.append(f'{paths.rel(paths.keys)} is out of date')
-
-    english = {k: v for k, v in compiled_catalogs(paths)['en'].items() if k in set(keys)}
-    if set(english) != set(keys):
-        errors.append(f'compiled English: {len(set(keys) - set(english))} missing keys')
-
-    files = sorted(p.name for p in paths.lang.glob('*.po')) if paths.lang.is_dir() else []
-    langs = tuple(name[:-3] for name in files)
-    mo_files = sorted(p.name for p in paths.lang.glob('*.mo')) if paths.lang.is_dir() else []
-    if check_mo:
-        for name in mo_files:
-            if name[:-3] not in langs:
-                errors.append(f'lang/{name} has no matching .po')
-
-    catalogs = {}
-    compiled = {}
-    for name in files:
-        text = (paths.lang / name).read_text(encoding='utf-8')
-        header, entries, parse_errors = parse_po(text)
-        errors.extend(f'{name}: {e}' for e in parse_errors)
-        meta = parse_header(header)
-        lang = meta.get('Language', name[:-3])
-        if lang != name[:-3]:
-            errors.append(f'{name}: Language {lang!r} does not match the file name')
-        if 'UTF-8' not in meta.get('Content-Type', '').upper():
-            errors.append(f'{name}: Content-Type is not UTF-8')
-        if not meta.get('X-Astral-Language-Name'):
-            errors.append(f'{name}: no X-Astral-Language-Name')
-        font = meta.get('X-Astral-Font-Lang', '')
-        if font and font != FONT_LANGUAGES.get(lang):
-            errors.append(f'{name}: unexpected X-Astral-Font-Lang {font!r}')
-        if FONT_LANGUAGES.get(lang) and not font:
-            errors.append(f'{name}: missing X-Astral-Font-Lang')
-        unknown = sorted(set(entries) - set(keys))
-        errors.extend(f'{name}: unknown msgctxt {k}' for k in unknown)
-        for key, (source, value) in entries.items():
-            if key in english:
-                if source != english[key]:
-                    errors.append(f'{name}: {key}: msgid is not the English source')
-                validate_entry(key, value, english[key], errors)
-        catalogs[lang] = entries
-        compiled[lang] = render_mo(header, {k: v for k, v in entries.items() if k in english}, english)
-
-    if check_mo:
-        for lang in sorted(compiled):
-            path = paths.lang / f'{lang}.mo'
-            if path.is_file() and path.read_bytes() != compiled[lang]:
-                errors.append(f'{lang}.mo is out of date')
-
-    for name in files:
-        lang = name[:-3]
-        entries = catalogs.get(lang, {})
-        if lang in FULL_LANGUAGES:
-            missing = [k for k in keys if k.startswith('UI_MENU_') and k not in entries]
-            if missing:
-                errors.append(f'{name}: {len(missing)} missing menu keys')
-        if set(SWKBD_KEYS) - set(entries):
-            errors.append(f'{name}: missing software keyboard keys')
-
-    pot_file = paths.lang / 'messages.pot'
-    if not pot_file.is_file():
-        errors.append('lang/messages.pot is missing')
-    else:
-        _, pot, pot_errors = parse_po(pot_file.read_text(encoding='utf-8'))
-        errors.extend(f'messages.pot: {e}' for e in pot_errors)
-        if set(pot) != set(english):
-            errors.append('messages.pot does not match the compiled English fallback')
-        for key, (source, value) in pot.items():
-            if key in english:
-                if source != english[key]:
-                    errors.append(f'messages.pot: {key}: msgid is not the English source')
-                if value:
-                    errors.append(f'messages.pot: {key}: msgstr must be empty')
-    return errors
-
-
-def generate(keys, paths):
-    source = compiled_catalogs(paths)
-    paths.lang.mkdir(parents=True, exist_ok=True)
-    changed = False
-    for name in ('en.po', 'pt.po'):
-        path = paths.lang / name
-        if path.is_file():
-            path.unlink()
-            changed = True
-    keyset = set(keys)
-    english = {k: v for k, v in source['en'].items() if k in keyset}
-    catalogs = {}
-    for path in sorted(paths.lang.glob('*.po')):
-        header, entries, errors = parse_po(path.read_text(encoding='utf-8'))
-        if errors:
-            raise ValueError(f'{path.name}: {errors[0]}')
-        for key, (source_id, _) in entries.items():
-            if key in english and source_id != english[key]:
-                raise ValueError(f'{path.name}: {key}: msgid does not match the English source')
-        catalogs[path.stem] = (header, {k: v[1] for k, v in entries.items() if k in keyset})
-    for lang, entries in source.items():
-        if lang == 'en' or lang in catalogs:
-            continue
-        name = entries[LANGUAGE_NAME_IDS[lang]]
-        catalogs[lang] = (header_text(lang, name, FONT_LANGUAGES.get(lang, '')), entries)
-    changed = write_if_changed(paths.keys, render_keys(keys)) or changed
-    changed = write_if_changed(paths.lang / 'messages.pot', render_pot(english, keys)) or changed
-    for lang, (header, entries) in catalogs.items():
-        text = render_po(lang, entries, keys, header, english)
-        changed = write_if_changed(paths.lang / f'{lang}.po', text) or changed
-    if changed:
-        print(f'wrote {paths.rel(paths.keys)}, lang/messages.pot and {len(catalogs)} catalogs')
-    return changed
-
-
-def report(keys, paths):
-    errors = validate(keys, paths)
-    if errors:
-        for error in errors:
-            print(error)
-        return 1
-    print(f'ok: {len(keys)} ids, {len(list(paths.lang.glob("*.po")))} catalogs')
-    return 0
-
-
-def refresh(root=None):
-    paths = paths_for(root)
+def load(paths):
     keys = enum_keys(paths)
-    generate(keys, paths)
-    errors = validate(keys, paths, check_mo=False)
-    if errors:
-        for error in errors:
-            print(error)
-        return 1
-    if compile_catalogs(paths):
-        print(f'wrote {len(catalog_langs(paths))} compiled catalogs in lang/*.mo')
-    return report(keys, paths)
+    english = english_text(paths)
+    missing = [k for k in keys if k not in english]
+    if missing:
+        raise ValueError(f'{paths.rel(paths.source)}: no English text for {", ".join(missing[:5])}')
+    catalogs = {}
+    for po in sorted(paths.lang.glob('*.po')) if paths.lang.is_dir() else []:
+        catalogs[po.name] = parse_po(po.read_text(encoding='utf-8'))
+    return keys, english, catalogs
+
+
+def check(paths, keys, english, catalogs, check_mo):
+    """(errors, warnings) of the files as they are."""
+    errors, warnings = [], []
+    if not paths.keys.is_file() or paths.keys.read_text(encoding='utf-8') != render_keys(keys):
+        errors.append(f'{paths.rel(paths.keys)} is out of date')
+    if not paths.pot.is_file() or paths.pot.read_text(encoding='utf-8') != render_pot(english, keys):
+        errors.append(f'{paths.rel(paths.pot)} is out of date')
+    for name, (header, _, entries, parse_errors) in catalogs.items():
+        errors += [f'{name}: {e}' for e in parse_errors]
+        errors += header_errors(name, header)
+        errors += [f'{name}: unknown msgctxt {k}' for k in entries if k not in english]
+        scope = SWKBD_KEYS if is_keyboard_catalog(entries) else keys
+        if any(k not in entries or entries[k].msgid != english[k] for k in scope) or \
+                any(k not in scope for k in entries if k in english):
+            errors.append(f'{name}: not merged with the current English text (run tools/ui_text_catalogs.py)')
+        for key, e in entries.items():
+            if key in english and e.msgstr and not e.fuzzy:
+                errors += [f'{name}: {msg}' for msg in entry_errors(key, e.msgstr, english[key])]
+        untranslated = sum(1 for k in scope if k in entries and not entries[k].msgstr)
+        fuzzy = sum(1 for k in scope if k in entries and entries[k].msgstr and entries[k].fuzzy)
+        if untranslated or fuzzy:
+            warnings.append(f'{name}: {untranslated} untranslated and {fuzzy} fuzzy entries show in English')
+        if check_mo:
+            mo = paths.lang / (name[:-3] + '.mo')
+            if not mo.is_file() or mo.read_bytes() != render_mo(header, compiled(entries, english), english):
+                errors.append(f'lang/{mo.name} is out of date')
+    return errors, warnings
+
+
+def update(paths, keys, english, catalogs):
+    """Writes ui_text_keys.inc, messages.pot, the merged .po files and their .mo; returns what it changed."""
+    changed = []
+    if write_if_changed(paths.keys, render_keys(keys).encode('utf-8')):
+        changed.append(paths.rel(paths.keys))
+    if write_if_changed(paths.pot, render_pot(english, keys).encode('utf-8')):
+        changed.append(paths.rel(paths.pot))
+    names = set()
+    for name, (header, header_comments, entries, parse_errors) in catalogs.items():
+        if parse_errors:
+            continue   # left as it is: check() reports why
+        merged = merge(entries, english, keys)
+        po = paths.lang / name
+        if write_if_changed(po, render_po(header, header_comments, merged, keys).encode('utf-8')):
+            changed.append(paths.rel(po))
+        mo = paths.lang / (name[:-3] + '.mo')
+        if write_if_changed(mo, render_mo(header, compiled(merged, english), english)):
+            changed.append(paths.rel(mo))
+        names.add(mo.name)
+        catalogs[name] = (header, header_comments, merged, parse_errors)
+    for stale in paths.lang.glob('*.mo') if paths.lang.is_dir() else []:
+        if stale.name not in names:
+            stale.unlink()
+            changed.append(paths.rel(stale))
+    return changed
+
+
+def install(paths, dest):
+    """Copies the compiled catalogs into dest (lang/ beside an astralchain executable) and removes the .mo files there
+    that no catalog makes any more. Returns how many files it wrote."""
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    wanted = {p.name for p in paths.lang.glob('*.mo')} if paths.lang.is_dir() else set()
+    for old in dest.glob('*.mo'):
+        if old.name not in wanted:
+            old.unlink()
+    n = 0
+    for name in sorted(wanted):
+        src, dst = paths.lang / name, dest / name
+        if not dst.is_file() or dst.read_bytes() != src.read_bytes():
+            shutil.copyfile(src, dst)
+            n += 1
+    return n
+
+
+def refresh(root=None, quiet=False):
+    """The update the builds run: 0 when the catalogs are usable, 1 (after printing why) when one is not."""
+    paths = paths_for(root)
+    keys, english, catalogs = load(paths)
+    changed = update(paths, keys, english, catalogs)
+    errors, warnings = check(paths, keys, english, catalogs, check_mo=True)
+    if changed and not quiet:
+        print(f'ui text catalogs: wrote {", ".join(changed)}')
+    for w in warnings if not quiet else ():
+        print(f'ui text catalogs: {w}')
+    for e in errors:
+        print(f'ui text catalogs: {e}')
+    return 1 if errors else 0
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument('--check', action='store_true', help='validate the committed files without regenerating them')
-    parser.add_argument('--root', type=Path, help='checkout root (default: the repository of this script)')
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument('--check', action='store_true', help='validate the committed files without writing anything')
+    ap.add_argument('--root', type=Path, help='checkout root (default: the repository of this script)')
+    args = ap.parse_args()
     if not args.check:
         return refresh(args.root)
     paths = paths_for(args.root)
-    keys = enum_keys(paths)
-    return report(keys, paths)
+    keys, english, catalogs = load(paths)
+    errors, warnings = check(paths, keys, english, catalogs, check_mo=False)
+    for line in warnings + errors:
+        print(line)
+    if not errors:
+        print(f'ok: {len(keys)} ids, {len(catalogs)} catalogs')
+    return 1 if errors else 0
 
 
 if __name__ == '__main__':

@@ -1,5 +1,24 @@
-// Text shown by the host (ui_text.h), loaded from compiled lang/*.mo catalogs whose PO entries use msgctxt for the
-// stable id and msgid for the English source. A missing entry falls back to the built-in English row.
+// Text the host shows the player (ui_text.h): the English text is compiled in (text_en, the fallback of every id), and
+// every other language comes from a compiled gettext catalog, lang/<tag>.mo beside the executable (AC_LANG_DIR moves
+// it), read once at start by ui_text_init before any other thread runs.
+//
+// The catalogs are made from lang/<tag>.po by tools/ui_text_catalogs.py, which build_game.py runs and which copies the
+// .mo files next to the executable it builds; the release ships them and the installer copies them into the install
+// folder. An entry is msgctxt = the id's name (ui_text_keys.inc, generated from the enum), msgid = the English source,
+// msgstr = the translation. An entry is used only when its msgid is the English text this build has, so a translation
+// made before the English changed falls back to English instead of saying something else, and only when text_ok
+// accepts it: valid UTF-8, the same printf conversions as the English (the menu formats it with the English
+// arguments), and within the lengths the software keyboard and the description pane take. Players may drop their own
+// .mo files in, so the parser bounds every offset and length by the file and trusts nothing in it.
+//
+// Two kinds of catalog: a menu catalog (it, ru, pt-BR, zh-Hans: every id) that the menu offers as a language, and a
+// keyboard catalog (ja, fr, de, es, nl, pt, zh-Hant, ko: only UI_SWKBD_*) that the game's name-entry keyboard uses in
+// that game language (ui_text). Before the catalogs were external, these texts were rows of this file; the menu
+// languages' rows became lang/{ru,pt-BR,zh-Hans}.po and the keyboard rows the other .po files, with the same strings.
+//
+// After ui_text_init the rows never change, so readers on any thread take no lock. Reading the twelve shipped catalogs
+// takes 1.4 ms at start (five starts of --probe-cfg on the Arc 140T machine, warm file cache), the id of each entry
+// found by a binary search over the sorted names.
 #include <ctype.h>
 #include <stdatomic.h>
 #include <stdlib.h>
@@ -336,7 +355,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_BIND_DESC_R] = "Throw a weapon.", [UI_BIND_DESC_ZL] = "Shield, lock on.", [UI_BIND_DESC_ZR] = "Bow.",
     [UI_BIND_DESC_PLUS] = "Menu, inventory.", [UI_BIND_DESC_MINUS] = "Map.",
     [UI_BIND_DESC_DPAD] = "Quick-select.",
-    [UI_BIND_DESC_MOVE] = "Moves Link like the left stick. The controller's left stick always works too.",
+    [UI_BIND_DESC_MOVE] = "Moves your character like the left stick. The controller's left stick always works too.",
     [UI_BIND_DESC_CAMERA] = "Turns the camera like the right stick. The mouse and the controller's right stick always "
                             "work too.",
     [UI_KEY_SPACE] = "Space", [UI_KEY_TAB] = "Tab", [UI_KEY_LSHIFT] = "Left Shift", [UI_KEY_LCTRL] = "Left Ctrl",
@@ -499,14 +518,27 @@ static const char *const keys[UI_TEXT_COUNT] = {
 static Row rows[MAX_ROWS];
 static int row_count;
 static int initialized;
+static uint16_t key_order[UI_TEXT_COUNT];   // the ids with a name, by name (strcmp), for id_for_mo_key
+static int key_count;
 
+static int key_cmp(const void *a, const void *b) {
+    return strcmp(keys[*(const uint16_t *)a], keys[*(const uint16_t *)b]);
+}
+
+// The id a catalog key "<name>\x04<English>" stands for, or -1 for an unknown name or an English text this build does
+// not have (a translation made from older English). A binary search over the names sorted once at start.
 static int id_for_mo_key(const char *key) {
     const char *sep = strchr(key, '\x04');
     if (!sep) return -1;
-    for (int i = 0; i < (int)UI_TEXT_COUNT; i++) {
-        if (!keys[i] || !text_en[i]) continue;
-        size_t n = strlen(keys[i]);
-        if ((size_t)(sep - key) == n && !memcmp(key, keys[i], n) && !strcmp(sep + 1, text_en[i])) return i;
+    size_t n = (size_t)(sep - key);
+    int lo = 0, hi = key_count - 1;
+    while (lo <= hi) {
+        int mid = lo + (hi - lo) / 2, id = key_order[mid];
+        int c = strncmp(keys[id], key, n);
+        if (!c && keys[id][n]) c = 1;   // the name is a prefix of keys[id], which sorts after it
+        if (!c) return text_en[id] && !strcmp(sep + 1, text_en[id]) ? id : -1;
+        if (c < 0) lo = mid + 1;
+        else hi = mid - 1;
     }
     return -1;
 }
@@ -561,7 +593,7 @@ static int next_format(const char *s, const char **start, const char **end) {
             q++;
             while (*q >= '0' && *q <= '9') q++;
         }
-        if (strchr("sdiufxX", *q)) {
+        if (*q && strchr("sdiufxX", *q)) {   // strchr also finds the terminating NUL
             *start = p;
             *end = q + 1;
             return 1;
@@ -717,6 +749,17 @@ fail:
     return 0;
 }
 
+int ui_text_catalog_check(const char *path, const char *lang) {
+    Row row = {0};
+    row.text = calloc(UI_TEXT_COUNT, sizeof *row.text);
+    if (!row.text) return -1;
+    if (!parse_catalog(path, lang, &row)) return -1;   // it freed the texts
+    int n = 0;
+    for (int i = 0; i < (int)UI_TEXT_COUNT; i++) n += row.text[i] != NULL;
+    free_row_text(&row);
+    return n;
+}
+
 typedef struct { char dir[PLAT_PATH_MAX * 2]; } LoadCtx;
 
 static int load_catalog(const char *name, void *ctx) {
@@ -764,7 +807,13 @@ static int row_compare(const void *a, const void *b) {
     return strcmp(ra->lang, rb->lang);
 }
 
-void ui_text_reload(void) {
+// Once, from ui_text_init: readers take no lock, so the rows must not change once other threads run.
+static void load_catalogs(void) {
+    uint64_t t0 = plat_now_ns();
+    key_count = 0;
+    for (int i = 0; i < (int)UI_TEXT_COUNT; i++)
+        if (keys[i]) key_order[key_count++] = (uint16_t)i;
+    qsort(key_order, (size_t)key_count, sizeof *key_order, key_cmp);
     for (int i = 1; i < row_count; i++) free_row_text(&rows[i]);
     row_count = 1;
     rows[0] = (Row){.lang = "en", .name = "English", .text = (const char **)text_en};
@@ -773,19 +822,22 @@ void ui_text_reload(void) {
     snprintf(ctx.dir, sizeof ctx.dir, "%s", dir);
     if (plat_dir_exists(dir)) plat_file_list(dir, ".mo", load_catalog, &ctx);
     qsort(rows + 1, (size_t)(row_count - 1), sizeof *rows, row_compare);
-    rt_log("ui text: %d catalogs from %s", row_count, dir);
+    int menus = 0;
+    for (int i = 1; i < row_count; i++) menus += rows[i].text[UI_MENU_TITLE] != NULL;
+    rt_log("ui text: %d catalogs from %s (%d with menu text, %d keyboard only) in %.2f ms", row_count - 1, dir, menus,
+           row_count - 1 - menus, (double)(plat_now_ns() - t0) / 1e6);
 }
 
 void ui_text_init(void) {
     if (initialized) return;
     initialized = 1;
-    ui_text_reload();
+    load_catalogs();
 }
 
 static const char *catalog_tag(const char *code) {
     static const struct { const char *code, *lang; } map[] = {
         {"en-US", "en"}, {"en-GB", "en"}, {"fr-CA", "fr"}, {"es-419", "es"},
-        {"zh-CN", "zh-Hans"}, {"zh-TW", "zh-Hant"}, {"pt", "pt-BR"},
+        {"zh-CN", "zh-Hans"}, {"zh-TW", "zh-Hant"},
     };
     if (code)
         for (size_t i = 0; i < sizeof map / sizeof *map; i++)
@@ -806,7 +858,7 @@ const char *ui_text_lang(const char *code) {
     code = catalog_tag(code);
     const Row *r = find_row(code);
     if (r) return r->lang;
-    static char base[16];
+    char base[16];   // per call: the keyboard asks from guest threads while the menu asks from the render thread
     size_t n = strcspn(code, "-");
     if (n < sizeof base && code[n]) {
         memcpy(base, code, n), base[n] = 0;
@@ -839,13 +891,16 @@ const char *ui_text(UiTextId id) { return ui_text_in(ui_text_lang(ov_language())
 void ui_text_visit(const char *lang, void (*visit)(void *ctx, const char *text), void *ctx) {
     const Row *r = find_row(lang);
     if (!r) return;
-    for (int id = 0; id < (int)UI_TEXT_COUNT; id++) {
-        const char *text = r->text[id] && *r->text[id] ? r->text[id] : fallback_text(id);
-        if (text && *text) visit(ctx, text);
-    }
+    for (int id = 0; id < (int)UI_TEXT_COUNT; id++)
+        if (r->text[id] && *r->text[id]) visit(ctx, r->text[id]);
 }
 
 int ui_text_lang_count(void) { return row_count; }
+
+int ui_text_is_menu_lang(const char *lang) {
+    const Row *r = find_row(lang);
+    return r && (r == &rows[0] || r->text[UI_MENU_TITLE]);
+}
 
 const char *ui_text_lang_at(int i) { return i >= 0 && i < row_count ? rows[i].lang : NULL; }
 
@@ -864,12 +919,14 @@ static const char *resolve_menu_lang(void) {
     const char *sys = plat_ui_language();
     const char *lang = ui_text_lang(v && *v ? v : sys && *sys ? sys : "en");
     if (ui_text_defined(lang, UI_MENU_TITLE)) return lang;
-    static char base[16];
+    char base[16];
     size_t n = strcspn(lang, "-");
     if (n < sizeof base && lang[n]) {
         memcpy(base, lang, n), base[n] = 0;
         if (ui_text_defined(base, UI_MENU_TITLE)) return find_row(base)->lang;
     }
+    // Portugal's Portuguese keeps its own keyboard catalog (pt) and reads the Brazilian menu rather than English
+    if (!strncmp(lang, "pt", 2) && ui_text_defined("pt-BR", UI_MENU_TITLE)) return find_row("pt-BR")->lang;
     return rows[0].lang;
 }
 

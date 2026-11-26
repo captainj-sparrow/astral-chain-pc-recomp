@@ -93,6 +93,7 @@
  "warn.exefs_skipped": "Non è stato possibile creare le patch ExeFS (.ips, .pchtxt) delle mod; il gioco verrà installato senza di esse. Dettagli: {log}",
   "warn.xbox_prompts_failed": "Non è stato possibile preparare le icone dei pulsanti Xbox (codice di uscita {code}); il gioco manterrà quelle di Switch. Dettagli: {log}",
   "warn.dlc_failed": "Non è stato possibile copiare la cartella DLC: {detail}. Il gioco funziona senza di essa; esegui di nuovo il programma di installazione per aggiungerla.",
+  "warn.lang_failed": "Non è stato possibile copiare i file delle lingue: {detail}. Il menu è in inglese; esegui di nuovo il programma di installazione per aggiungerli.",
   "warn.shaders_skipped": "Il driver grafico si è arrestato durante la creazione di alcuni shader, quindi {count} sono stati esclusi dalla preparazione. Il gioco li creerà al primo utilizzo, ma il driver potrebbe arrestarsi di nuovo; un aggiornamento del driver potrebbe risolvere. Dettagli: {log}",
 
  "warn.kernel_old": "Linux {version} non dispone del tracciamento delle scritture richiesto dal gioco (6.7 o successivo); il gioco potrebbe essere molto lento. Aggiornare il sistema risolve il problema.",

@@ -962,61 +962,114 @@ static void probe_fonts(void) {
            (unsigned long long)addr, (unsigned long long)size, len < 0 ? "substitute" : path);
 }
 
-// The host catalog (runtime/ui_text.c): menu and keyboard text comes from lang/*.mo, a missing entry falls back to the
-// built-in English row, and menu_text follows AC_MENU_LANG.
+// A GNU MO file of n (key, value) pairs, little endian, no hash table, keys in the given (sorted) order; the first pair
+// is the header ("", header). Returns its size, or 0 when cap is too small.
+static size_t mo_build(uint8_t *out, size_t cap, const char *const *kv, int n) {
+    size_t strings = 28 + 16 * (size_t)n, at = strings;
+    for (int i = 0; i < 2 * n; i++) at += strlen(kv[i]) + 1;
+    if (at > cap) return 0;
+    uint32_t head[7] = {0x950412DE, 0, (uint32_t)n, 28, 28 + 8 * (uint32_t)n, 0, 0};
+    memcpy(out, head, sizeof head);   // x86-64: little endian
+    at = strings;
+    for (int col = 0; col < 2; col++)
+        for (int i = 0; i < n; i++) {
+            const char *s = kv[2 * i + col];
+            uint32_t ent[2] = {(uint32_t)strlen(s), (uint32_t)at};
+            memcpy(out + 28 + 8 * ((size_t)col * n + i), ent, sizeof ent);
+            memcpy(out + at, s, ent[0] + 1);
+            at += ent[0] + 1;
+        }
+    return at;
+}
+
+// The host catalogs (runtime/ui_text.c): English is built in, and the lang/*.mo files beside the executable (which
+// build_game.py, the release and the installer put there) hold four menu languages and eight keyboard ones. Their
+// absence fails the probe: without them the menu is English only, which no other check would notice.
 static void probe_menu_text(void) {
     ui_text_init();
-    CHECK(ui_text_defined("en", UI_MENU_TITLE), "built-in English menu text is missing");
+    static const char *const menus[] = {"it", "ru", "pt-BR", "zh-Hans"};
+    static const char *const keyboards[] = {"ja", "fr", "de", "es", "nl", "pt", "zh-Hant", "ko"};
+    for (size_t i = 0; i < sizeof menus / sizeof *menus; i++)
+        CHECK(ui_text_is_menu_lang(menus[i]), "no menu catalog %s: lang/%s.mo missing beside the executable", menus[i],
+              menus[i]);
+    for (size_t i = 0; i < sizeof keyboards / sizeof *keyboards; i++)
+        CHECK(ui_text_defined(keyboards[i], UI_SWKBD_DEFAULT_NAME) && !ui_text_is_menu_lang(keyboards[i]),
+              "no keyboard catalog %s (or it has menu text)", keyboards[i]);
+    CHECK(ui_text_is_menu_lang("en") && !ui_text_defined("ja", UI_MENU_TITLE), "menu languages wrong");
+
+    // English, the fallback of every id, and the room the description pane needs in every menu language
     CHECK(!ui_text_defined("en", UI_TEXT_COUNT) && !*ui_text_in("ru", UI_TEXT_COUNT), "an id past the catalog gives text");
-    for (UiTextId id = UI_MENU_FIRST; id <= UI_MENU_LAST_ID; id++) {
-        const char *text = ui_text_in("en", id);
-        CHECK(text && *text, "english menu id %d is empty", (int)id);
-        CHECK(strlen(text) + 256 < UI_DESC_BYTES, "english menu id %d is too long for the description pane", (int)id);
-    }
     for (int i = 0; i < ui_text_lang_count(); i++) {
         const char *lang = ui_text_lang_at(i);
         CHECK(lang && *lang && *ui_text_lang_name(lang), "catalog %d has no language tag or name", i);
-        int has_menu = ui_text_defined(lang, UI_MENU_TITLE);
-        for (UiTextId id = UI_MENU_FIRST; id <= UI_MENU_LAST_ID; id++) {
-            const char *text = ui_text_in(lang, id);
-            CHECK(text && *text, "%s menu id %d is empty", lang, (int)id);
-            CHECK(strlen(text) + 256 < UI_DESC_BYTES, "%s menu id %d is too long for the description pane", lang, (int)id);
+        for (int id = UI_MENU_FIRST; id <= UI_MENU_LAST_ID; id++) {
+            const char *text = ui_text_in(lang, (UiTextId)id);
+            CHECK(*text && strlen(text) + 256 < UI_DESC_BYTES, "%s menu id %d is empty or too long", lang, id);
         }
-        for (UiTextId id = UI_SWKBD_TITLE; id < UI_MENU_FIRST; id++) {
-            const char *text = ui_text_in(lang, id);
-            CHECK(text && *text, "%s keyboard id %d is empty", lang, (int)id);
-        }
-        if (ui_text_defined(lang, UI_MENU_OV_GAME_PCT))
-            CHECK(strstr(ui_text_in(lang, UI_MENU_OV_GAME_PCT), "%.0f%%"), "%s lost the overlay percentage", lang);
-        if (ui_text_defined(lang, UI_MENU_OV_MAX_MS))
-            CHECK(strstr(ui_text_in(lang, UI_MENU_OV_MAX_MS), "%.1f"), "%s lost the overlay time format", lang);
-        if (has_menu) {
-            cfg_set("AC_MENU_LANG", lang);
-            CHECK(menu_text(UI_MENU_CONTINUE) == ui_text_in(lang, UI_MENU_CONTINUE), "menu_text ignores AC_MENU_LANG=%s", lang);
-        }
+        for (int id = UI_SWKBD_TITLE; id < UI_MENU_FIRST; id++)
+            CHECK(*ui_text_in(lang, (UiTextId)id), "%s keyboard id %d is empty", lang, id);
     }
+
+    // the texts themselves, as they were when they were rows of ui_text.c
+    CHECK(!strcmp(ui_text_in("ru", UI_SWKBD_OK), "ОК") && !strcmp(ui_text_in("de", UI_SWKBD_CANCEL), "Abbrechen") &&
+          !strcmp(ui_text_in("ja", UI_SWKBD_DEFAULT_NAME), "ウマ") && !strcmp(ui_text_in("en", UI_SWKBD_OK), "OK"),
+          "keyboard texts changed");
+    CHECK(!strcmp(ui_text_in("it", UI_MENU_TITLE), "Impostazioni") && !strcmp(ui_text_in("ru", UI_MENU_LANGNAME_RU),
+          "Русский"), "menu texts changed");
+    CHECK(!strcmp(ui_text_in("ja", UI_MENU_CONTINUE), ui_text_in("en", UI_MENU_CONTINUE)), "a keyboard catalog has menu text");
+    for (int i = 0; i < ui_text_lang_count(); i++)
+        for (int id = UI_MENU_LANGNAME_EN; id <= UI_MENU_LANGNAME_PT_BR; id++)
+            CHECK(!strcmp(ui_text_in(ui_text_lang_at(i), (UiTextId)id), ui_text_in("en", (UiTextId)id)),
+                  "language name %d differs in %s", id, ui_text_lang_at(i));
+    for (size_t i = 0; i < sizeof menus / sizeof *menus; i++)
+        CHECK(strstr(ui_text_in(menus[i], UI_MENU_OV_GAME_PCT), "%.0f%%") &&
+              strstr(ui_text_in(menus[i], UI_MENU_OV_MAX_MS), "%.1f"), "%s overlay format lost its conversion", menus[i]);
+    // Brazil gets the Brazilian keyboard, Portugal its own; both read the Brazilian menu
+    CHECK(!strcmp(ui_text_lang("pt-BR"), "pt-BR") && !strcmp(ui_text_lang("pt"), "pt") &&
+          strcmp(ui_text_in("pt-BR", UI_SWKBD_PROMPT), ui_text_in("pt", UI_SWKBD_PROMPT)), "pt keyboard catalog not used");
+
+    // menu_text follows the setting live; a keyboard catalog or an unknown tag gives English
+    static const char *const set[] = {"ru", "pt-BR", "it", "zh-Hans", "en"};
+    for (size_t i = 0; i < sizeof set / sizeof *set; i++) {
+        cfg_set("AC_MENU_LANG", set[i]);
+        CHECK(menu_text(UI_MENU_CONTINUE) == ui_text_in(set[i], UI_MENU_CONTINUE), "menu_text ignores MENU_LANG=%s", set[i]);
+    }
+    cfg_set("AC_MENU_LANG", "pt");
+    CHECK(menu_text(UI_MENU_CONTINUE) == ui_text_in("pt-BR", UI_MENU_CONTINUE), "MENU_LANG=pt does not read pt-BR");
+    cfg_set("AC_MENU_LANG", "ja");
+    CHECK(menu_text(UI_MENU_CONTINUE) == ui_text_in("en", UI_MENU_CONTINUE), "MENU_LANG=ja is not English");
     cfg_set("AC_MENU_LANG", "");
-    if (ui_text_defined("it", UI_MENU_TITLE))
-        CHECK(!strcmp(ui_text_in("it", UI_MENU_TITLE), "Impostazioni"), "Italian settings title changed");
-    if (ui_text_defined("ru", UI_SWKBD_OK))
-        CHECK(!strcmp(ui_text_in("ru", UI_SWKBD_OK), "ОК"), "Russian keyboard OK changed");
-    if (ui_text_defined("de", UI_SWKBD_CANCEL))
-        CHECK(!strcmp(ui_text_in("de", UI_SWKBD_CANCEL), "Abbrechen"), "German keyboard cancel changed");
-    CHECK(!strcmp(ui_text_lang("pt-BR"), "pt-BR") && !strcmp(ui_text_lang("pt"), "pt-BR"),
-          "Portuguese tags not mapped");
-    CHECK(ui_text_in("pt", UI_SWKBD_PROMPT) == ui_text_in("pt-BR", UI_SWKBD_PROMPT),
-          "pt and pt-BR do not share a catalog");
-    char auto_buf[16];
-    const char *auto_lang = ui_text_lang(plat_ui_language());
-    if (!ui_text_defined(auto_lang, UI_MENU_TITLE)) {
-        size_t n = strcspn(auto_lang, "-");
-        if (n < sizeof auto_buf && auto_lang[n]) {
-            memcpy(auto_buf, auto_lang, n), auto_buf[n] = 0;
-            auto_lang = auto_buf;
-        }
+    const char *sys = ui_text_lang(plat_ui_language());
+    const char *auto_lang = ui_text_is_menu_lang(sys) ? sys : !strncmp(sys, "pt", 2) ? "pt-BR" : "en";
+    if (!ui_text_is_menu_lang(sys) && strchr(sys, '-')) {   // the base language ("ru" for "ru-RU")
+        char base[16];
+        snprintf(base, sizeof base, "%.*s", (int)strcspn(sys, "-"), sys);
+        if (ui_text_is_menu_lang(base)) auto_lang = ui_text_lang(base);
     }
-    if (!ui_text_defined(auto_lang, UI_MENU_TITLE)) auto_lang = "en";
     CHECK(menu_text(UI_MENU_CONTINUE) == ui_text_in(auto_lang, UI_MENU_CONTINUE), "menu_text auto ignores the system language");
+
+    // A player's own catalog: a translation is used only with this build's English and printf conversions, and one
+    // that ends in '%' is refused without reading past its end (strchr finds the terminating NUL)
+    char dir[512], path[640];
+    CHECK(plat_temp_dir(dir, sizeof dir), "no temporary directory");
+    snprintf(path, sizeof path, "%s/ac-probe-xx.mo", dir);
+    const char *const header = "Language: xx\nContent-Type: text/plain; charset=UTF-8\nX-Astral-Language-Name: Probe\n";
+    char k_ok[160], k_pct[160], k_old[160];
+    snprintf(k_ok, sizeof k_ok, "UI_MENU_CONTINUE\x04%s", ui_text_in("en", UI_MENU_CONTINUE));
+    snprintf(k_pct, sizeof k_pct, "UI_MENU_OV_FMT_PCT\x04%s", ui_text_in("en", UI_MENU_OV_FMT_PCT));
+    snprintf(k_old, sizeof k_old, "UI_MENU_QUIT\x04%s", "Quit the game (older English)");
+    const char *const kv[] = {"", header, k_ok, "Weiter", k_old, "Beenden", k_pct, "100%"};   // "100%" ends the file
+    static uint8_t mo[2048];
+    size_t n = mo_build(mo, sizeof mo, kv, 4);
+    CHECK(n && plat_file_write(path, mo, n), "could not write %s", path);
+    int used = ui_text_catalog_check(path, "xx");
+    CHECK(used == 1, "probe catalog: %d entries used, want 1 (the current English only, '%%' at the end refused)", used);
+    CHECK(ui_text_catalog_check(path, "yy") == -1, "a catalog whose Language is not its file name was accepted");
+    plat_file_write(path, mo, 20);   // cut off: refused
+    CHECK(ui_text_catalog_check(path, "xx") == -1, "a cut-off catalog was accepted");
+    remove(path);
+    printf("menu text: %d catalogs (%d menu languages), keyboard and menu texts and a player's catalog checked\n",
+           ui_text_lang_count() - 1, (int)(sizeof menus / sizeof *menus));
 }
 
 static void probe_main(Cpu *c) {

@@ -657,6 +657,19 @@ def write_zip(out, path):
     print(f'{path}: {mib(path.stat().st_size)}')
 
 
+def copy_catalogs(src, dst):
+    """lang/*.mo of a release into dst, which keeps no other .mo (the installer does the same, installer/steps.py)."""
+    dst.mkdir(parents=True, exist_ok=True)
+    wanted = {p.name for p in src.glob('*.mo')}
+    if not wanted:
+        sys.exit(f'{src} holds no compiled catalogs')
+    for old in dst.glob('*.mo'):
+        if old.name not in wanted:
+            old.unlink()
+    for name in wanted:
+        shutil.copyfile(src / name, dst / name)
+
+
 def prove(out, cpu='v3'):
     """Compile the generated C and link astralchain.exe with the folder's tools only, then run the probes next to it."""
     out = out.resolve()
@@ -674,6 +687,9 @@ def prove(out, cpu='v3'):
     print(f'prove: build {time.time() - t0:.0f} s')
     for dll in ('SDL3.dll', 'libopus-0.dll', 'libxess.dll', *fsr4_sdk.DLLS):
         shutil.copy2(out / 'bin' / dll, chk / dll)
+    # The release's compiled text catalogs beside the game, where the installer puts them: --probe-services wants the
+    # menu and keyboard languages they hold
+    copy_catalogs(out / 'lang', chk / 'lang')
     failed = []
     for probe in PROBES:
         # the game writes UTF-8 (--probe-services logs a Japanese keyboard answer), which cp1252 cannot decode

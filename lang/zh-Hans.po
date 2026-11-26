@@ -419,8 +419,8 @@ msgid "A temporal upscaler in place of the game's anti-aliasing: smoother edges 
 msgstr "以时间性超分辨率取代游戏的抗锯齿：边缘更平滑、闪烁更少；选择低于“原生”的模式还能提高帧率。NVIDIA DLSS 需要 NVIDIA RTX 显卡，并将 nvngx_dlss.dll 放在 astralchain.exe 旁；Intel XeSS 需要较新的显卡，并将 libxess.dll 放在 astralchain.exe 旁；AMD FSR 3 可在任何显卡上运行，AMD FSR 4 需要 Radeon RX 6000 或更新的显卡。“自动”在可运行时使用 DLSS，否则使用 FSR 3。在此选择的 DLSS、XeSS 和 FSR 4 重启后生效。HUD 不受影响。"
 
 msgctxt "UI_MENU_UPSCALING_DESC_OTHER"
-msgid "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less shimmer, and with a mode below Native more frames per second. AMD FSR 3 runs on any GPU, AMD FSR 4 on a Radeon RX 6000 or newer; Automatic is FSR 3 here (NVIDIA DLSS and Intel XeSS are Windows only). FSR 4 chosen here takes effect after a restart. The HUD is not touched."
-msgstr "以时间性超分辨率取代游戏的抗锯齿：边缘更平滑、闪烁更少；选择低于“原生”的模式还能提高帧率。AMD FSR 3 可在任何显卡上运行，AMD FSR 4 需要 Radeon RX 6000 或更新的显卡；此处“自动”即 FSR 3（NVIDIA DLSS 和 Intel XeSS 仅限 Windows）。在此选择的 FSR 4 重启后生效。HUD 不受影响。"
+msgid "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less shimmer, and with a mode below Native more frames per second. NVIDIA DLSS needs an NVIDIA RTX GPU and libnvidia-ngx-dlss.so next to astralchain, AMD FSR 3 runs on any GPU, AMD FSR 4 on a Radeon RX 6000 or newer; Automatic takes DLSS where it can run and FSR 3 elsewhere (Intel XeSS is Windows only). DLSS and FSR 4 chosen here take effect after a restart. The HUD is not touched."
+msgstr "以时间性超分辨率取代游戏的抗锯齿：边缘更平滑、闪烁更少；选择低于“原生”的模式还能提高帧率。NVIDIA DLSS 需要 NVIDIA RTX 显卡，并将 libnvidia-ngx-dlss.so 放在 astralchain 旁；AMD FSR 3 可在任何显卡上运行，AMD FSR 4 需要 Radeon RX 6000 或更新的显卡；“自动”在可运行时使用 DLSS，否则使用 FSR 3（Intel XeSS 仅限 Windows）。在此选择的 DLSS 和 FSR 4 重启后生效。HUD 不受影响。"
 
 msgctxt "UI_MENU_UPSCALING_OFF"
 msgid "Off"
@@ -1275,8 +1275,8 @@ msgid "Quick-select."
 msgstr "快捷选择。"
 
 msgctxt "UI_BIND_DESC_MOVE"
-msgid "Moves Link like the left stick. The controller's left stick always works too."
-msgstr "像左摇杆一样移动林克。手柄的左摇杆始终可用。"
+msgid "Moves your character like the left stick. The controller's left stick always works too."
+msgstr "像左摇杆一样移动角色。手柄的左摇杆始终可用。"
 
 msgctxt "UI_BIND_DESC_CAMERA"
 msgid "Turns the camera like the right stick. The mouse and the controller's right stick always work too."
@@ -2173,4 +2173,3 @@ msgstr "不支持"
 msgctxt "UI_MENU_CHEAT_UNSUPPORTED_DESC"
 msgid "This cheat cannot be used with this version of the game:"
 msgstr "此金手指不能用于此游戏版本："
-

@@ -425,8 +425,8 @@ msgid "A temporal upscaler in place of the game's anti-aliasing: smoother edges 
 msgstr "Un upscaler temporale al posto dell'anti-aliasing del gioco: bordi più levigati e meno sfarfallio, e con una modalità sotto Nativo più frame al secondo. NVIDIA DLSS richiede una GPU NVIDIA RTX e nvngx_dlss.dll accanto a astralchain.exe, Intel XeSS una GPU recente e libxess.dll accanto a astralchain.exe; AMD FSR 3 funziona su qualsiasi GPU, AMD FSR 4 su una Radeon RX 6000 o più recente. \"Automatico\" prende DLSS dove può girare e FSR 3 altrove. DLSS, XeSS e FSR 4 scelti qui hanno effetto dopo un riavvio. La HUD non viene toccata."
 
 msgctxt "UI_MENU_UPSCALING_DESC_OTHER"
-msgid "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less shimmer, and with a mode below Native more frames per second. AMD FSR 3 runs on any GPU, AMD FSR 4 on a Radeon RX 6000 or newer; Automatic is FSR 3 here (NVIDIA DLSS and Intel XeSS are Windows only). FSR 4 chosen here takes effect after a restart. The HUD is not touched."
-msgstr "Un upscaler temporale al posto dell'anti-aliasing del gioco: bordi più levigati e meno sfarfallio, e scegliendo modalità sotto Nativo, maggiori frame al secondo. AMD FSR 3 funziona su qualsiasi GPU, AMD FSR 4 su una Radeon RX 6000 o più recente; \"Automatico\" è FSR 3 qui (NVIDIA DLSS e Intel XeSS sono solo su Windows). FSR 4 scelto qui ha effetto dopo un riavvio. La HUD non viene toccata."
+msgid "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less shimmer, and with a mode below Native more frames per second. NVIDIA DLSS needs an NVIDIA RTX GPU and libnvidia-ngx-dlss.so next to astralchain, AMD FSR 3 runs on any GPU, AMD FSR 4 on a Radeon RX 6000 or newer; Automatic takes DLSS where it can run and FSR 3 elsewhere (Intel XeSS is Windows only). DLSS and FSR 4 chosen here take effect after a restart. The HUD is not touched."
+msgstr "Un upscaler temporale al posto dell'anti-aliasing del gioco: bordi più levigati e meno sfarfallio, e con una modalità sotto Nativo più frame al secondo. NVIDIA DLSS richiede una GPU NVIDIA RTX e libnvidia-ngx-dlss.so accanto a astralchain, AMD FSR 3 funziona su qualsiasi GPU, AMD FSR 4 su una Radeon RX 6000 o più recente; \"Automatico\" prende DLSS dove può girare e FSR 3 altrove (Intel XeSS è solo per Windows). DLSS e FSR 4 scelti qui hanno effetto dopo un riavvio. La HUD non viene toccata."
 
 msgctxt "UI_MENU_UPSCALING_OFF"
 msgid "Off"
@@ -1281,7 +1281,7 @@ msgid "Quick-select."
 msgstr "Selezione rapida."
 
 msgctxt "UI_BIND_DESC_MOVE"
-msgid "Moves Link like the left stick. The controller's left stick always works too."
+msgid "Moves your character like the left stick. The controller's left stick always works too."
 msgstr "Muove il personaggio come lo stick sinistro. Anche lo stick sinistro del controller funziona sempre."
 
 msgctxt "UI_BIND_DESC_CAMERA"

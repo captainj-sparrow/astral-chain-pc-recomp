@@ -92,12 +92,9 @@ From the repository root, in PowerShell. Every step that depends on the game ver
 
    `--cpu v2` targets x86-64-v2 (SSE4.2, no AVX2/FMA) for older CPUs; the default `v3` needs AVX2. The v2 build links
    `runtime/fma.c`, a correctly rounded software fma the FP lowering needs, and runs slower.
-   `build_game.py` first regenerates the ids and template, checks the `lang\*.po` sources and compiles them into the
-   `lang\*.mo` files the runtime reads (generated locally, not committed), so adding an id and its English text in
-   `ui_text.h` and `ui_text.c` is enough for the next build. Use `--skip-ui-catalogs` only for the release builders'
-   internal calls.
-
-
+   `build_game.py` first updates and compiles the text catalogs (`lang\*.po` -> `lang\*.mo`) and copies them beside
+   the executable: see "Texts and translations" below. `--skip-ui-catalogs` is for the release builders' internal
+   calls only.
 
    Lifting takes about 2 minutes on 6 workers (a Z1 Extreme; the register analysis of `recomp/ipa.py` is most of
    it, and `--no-abi-trust` lifts without it in about 20 s), a clean compile about 200 s on 24 threads; later builds
@@ -165,6 +162,52 @@ Settings live in `astralchain.ini` next to `astralchain.exe` ([astralchain.ini.e
 your machines without MSYS2, Python or .NET. `romfs.bin` stays out unless you pass `--with-romfs`; otherwise put it in
 `romfs\` next to the exe or point `AC_ROMFS` at its folder. Run `astralchain.exe --prepare-shaders` once in the copied
 folder. The folder holds code and data derived from your game: for your own machines only.
+
+## Texts and translations
+
+The text the port itself shows (the in-game menu, the performance overlay and the game's name-entry keyboard) is not
+in the C code except for English:
+
+- `runtime/ui_text.h`: the `UiTextId` enum, one id per string.
+- `runtime/ui_text.c`: `text_en`, the English text of every id, compiled in. It is the fallback of every id in every
+  language, so the game always has a text to show.
+- `lang/<tag>.po`: one file per other language, in gettext's PO format (Poedit or any text editor). An entry is
+  `msgctxt` = the id's name, `msgid` = the English source, `msgstr` = the translation. Two kinds: a **menu catalog**
+  (`it`, `ru`, `pt-BR`, `zh-Hans`) has every id and is offered in the Menu tab; a **keyboard catalog** (`ja`, `fr`,
+  `de`, `es`, `nl`, `pt`, `zh-Hant`, `ko`) has only the `UI_SWKBD_*` ids, which the name-entry keyboard uses in that
+  game language.
+- `lang/messages.pot`: the template a new language starts from (generated, committed).
+- `runtime/ui_text_keys.inc`: the id names the runtime matches `msgctxt` against (generated, committed).
+- `lang/*.mo`: the compiled catalogs the runtime reads. Build outputs: ignored by git, never committed.
+
+`tools/ui_text_catalogs.py` turns the `.po` files into `.mo` files, and **`build_game.py` runs it before every build**
+and copies the `.mo` files into `build\v101\lang\` beside the executable, which reads them at start (`AC_LANG_DIR`
+points elsewhere). A build without them runs with an English menu, and `--probe-services` fails. The release builders
+run it too and ship `lang\*.mo`; the installer copies them into the install folder's `lang\` in its last step. Run it
+by hand (`.venv\Scripts\python tools\ui_text_catalogs.py`) after editing a `.po` without building, and
+`--check` to validate the committed files without writing anything.
+
+It works like gettext's `msgmerge`, so a change of the English text never stops the build:
+
+- **A new string**: add its id to the enum in `ui_text.h` and its English to `text_en`. The next build adds it to
+  `messages.pot` and, with an empty `msgstr`, to every menu catalog; it shows in English until it is translated.
+- **A changed English text**: its translations stay, marked `#, fuzzy` with the old English on a `#| msgid` line. A
+  fuzzy entry is left out of the `.mo` (the menu shows the new English) until the translation is checked and the flag
+  removed. The runtime also refuses any entry whose `msgid` is not this build's English, so a stale `.mo` cannot show
+  an outdated sentence.
+- **Translating**: fill in `msgstr` and delete `#, fuzzy` where it is set. Keep `msgctxt` and `msgid` as they are,
+  and keep the printf conversions (`%s`, `%d`, `%.1f`...) of the English, in the same order: the menu formats the
+  translation with the English arguments.
+- **A new language**: copy `messages.pot` to `lang/<tag>.po` (the tag the game and Windows use: `fr`, `es`, `ja`...),
+  fill in `Language`, `X-Astral-Language-Name` (the language's own name) and, for Japanese, Korean or Chinese,
+  `X-Astral-Font-Lang` (the system font that draws it), then translate. Delete the entries left empty, or keep them:
+  they show in English.
+
+The build prints untranslated and fuzzy entries as warnings. It fails on a malformed file, a header without those
+fields, an unknown `msgctxt`, or a translation the runtime would refuse: other printf conversions than the English,
+a keyboard text over the Switch keyboard's limits, or a menu text over 1792 bytes (the description pane keeps 256 of
+its 2048 for a note). `--probe-services` checks the loaded catalogs, sample texts of each kind and a hand-made
+catalog. The installer's own window has its texts in `installer/text/<lang>.json` instead (docs/installer.md).
 
 ## Linux (in progress)
 
@@ -282,6 +325,11 @@ Before a commit:
 - `python tools/check_content.py --staged`: nothing game-derived is staged. CI runs the same check;
   `git config core.hooksPath .githooks` runs it before each local commit.
 - `build\v101\astralchain.exe --selftest`: layout, dispatch table and host-function registry, without game files.
+
+A change to the host's texts (`runtime/ui_text.*`, `lang/*.po`, `tools/ui_text_catalogs.py`) passes
+`.venv\Scripts\python tools\ui_text_catalogs.py --check`, `tests\ui_text_catalogs_test.py` (the tool's rules, no game
+files) and `astralchain.exe --probe-services`, which needs the
+compiled catalogs beside the executable (`build_game.py` puts them there; "Texts and translations").
 
 A change to the button prompts (`tools/make_prompts_folders.py`, `runtime/romfs.c` overlay_init) passes
 `astralchain.exe --probe-cfg`, which checks the prompts pick and folders (input_map.c); a change to the settings

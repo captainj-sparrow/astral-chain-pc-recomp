@@ -1,0 +1,35 @@
+# The game's name-entry keyboard in this game language (a keyboard catalog: the menu stays in its own
+# language). Add the other ids from lang/messages.pot to translate the menu as well.
+msgid ""
+msgstr ""
+"Project-Id-Version: astral-chain-pc-recomp\n"
+"Language: ja\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Astral-Language-Name: 日本語\n"
+"X-Astral-Font-Lang: ja\n"
+
+msgctxt "UI_SWKBD_TITLE"
+msgid "Text entry"
+msgstr "文字入力"
+
+msgctxt "UI_SWKBD_PROMPT"
+msgid "Enter a name"
+msgstr "名前を入力してください"
+
+msgctxt "UI_SWKBD_DEFAULT_NAME"
+msgid "Horse"
+msgstr "ウマ"
+
+msgctxt "UI_SWKBD_OK"
+msgid "OK"
+msgstr "OK"
+
+msgctxt "UI_SWKBD_CANCEL"
+msgid "Cancel"
+msgstr "キャンセル"
+
+msgctxt "UI_SWKBD_PAD_HINT"
+msgid "Controller: A = OK, B = Cancel"
+msgstr "コントローラー: A = OK、B = キャンセル"

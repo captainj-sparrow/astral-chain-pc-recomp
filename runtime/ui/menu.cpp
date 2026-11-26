@@ -286,11 +286,18 @@ static int vk_up(const MenuTarget *t) {
     return 1;
 }
 
-// Roboto Medium (Latin, Cyrillic, dashes and quotes) at 26 px per 1080 lines, with glyphs merged from a system font for
-// every catalog whose X-Astral-Font-Lang header names one. Every string of the catalog goes into the builder: the merged
-// font must cover the whole menu of that language, not only its name. Made again when the window height changes; the old
-// texture goes after the queue is idle (CreateFontsTexture).
+// Roboto Medium (Latin, Cyrillic, dashes and quotes) at 26 px per 1080 lines, with the glyphs of the Japanese, Korean
+// and Chinese language names merged in from a system font when there is one (each language is named in its own script,
+// in the Game tab's language row and the Menu tab's), and the glyphs of every catalog whose X-Astral-Font-Lang names
+// that font (ui_text.c): every string such a catalog has goes into the builder, since the merged font must cover the
+// whole menu of that language, not only its name. The four names are merged even without a lang folder, as before the
+// catalogs moved out of the executable. Made again when the window height changes; the old texture goes after the queue
+// is idle (CreateFontsTexture).
 static const ImWchar kRanges[] = {0x0020, 0x00FF, 0x0400, 0x052F, 0x2010, 0x2027, 0};
+static const struct { const char *font; UiTextId name; } kCjk[] = {
+    {"ja", UI_MENU_LANGNAME_JA}, {"ko", UI_MENU_LANGNAME_KO}, {"zh-Hans", UI_MENU_LANGNAME_ZH_HANS},
+    {"zh-Hant", UI_MENU_LANGNAME_ZH_HANT},
+};
 
 static uint32_t be32(const uint8_t *p) { return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3]; }
 
@@ -342,7 +349,7 @@ static void add_row_glyphs(void *ctx, const char *text) {
 }
 
 static int fonts_up(float scale) {
-    enum { N = 32 };
+    enum { N = 16 };
     ImFontAtlas *fa = ImGui::GetIO().Fonts;
     fa->Clear();
     ImFontConfig fc;
@@ -350,16 +357,18 @@ static int fonts_up(float scale) {
     fa->AddFontFromMemoryTTF((void *)roboto_ttf, (int)sizeof roboto_ttf, 26.0f * scale, &fc, kRanges);
     uint8_t *data[N] = {};
     ImVector<ImWchar> ranges[N];
-    const char *font_langs[N] = {};
-    int merged = 0, tried = 0;
+    // The system fonts to merge: the four of the CJK language names, then any other a catalog names
+    const char *fonts[N];
+    int tried = 0, merged = 0;
+    for (const auto &c : kCjk) fonts[tried++] = c.font;
     for (int i = 0; i < ui_text_lang_count() && tried < N; i++) {
-        const char *lang = ui_text_lang_at(i);
-        const char *font_lang = ui_text_font_lang(lang);
-        if (!font_lang || !*font_lang) continue;
-        int seen = 0;
-        for (int j = 0; j < tried; j++) seen |= !strcmp(font_langs[j], font_lang);
-        if (seen) continue;
-        font_langs[tried++] = font_lang;
+        const char *f = ui_text_font_lang(ui_text_lang_at(i));
+        int seen = !f || !*f;
+        for (int j = 0; j < tried && !seen; j++) seen = !strcmp(fonts[j], f);
+        if (!seen) fonts[tried++] = f;
+    }
+    for (int k = 0; k < tried; k++) {
+        const char *font_lang = fonts[k];
         char path[512];
         uint64_t size = 0;
         if (!plat_font_path(font_lang, path, sizeof path) || !(data[merged] = plat_file_read(path, &size))) continue;
@@ -371,8 +380,14 @@ static int fonts_up(float scale) {
             continue;
         }
         ImFontGlyphRangesBuilder b;
-        b.AddText(ui_text_lang_name(lang));
-        ui_text_visit(lang, add_row_glyphs, &b);
+        for (const auto &c : kCjk)
+            if (!strcmp(c.font, font_lang)) b.AddText(ui_text_in("en", c.name));
+        for (int i = 0; i < ui_text_lang_count(); i++) {
+            const char *lang = ui_text_lang_at(i);
+            if (strcmp(ui_text_font_lang(lang), font_lang)) continue;
+            b.AddText(ui_text_lang_name(lang));
+            ui_text_visit(lang, add_row_glyphs, &b);
+        }
         b.BuildRanges(&ranges[merged]);
         ImFontConfig mc;
         mc.MergeMode = true;
@@ -386,7 +401,8 @@ static int fonts_up(float scale) {
     fa->ClearInputData();   // the glyphs are in the texture: the font files and the pixels are not needed again
     fa->ClearTexData();
     for (uint8_t *d : data) free(d);
-    rt_log("menu: font atlas at %.1f px, merged %d of %d system fonts", 26.0f * scale, merged, tried);
+    rt_log("menu: font atlas at %.1f px, %d of %d system fonts merged (language names and catalogs)", 26.0f * scale,
+           merged, tried);
     g_font_scale = ok ? scale : 0;
     return ok;
 }
@@ -1152,11 +1168,13 @@ static void tab_menu(float scale) {
     const char *values[MAX_LANGS + 1], *names[MAX_LANGS + 1];
     values[0] = "";
     names[0] = menu_text(UI_MENU_MENU_LANG_AUTO);
-    int n = ui_text_lang_count();
-    if (n > MAX_LANGS) n = MAX_LANGS;
-    for (int i = 0; i < n; i++) {
-        values[i + 1] = ui_text_lang_at(i);
-        names[i + 1] = ui_text_lang_name(values[i + 1]);
+    int n = 0;   // English and the catalogs with menu text; a keyboard catalog has none to show
+    for (int i = 0; i < ui_text_lang_count() && n < MAX_LANGS; i++) {
+        const char *lang = ui_text_lang_at(i);
+        if (!ui_text_is_menu_lang(lang)) continue;
+        values[n + 1] = lang;
+        names[n + 1] = ui_text_lang_name(lang);
+        n++;
     }
     opt_choice_list("AC_MENU_LANG", UI_MENU_MENU_LANG, values, names, n + 1, UI_MENU_MENU_LANG_DESC);
     opt_end();

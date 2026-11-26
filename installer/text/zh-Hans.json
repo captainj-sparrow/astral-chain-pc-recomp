@@ -93,6 +93,7 @@
  "warn.update_accepted": "更新代码与参考的 {version} 转储不一致（{modules}）；按你的选择继续。游戏可能无法运行。",
  "warn.xbox_prompts_failed": "无法准备 Xbox 按键提示（退出代码 {code}）；游戏将继续使用 Switch 按键提示。详情：{log}",
  "warn.dlc_failed": "无法复制 DLC 文件夹：{detail}。游戏没有它也能运行；再次运行安装程序即可添加。",
+ "warn.lang_failed": "无法复制语言文件：{detail}。菜单将显示为英语；再次运行安装程序即可添加。",
  "warn.shaders_skipped": "显卡驱动在编译部分着色器时崩溃，因此有 {count} 个着色器未被预先准备。游戏会在首次需要时编译它们，驱动在那时也可能崩溃；更新驱动可能会解决。详情：{log}",
  "warn.kernel_old": "Linux {version} 缺少游戏依赖的写入跟踪功能（需要 6.7 或更新版本）；游戏可能运行得很慢。更新系统即可解决。",
 

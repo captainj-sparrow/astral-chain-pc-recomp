@@ -12,8 +12,8 @@ Release (docs/installer.md "Release layout"), root = the unpacked folder:
                             include/ + lib/ of Vulkan, SDL3, Opus, libvpx and VMA (build_game.py --deps)
     bin/                    ac_xlate.exe (+ ac_xlate.id), hactool.exe, ninja.exe, SDL3.dll, libopus-0.dll
     data/shader-answers.bin the shader variants players met (a shader-answers.bin recorded in play, tools/prepare_shaders.py)
-    lang/                   the compiled UI catalogs (lang/*.mo) and lang/messages.pot, copied next to astralchain.exe
-                            at prepare
+    lang/                   the compiled text catalogs (lang/*.mo) and lang/messages.pot; Cleanup copies the .mo files
+                            next to astralchain.exe (installer/steps.py copy_catalogs)
     astralchain.ini.example
     VERSION                 the release version, one line
     temp/                   the default scratch folder (a successful install removes it; its run logs move to the

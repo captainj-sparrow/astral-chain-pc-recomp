@@ -35,6 +35,9 @@ Use the issue form. Include the port version and game update from the title line
 - A change to the lifter (`recomp/`) or the CPU headers passes the differential tests in [docs/building.md](docs/building.md), "Checks".
 - Commit messages are plain sentences, without `feat:` or other prefixes.
 - AI-assisted code is welcome. You are responsible for having read and run it.
+- A translation of the menu is a `lang/<tag>.po` file: start from `lang/messages.pot`, as docs/building.md "Texts and
+  translations" describes. Keep `msgctxt`, `msgid` and the printf conversions as they are; you need no build to send
+  one.
 
 ## Code and docs
 

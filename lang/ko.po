@@ -1,0 +1,35 @@
+# The game's name-entry keyboard in this game language (a keyboard catalog: the menu stays in its own
+# language). Add the other ids from lang/messages.pot to translate the menu as well.
+msgid ""
+msgstr ""
+"Project-Id-Version: astral-chain-pc-recomp\n"
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Astral-Language-Name: 한국어\n"
+"X-Astral-Font-Lang: ko\n"
+
+msgctxt "UI_SWKBD_TITLE"
+msgid "Text entry"
+msgstr "문자 입력"
+
+msgctxt "UI_SWKBD_PROMPT"
+msgid "Enter a name"
+msgstr "이름을 입력하세요"
+
+msgctxt "UI_SWKBD_DEFAULT_NAME"
+msgid "Horse"
+msgstr "말"
+
+msgctxt "UI_SWKBD_OK"
+msgid "OK"
+msgstr "확인"
+
+msgctxt "UI_SWKBD_CANCEL"
+msgid "Cancel"
+msgstr "취소"
+
+msgctxt "UI_SWKBD_PAD_HINT"
+msgid "Controller: A = OK, B = Cancel"
+msgstr "컨트롤러: A 확인, B 취소"

@@ -50,8 +50,8 @@ The install folder (`main.c` `portable_paths()` reads this layout; it stays port
   shader-cache/                         the translated shaders, packed into one shader-cache.pack
   shader-prepared.bin                   the variants prepared ahead of play (read at boot to warm the driver)
   shader-prepared-driver.txt            the GPU driver caches that hold them (a start with another one rebuilds it)
-  lang/*.mo, messages.pot               compiled UI catalogs and the translator template; precompiled .mo drop-ins are
-                                        picked up at the next game start
+  lang/*.mo                             the menu's and keyboard's languages (docs/building.md "Texts and translations"),
+                                        copied by the last step; a player's own .mo there is read at the next start
   profile/                              saves
   mods/                                 the player's mods, one folder per mod (created by the menu's "Open mods folder")
   dlc/                                  the DLCs' XML sources (docs/dlc.md) and their guide, copied from the release
@@ -187,8 +187,8 @@ runtime/              libacrt.a, libacrt-v2.a, the headers the generated code an
 bin/                  ac_xlate.exe (+ .id), hactool.exe, SDL3.dll, libopus-0.dll, libxess.dll, ninja.exe, and AMD FSR 4:
                       amd_fidelityfx_loader_vk.dll and amd_fidelityfx_upscaler_vk.dll (the Linux release has the same
                       two DLLs with libffx_vk_linux.so, which runs them)
-lang/                 the compiled UI catalogs copied beside astralchain.exe at prepare; players may add more .mo files
-                      there (`msgfmt -o xx.mo xx.po` on their own machine)
+lang/                 the compiled text catalogs (lang/*.mo) and messages.pot, the template of a new language; the last
+                      step copies the .mo files beside astralchain.exe
 licenses/             the licence files of everything bundled
 THIRD_PARTY_NOTICES.md
 dlc/                  the DLCs (docs/dlc.md): XML and their guide, copied into the install folder by the last step

@@ -1,7 +1,14 @@
+# The template of a new language for the in-game menu, the overlay and the game's name-entry keyboard.
+# Copy it to lang/<tag>.po, fill in Language and X-Astral-Language-Name (and X-Astral-Font-Lang for
+# ja, ko, zh-Hans or zh-Hant), translate the msgstr lines, and keep msgctxt and msgid as they are.
 msgid ""
 msgstr ""
+"Project-Id-Version: astral-chain-pc-recomp\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
-"X-Astral-Language-Name: English\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Astral-Language-Name: \n"
 
 msgctxt "UI_SWKBD_TITLE"
 msgid "Text entry"
@@ -416,7 +423,7 @@ msgid "A temporal upscaler in place of the game's anti-aliasing: smoother edges 
 msgstr ""
 
 msgctxt "UI_MENU_UPSCALING_DESC_OTHER"
-msgid "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less shimmer, and with a mode below Native more frames per second. AMD FSR 3 runs on any GPU, AMD FSR 4 on a Radeon RX 6000 or newer; Automatic is FSR 3 here (NVIDIA DLSS and Intel XeSS are Windows only). FSR 4 chosen here takes effect after a restart. The HUD is not touched."
+msgid "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less shimmer, and with a mode below Native more frames per second. NVIDIA DLSS needs an NVIDIA RTX GPU and libnvidia-ngx-dlss.so next to astralchain, AMD FSR 3 runs on any GPU, AMD FSR 4 on a Radeon RX 6000 or newer; Automatic takes DLSS where it can run and FSR 3 elsewhere (Intel XeSS is Windows only). DLSS and FSR 4 chosen here take effect after a restart. The HUD is not touched."
 msgstr ""
 
 msgctxt "UI_MENU_UPSCALING_OFF"
@@ -1272,7 +1279,7 @@ msgid "Quick-select."
 msgstr ""
 
 msgctxt "UI_BIND_DESC_MOVE"
-msgid "Moves Link like the left stick. The controller's left stick always works too."
+msgid "Moves your character like the left stick. The controller's left stick always works too."
 msgstr ""
 
 msgctxt "UI_BIND_DESC_CAMERA"
@@ -2170,4 +2177,3 @@ msgstr ""
 msgctxt "UI_MENU_CHEAT_UNSUPPORTED_DESC"
 msgid "This cheat cannot be used with this version of the game:"
 msgstr ""
-

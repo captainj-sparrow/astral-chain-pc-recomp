@@ -259,17 +259,39 @@ typedef enum {
 // the longest Russian description is about 850 bytes; the probe checks every menu text leaves room for a note.
 enum { UI_DESC_BYTES = 2048 };
 
+// Reads the catalogs (lang/*.mo beside the executable, or AC_LANG_DIR) once; main() calls it after the log opens and
+// before any other thread starts, and nothing changes them afterwards, so the functions below take no lock.
 void ui_text_init(void);
-void ui_text_reload(void);
+// UTF-8 text for id in the language of ov_language() (the software keyboard); English when that language's catalog
+// has no usable text for id or there is no catalog.
 const char *ui_text(UiTextId id);
+// The same for an explicit catalog language ("it", "ru", "pt-BR", "zh-Hans", "ja", "pt", ...; a Switch code is mapped
+// as ui_text_lang does); an id past the enum gives "".
 const char *ui_text_in(const char *lang, UiTextId id);
+// Calls visit(ctx, text) for every string the catalog of lang has its own text for (an id that falls back to English
+// is not visited): the font builder covers the glyphs the language adds (ui/menu.cpp).
 void ui_text_visit(const char *lang, void (*visit)(void *ctx, const char *text), void *ctx);
+// 1 when the catalog of lang has its own text for id (no fallback to English), for the probe.
 int ui_text_defined(const char *lang, UiTextId id);
+// The catalog language for a Switch language code ("en-GB" -> "en", "zh-CN" -> "zh-Hans", "es-419" -> "es"); a code
+// with no catalog of its own and none for its base language comes back unchanged.
 const char *ui_text_lang(const char *switch_code);
+// The loaded catalogs, English (built in) first, then by tag: their count and the tag of the i-th.
 int ui_text_lang_count(void);
 const char *ui_text_lang_at(int i);
+// 1 for English and for a catalog with menu text: the languages the Menu tab offers. A keyboard catalog (only the
+// UI_SWKBD_* ids) is not one.
+int ui_text_is_menu_lang(const char *lang);
+// The language's own name (the catalog's X-Astral-Language-Name), and the system font its script needs
+// (X-Astral-Font-Lang: "ja", "ko", "zh-Hans", "zh-Hant" or "" for none).
 const char *ui_text_lang_name(const char *lang);
 const char *ui_text_font_lang(const char *lang);
+// Parses the catalog at path as the one of lang without loading it: the number of entries it would use (translations
+// whose English source is this build's and that the checks accept), -1 for a file it refuses. For the probe.
+int ui_text_catalog_check(const char *path, const char *lang);
+// Menu text: ui_text_in(menu language, id). The menu language is AC_MENU_LANG when a menu catalog has it; unset, the
+// system UI language when one does (its base language too, and pt-BR for Portugal's Portuguese), else English. Follows
+// a live change of the setting.
 const char *menu_text(UiTextId id);
 // The inputs bound to a Switch action (input_map.h B_*) as the Controls tab's remapping rows label them, in the menu
 // language: its keys with " / " between two ("Left mouse / Z"), the gamepad button of the layout the rows show when

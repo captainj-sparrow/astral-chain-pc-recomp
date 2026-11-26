@@ -418,8 +418,8 @@ msgid "A temporal upscaler in place of the game's anti-aliasing: smoother edges 
 msgstr "Um upscaler temporal no lugar do antisserrilhado do jogo: bordas mais suaves e menos cintilação e, com um modo abaixo de Nativo, mais quadros por segundo. NVIDIA DLSS precisa de uma placa NVIDIA RTX e do nvngx_dlss.dll ao lado do astralchain.exe, Intel XeSS de uma placa recente e do libxess.dll ao lado do astralchain.exe; AMD FSR 3 roda em qualquer placa, AMD FSR 4 em uma Radeon RX 6000 ou mais recente. Automático usa o DLSS onde ele pode rodar e o FSR 3 nos outros casos. DLSS, XeSS e FSR 4 escolhidos aqui valem após reiniciar. O HUD não é afetado."
 
 msgctxt "UI_MENU_UPSCALING_DESC_OTHER"
-msgid "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less shimmer, and with a mode below Native more frames per second. AMD FSR 3 runs on any GPU, AMD FSR 4 on a Radeon RX 6000 or newer; Automatic is FSR 3 here (NVIDIA DLSS and Intel XeSS are Windows only). FSR 4 chosen here takes effect after a restart. The HUD is not touched."
-msgstr "Um upscaler temporal no lugar do antisserrilhado do jogo: bordas mais suaves e menos cintilação e, com um modo abaixo de Nativo, mais quadros por segundo. AMD FSR 3 roda em qualquer placa, AMD FSR 4 em uma Radeon RX 6000 ou mais recente; Automático é o FSR 3 aqui (NVIDIA DLSS e Intel XeSS são somente no Windows). FSR 4 escolhido aqui vale após reiniciar. O HUD não é afetado."
+msgid "A temporal upscaler in place of the game's anti-aliasing: smoother edges and less shimmer, and with a mode below Native more frames per second. NVIDIA DLSS needs an NVIDIA RTX GPU and libnvidia-ngx-dlss.so next to astralchain, AMD FSR 3 runs on any GPU, AMD FSR 4 on a Radeon RX 6000 or newer; Automatic takes DLSS where it can run and FSR 3 elsewhere (Intel XeSS is Windows only). DLSS and FSR 4 chosen here take effect after a restart. The HUD is not touched."
+msgstr "Um upscaler temporal no lugar do antisserrilhado do jogo: bordas mais suaves e menos cintilação e, com um modo abaixo de Nativo, mais quadros por segundo. NVIDIA DLSS precisa de uma placa NVIDIA RTX e do libnvidia-ngx-dlss.so ao lado do astralchain, AMD FSR 3 roda em qualquer placa, AMD FSR 4 em uma Radeon RX 6000 ou mais recente; Automático usa o DLSS onde ele pode rodar e o FSR 3 nos outros casos (Intel XeSS é somente no Windows). DLSS e FSR 4 escolhidos aqui valem após reiniciar. O HUD não é afetado."
 
 msgctxt "UI_MENU_UPSCALING_OFF"
 msgid "Off"
@@ -1274,8 +1274,8 @@ msgid "Quick-select."
 msgstr "Seleção rápida."
 
 msgctxt "UI_BIND_DESC_MOVE"
-msgid "Moves Link like the left stick. The controller's left stick always works too."
-msgstr "Move o Link como o analógico esquerdo. O analógico esquerdo do controle também sempre funciona."
+msgid "Moves your character like the left stick. The controller's left stick always works too."
+msgstr "Move o personagem como o analógico esquerdo. O analógico esquerdo do controle também sempre funciona."
 
 msgctxt "UI_BIND_DESC_CAMERA"
 msgid "Turns the camera like the right stick. The mouse and the controller's right stick always work too."
@@ -2172,4 +2172,3 @@ msgstr "não suportado"
 msgctxt "UI_MENU_CHEAT_UNSUPPORTED_DESC"
 msgid "This cheat cannot be used with this version of the game:"
 msgstr "Este cheat não pode ser usado com esta versão do jogo:"
-
