@@ -515,7 +515,8 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   one to three frames between two of the game's. Its inputs per game frame are taken when the game presents it: the
   window texture with the HUD, the HUD-less scene (the float picture SMAA's blend copied into the window texture before
   the HUD, which `vk_hdr.c` finds for HDR output and here without it), and the temporal upscaler's scene depth, motion
-  vectors (render pixels, scaled by 1 / render size into NGX's normalised range), camera matrices (row-vector form of
+  vectors (render pixels, given with a scale of 1: the SDK header's normalised range, 1 / render size, is Streamline's,
+  and with it NGX saw almost no motion and bent thin geometry), camera matrices (row-vector form of
   the projection, the reprojection the motion pass uses and their inverses) and jitter (`vk_dlaa.c`
   `vk_dlaa_fg_inputs`), so it runs only with a temporal upscaler. The present thread records the evaluations (one per
   generated frame, `MultiFrameIndex` 1..n) at the start of the command buffer of the blit that shows the first

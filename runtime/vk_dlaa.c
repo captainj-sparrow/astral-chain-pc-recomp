@@ -1076,9 +1076,11 @@ int vk_ngx_fg_evaluate(VkCommandBuffer cb, void *feat, const VkFgEval *e) {
     p_setp(p, "DLSSG.PrevClipToClip", (void *)f->prev_to_clip);
     p_setf(p, "DLSSG.JitterOffsetX", f->jitter[0]);
     p_setf(p, "DLSSG.JitterOffsetY", f->jitter[1]);
-    // the vectors are in render pixels: these take them to the [-1, 1] range NGX normalises them to
-    p_setf(p, "DLSSG.MvecScaleX", 1.0f / (float)f->rw);
-    p_setf(p, "DLSSG.MvecScaleY", 1.0f / (float)f->rh);
+    // The vectors as they are, in render pixels: scale 1. The SDK's header says the scale takes them to [-1, 1], which
+    // is Streamline's convention, not NGX's: with 1 / render size NGX saw almost no motion and made its frames from its
+    // own optical flow, so railings bent and kinked in a camera pan; with 1 they stay straight (A/B in the same pan).
+    p_setf(p, "DLSSG.MvecScaleX", 1.0f);
+    p_setf(p, "DLSSG.MvecScaleY", 1.0f);
     p_setf(p, "DLSSG.CameraPinholeOffsetX", 0.0f);
     p_setf(p, "DLSSG.CameraPinholeOffsetY", 0.0f);
     p_setf(p, "DLSSG.CameraPosX", f->cam_pos[0]);
