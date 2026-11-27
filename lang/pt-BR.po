@@ -518,8 +518,8 @@ msgid "Frame generation"
 msgstr "Geração de quadros"
 
 msgctxt "UI_MENU_FRAMEGEN_DESC"
-msgid "NVIDIA DLSS Frame Generation: frames made between the game's own, for a smoother picture; the game itself keeps its frame rate. 2x shows one frame between two of the game's, 3x and 4x two and three (RTX 50 series). Automatic fills the display's refresh rate. Needs an NVIDIA RTX 40 or newer GPU, the DLSS SDK's frame generation library next to the game and an upscaler running. It adds about half a frame of latency, and NVIDIA Reflex runs with it to keep the rest down, whatever Low latency says. Turning it on takes effect after a restart, then at once."
-msgstr "NVIDIA DLSS Frame Generation: quadros criados entre os do jogo, para uma imagem mais fluida; o próprio jogo mantém sua taxa de quadros. 2x mostra um quadro entre dois do jogo, 3x e 4x dois e três (série RTX 50). Automático preenche a taxa de atualização da tela. Requer uma GPU NVIDIA RTX 40 ou mais nova, a biblioteca de geração de quadros do DLSS SDK ao lado do jogo e um upscaler ativo. Adiciona cerca de meio quadro de latência, e o NVIDIA Reflex funciona junto para reduzir o restante, seja qual for a opção de Baixa latência. Ligar vale após reiniciar, depois na hora."
+msgid "Frames made between the game's own, for a smoother picture; the game itself keeps its frame rate. 2x shows one frame between two of the game's, 3x and 4x two and three (NVIDIA DLSS on the RTX 50 series). Automatic fills the display's refresh rate. Needs an upscaler running. It adds about half a frame of latency; on NVIDIA cards NVIDIA Reflex runs with it to keep the rest down, whatever Low latency says, and turning it on then takes a restart."
+msgstr "Quadros criados entre os do jogo, para uma imagem mais fluida; o próprio jogo mantém sua taxa de quadros. 2x mostra um quadro entre dois do jogo, 3x e 4x dois e três (NVIDIA DLSS na série RTX 50). Automático preenche a taxa de atualização da tela. Requer um upscaler ativo. Adiciona cerca de meio quadro de latência; nas placas NVIDIA o NVIDIA Reflex funciona junto para reduzir o restante, seja qual for a opção de Baixa latência, e ligar então requer reiniciar."
 
 msgctxt "UI_MENU_FRAMEGEN_NEEDS_TAA"
 msgid "needs an upscaler"
@@ -528,6 +528,22 @@ msgstr "requer um upscaler"
 msgctxt "UI_MENU_FRAMEGEN_RESTART_DESC"
 msgid "Closes the game and starts it again with frame generation and NVIDIA Reflex, which it runs with. Progress since your last save is lost."
 msgstr "Fecha o jogo e o abre de novo com a geração de quadros e o NVIDIA Reflex, que funciona junto com ela. O progresso desde o último salvamento é perdido."
+
+msgctxt "UI_MENU_FRAMEGEN_METHOD"
+msgid "Frame generation method"
+msgstr "Método de geração de quadros"
+
+msgctxt "UI_MENU_FRAMEGEN_METHOD_DESC"
+msgid "How the frames between are made. NVIDIA DLSS: RTX 40 series or newer, with NVIDIA's frame generation library (nvngx_dlssg.dll 310.4.0 or newer) next to the game, up to 4x. AMD FSR 3: most recent GPUs, 2x. Automatic takes DLSS where it can run, else FSR 3."
+msgstr "Como os quadros intermediários são criados. NVIDIA DLSS: série RTX 40 ou mais nova, com a biblioteca de geração de quadros da NVIDIA (nvngx_dlssg.dll 310.4.0 ou mais nova) ao lado do jogo, até 4x. AMD FSR 3: a maioria das GPUs recentes, 2x. Automático usa o DLSS onde ele funciona, senão o FSR 3."
+
+msgctxt "UI_MENU_FRAMEGEN_METHOD_DLSS"
+msgid "NVIDIA DLSS"
+msgstr "NVIDIA DLSS"
+
+msgctxt "UI_MENU_FRAMEGEN_METHOD_FSR"
+msgid "AMD FSR 3"
+msgstr "AMD FSR 3"
 
 msgctxt "UI_MENU_OUTPUT_RES_AUTO"
 msgid "Automatic"

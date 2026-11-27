@@ -1,5 +1,6 @@
-// NVIDIA DLSS Frame Generation (vk_dlssg.c, AC_FRAME_GENERATION = off, auto, 2x, 3x, 4x): frames made by NGX between the
-// game's own, from the frame's picture with its HUD, the HUD-less scene, the scene depth and the temporal upscaler's
+// Frame generation (vk_dlssg.c, AC_FRAME_GENERATION = off, auto, 2x, 3x, 4x; AC_FRAME_GENERATION_METHOD = auto, dlss,
+// fsr3): frames made between the game's own, by NVIDIA DLSS Frame Generation (NGX) or AMD FSR 3 frame generation
+// (vk_ffxfg.c), from the frame's picture with its HUD, the HUD-less scene, the scene depth and the temporal upscaler's
 // motion vectors, presented by the present thread between the game's presents.
 #pragma once
 #include "vk.h"
@@ -8,8 +9,12 @@
 // present_image), while the frame's images still hold that frame: the temporal upscaler's part (vk_dlaa_fg_inputs)
 // and the HUD-less scene (vk_hdr_present_source). Matrices are row-major for row vectors (v * M), NGX's convention,
 // and hold no jitter.
+// Why a frame has no frames between (VkFgFrame.why, and vk_dlssg_begin's own reasons), for the state log
+enum { FG_WHY_RUNS, FG_WHY_OFF, FG_WHY_NO_METHOD, FG_WHY_RESTART, FG_WHY_MOVIE, FG_WHY_NO_UPSCALER, FG_WHY_NO_HUDLESS,
+       FG_WHY_FORMAT, FG_WHY_NO_ROOM, FG_WHY_REPEAT };
 typedef struct VkFgFrame {
     int on;                                // the frame has everything below and frame generation is to run
+    int why;                               // FG_WHY_*: FG_WHY_RUNS with on, else why not
     int reset;                             // a new history: a camera cut, a new scene size, frames without the AA
     VkImage depth;                         // the scene depth (D32F_S8 or D32F), GENERAL, its depth aspect
     VkImageView depth_view;
@@ -58,7 +63,10 @@ void vk_dlssg_release(void);          // vk_dlaa_release, the device idle, befor
 // here (no NVIDIA GPU or driver with it, its library missing, or it failed), 3 waits for a temporal upscaler.
 const char *vk_dlssg_running(void);
 int vk_dlssg_choice_state(void);
-int vk_dlssg_max_multiplier(void);    // 2 .. 6, from NGX's MultiFrameCountMax; 0 before NGX answered or without it
+int vk_dlssg_max_multiplier(void);    // 2 .. 6 for the method in use (NGX's MultiFrameCountMax, FSR 3 2); 0 none
+// The methods for the menu: 1 DLSS, 2 FSR 3. Whether one runs here (offered, not failed), and the one in use (0 none).
+int vk_dlssg_method_offered(int m);
+int vk_dlssg_method_in_use(void);
 
 // vk_dlaa.c, for vk_dlssg.c: NGX's frame generation feature, through the core vk_dlaa.c loaded and initialised.
 typedef struct VkFgEval {

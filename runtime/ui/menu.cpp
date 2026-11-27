@@ -72,6 +72,8 @@ extern "C" int vk_lowlat_backend(void);                 // vk.h: 0 off, 1 Reflex
 extern "C" const char *vk_dlssg_running(void);          // vk_dlssg.h: "2x".."6x" while generated frames show, or NULL
 extern "C" int vk_dlssg_choice_state(void);             // vk_dlssg.h: 0 runs, 1 restart, 2 not here, 3 no upscaler
 extern "C" int vk_dlssg_max_multiplier(void);           // vk_dlssg.h: 2..6, 0 not offered here
+extern "C" int vk_dlssg_method_offered(int m);          // vk_dlssg.h: method 1 DLSS, 2 FSR 3 runs here
+extern "C" int vk_dlssg_method_in_use(void);            // vk_dlssg.h: 0 none, 1 DLSS, 2 FSR 3
 bool tab_cheats(float scale);        // ui/cheats_tab.cpp; true: restart into the rebuild
 int audout_mix_channels(void);       // ov_audout.c: what the game mixes, 2 or 6; 0 before it opened its output
 void audout_meters(float peak[6]);   // ov_audout.c: the highest sample per speaker since the last call
@@ -277,7 +279,9 @@ static int vk_up(const MenuTarget *t) {
     ii.Queue = t->queue;
     ii.DescriptorPoolSize = 16;
     ii.MinImageCount = 2;
-    ii.ImageCount = 4;   // vertex buffers rotate per recorded frame: more than gfx_present.c's 2 frames in flight
+    // vertex buffers rotate per recorded frame: more than gfx_present.c's frames in flight, 8 with frame generation
+    // (FRAMES; with 4, ImGui resized a buffer a blit 4 frames back still read: vkDestroyBuffer in use, validation)
+    ii.ImageCount = 9;
     ii.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
     ii.UseDynamicRendering = true;
     g_vk_fmt = t->format;
@@ -651,7 +655,7 @@ static void rows_upscaling(void) {
         if (vk_dlaa_running()) opt_disable_next(UI_MENU_AA_BY_UPSCALER);
         opt_choice_list("AC_ANTI_ALIASING", UI_MENU_AA, av, an, 2, UI_MENU_AA_DESC, cfg_smaa() ? 1 : 0);
     }
-    {   // frame generation (vk_dlssg.c): 3x and 4x where NGX makes that many (the RTX 50 series)
+    {   // frame generation (vk_dlssg.c): 3x and 4x where NVIDIA DLSS makes that many (the RTX 50 series), 2x with FSR 3
         static const char *const fv[] = {"off", "auto", "2x", "3x", "4x"};
         const char *fn[] = {menu_text(UI_MENU_UPSCALING_OFF), menu_text(UI_MENU_UPSCALING_AUTO), "2x", "3x", "4x"};
         const char *fg = cfg_value("AC_FRAME_GENERATION");
@@ -672,6 +676,22 @@ static void rows_upscaling(void) {
         opt_choice_list("AC_FRAME_GENERATION", UI_MENU_FRAMEGEN, fv, fn, n, UI_MENU_FRAMEGEN_DESC, fcur, fnote);
         // switched on after the start: NGX, NVIDIA Reflex and its present queue come up with the device
         restart_row(vk_dlssg_choice_state() == 1, UI_MENU_FRAMEGEN_RESTART_DESC);
+        // the method: the note says which one makes the frames, or that the one asked for does not run here
+        static const char *const mv[] = {"auto", "dlss", "fsr3"};
+        const char *mn[] = {menu_text(UI_MENU_UPSCALING_AUTO), menu_text(UI_MENU_FRAMEGEN_METHOD_DLSS),
+                            menu_text(UI_MENU_FRAMEGEN_METHOD_FSR)};
+        const char *mset = cfg_value("AC_FRAME_GENERATION_METHOD");
+        int mcur = 0;
+        for (int i = 0; i < 3; i++)
+            if (mset && !strcmp(mset, mv[i])) mcur = i;
+        static char note_m[64];
+        const char *mnote = nullptr;
+        int inuse = vk_dlssg_method_in_use();
+        if (mcur && !vk_dlssg_method_offered(mcur)) mnote = menu_text(UI_MENU_UPSCALING_UNAVAILABLE);
+        else if (inuse && strcmp(fg ? fg : "off", "off"))
+            snprintf(note_m, sizeof note_m, menu_text(UI_MENU_PRESENT_IN_USE), mn[inuse]), mnote = note_m;
+        opt_choice_list("AC_FRAME_GENERATION_METHOD", UI_MENU_FRAMEGEN_METHOD, mv, mn, 3, UI_MENU_FRAMEGEN_METHOD_DESC,
+                        mcur, mnote);
     }
 }
 

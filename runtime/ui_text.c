@@ -181,13 +181,19 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_AA_OFF] = "Off",
     [UI_MENU_AA_BY_UPSCALER] = "the upscaler smooths the edges",
     [UI_MENU_FRAMEGEN] = "Frame generation",
-    [UI_MENU_FRAMEGEN_DESC] = "NVIDIA DLSS Frame Generation: frames made between the game's own, for a smoother "
-                              "picture; the game itself keeps its frame rate. 2x shows one frame between two of the "
-                              "game's, 3x and 4x two and three (RTX 50 series). Automatic fills the display's refresh "
-                              "rate. Needs an NVIDIA RTX 40 or newer GPU, the DLSS SDK's frame generation library next to "
-                              "the game and an upscaler running. It adds about half a frame of latency, and NVIDIA "
-                              "Reflex runs with it to keep the rest down, whatever Low latency says. Turning it on "
-                              "takes effect after a restart, then at once.",
+    [UI_MENU_FRAMEGEN_DESC] = "Frames made between the game's own, for a smoother picture; the game itself keeps its "
+                              "frame rate. 2x shows one frame between two of the game's, 3x and 4x two and three "
+                              "(NVIDIA DLSS on the RTX 50 series). Automatic fills the display's refresh rate. Needs an "
+                              "upscaler running. It adds about half a frame of latency; on NVIDIA cards NVIDIA Reflex "
+                              "runs with it to keep the rest down, whatever Low latency says, and turning it on then "
+                              "takes a restart.",
+    [UI_MENU_FRAMEGEN_METHOD] = "Frame generation method",
+    [UI_MENU_FRAMEGEN_METHOD_DESC] = "How the frames between are made. NVIDIA DLSS: RTX 40 series or newer, with "
+                                     "NVIDIA's frame generation library (nvngx_dlssg.dll 310.4.0 or newer) next to the "
+                                     "game, up to 4x. AMD FSR 3: most recent GPUs, 2x. Automatic takes DLSS where it can "
+                                     "run, else FSR 3.",
+    [UI_MENU_FRAMEGEN_METHOD_DLSS] = "NVIDIA DLSS",
+    [UI_MENU_FRAMEGEN_METHOD_FSR] = "AMD FSR 3",
     [UI_MENU_FRAMEGEN_NEEDS_TAA] = "needs an upscaler",
     [UI_MENU_FRAMEGEN_RESTART_DESC] = "Closes the game and starts it again with frame generation and NVIDIA Reflex, which "
                                       "it runs with. Progress since your last save is lost.",

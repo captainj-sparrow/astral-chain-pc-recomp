@@ -69,6 +69,7 @@ typedef enum {
     UI_MENU_FRAMEGEN, UI_MENU_FRAMEGEN_DESC,
     UI_MENU_FRAMEGEN_NEEDS_TAA,   // the row's note: no temporal upscaler runs, so no frames are generated
     UI_MENU_FRAMEGEN_RESTART_DESC,   // "Restart now" under the row: frame generation was switched on after the start
+    UI_MENU_FRAMEGEN_METHOD, UI_MENU_FRAMEGEN_METHOD_DESC, UI_MENU_FRAMEGEN_METHOD_DLSS, UI_MENU_FRAMEGEN_METHOD_FSR,
     UI_MENU_OUTPUT_RES_AUTO,
     UI_MENU_OUTPUT_RES_NEXT,   // ", %s after restart": the size output_res = auto takes at the next start
 

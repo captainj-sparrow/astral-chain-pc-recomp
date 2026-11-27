@@ -382,7 +382,9 @@ DLSS Frame Generation (`AC_FRAME_GENERATION=2x` with `AC_UPSCALING=dlss`, on an 
 SDK's `nvngx_dlssg.dll` 310.4.0 or newer beside the executable) wants a run through `tools/input/new_game.txt` on a
 blank profile with `AC_TRACE=present`: its `present:` lines end in "1 generated" (2x) once the motorway is reached,
 and no `dlssg: NGX refused` line follows the `feature created` one. `AC_NGX_LOG=1` (2: verbose) puts NGX's own log in
-the port's, which names what a refused evaluation lacked.
+the port's, which names what a refused evaluation lacked. AMD FSR 3 frame generation (`AC_FRAME_GENERATION_METHOD=fsr3`,
+any GPU; the Intel iGPU with `AC_GPU_NAME=Arc` and `AC_UPSCALING=fsr3`) wants the same run with `AC_VK_VALIDATION=1`:
+"1 generated" lines, no validation error, and the `ffxfg: GPU time` lines for the cost.
 `.venv\Scripts\python tools\xess_sdk.py` puts the pinned SDK's `libxess.dll` in `toolchain\xess\`, which
 `build_game.py` then copies next to `astralchain.exe`. AMD FSR 3 (`AC_UPSCALING=fsr3`) needs no step of its own: when it compiles
 `runtime/`, `build_game.py` calls `tools/ffx_sdk.py`, which fetches the pinned FidelityFX SDK files once into

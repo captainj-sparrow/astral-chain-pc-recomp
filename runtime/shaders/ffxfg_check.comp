@@ -1,0 +1,83 @@
+#version 450
+#extension GL_EXT_samplerless_texture_functions : require
+// FSR 3 frame generation (runtime/vk_ffxfg.c), our own pass between AMD's dilation and its vector field: the game's
+// motion vectors checked against the two pictures.
+//
+// AMD's interpolation moves every pixel along the game's motion vector. That vector is the surface's, and what a pixel
+// shows may not move with the surface: the red glow a motorbike's rear light casts on the road stays with the bike,
+// and what a wet road reflects moves as the things reflected do. On the new game's motorway seen from the side
+// (Arc 140T, 2560x1440, 43 fps) the road's vectors were 223 picture pixels a frame beside the bike where the picture
+// itself moved by 64 (block matching, and AMD's optical flow said 54 to 67), and the rear light's glow, 220 pixels long
+// in both of the game's frames, was missing from every frame made (red 23 to 41 where the game's frames had 41 to
+// 149): what the player saw as a trail and a ghost of the bike, flickering at the game's rate. Where the frame
+// between has both of its sources a wrong vector's two halves partly cancel out; beside something in front and along
+// the picture's edges only one side exists, and the pixel is taken from half a wrong vector away.
+//
+// So each scene pixel's vector is checked: the colour it reads in the last picture against the pixel's own in this
+// one. A vector that is off by more than k.y gives way to one that explains the pixel, when one does to within k.x
+// and twice better than it by k.y: no vector (the pixel looks the same in both pictures at its own place: the glow),
+// or the optical flow's for the pixel's 8x8 block (the reflections), whichever reads the nearer colour. A vector from
+// off the screen counts as off. A pixel given another vector has its depth pushed back by 1 / k.z in view space, in
+// the copy the vector field alone reads: the field gives a place to the nearest pixel that lands there, and a pixel
+// of the same surface whose vector does hold (a lane marking crossing the glow) must win it. No vector replaces one
+// of up to k.w scene pixels, and the flow replaces only a vector it differs from by more than that (half of that is
+// not seen). Colours are one bilinear read at the scene pixel's centre: a 2x2 box of the picture's texels chose the
+// same pixels to within 2 % on the motorway.
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(set = 0, binding = 0) uniform texture2D mv_tex;      // AMD's dilated vectors: to last frame's place, in UV
+layout(set = 0, binding = 1) uniform texture2D depth_tex;   // AMD's dilated depth, near 0 to far 1
+layout(set = 0, binding = 2) uniform texture2D cur_tex;     // this frame's picture without its HUD
+layout(set = 0, binding = 3) uniform texture2D prev_tex;    // the last one's
+layout(set = 0, binding = 4, rg16f) uniform writeonly image2D mv_out;
+layout(set = 0, binding = 5, r32f) uniform writeonly image2D depth_out;
+layout(set = 0, binding = 6, std140) uniform K {
+    vec4 k;   // explained within, off by at least, 1 / the push back, vectors from (scene pixels)
+    vec4 d;   // AMD's device to view depth: view = d.y / (depth - d.x); d.z the flow's block in picture pixels
+} u;
+layout(set = 0, binding = 7) uniform sampler lin;
+layout(set = 0, binding = 8) uniform itexture2D flow_tex;   // AMD's optical flow: per block, to last frame's place
+                                                            // in picture pixels
+
+float max3(vec3 v) { return max(v.r, max(v.g, v.b)); }
+bool inside(vec2 q) { return all(greaterThanEqual(q, vec2(0.0))) && all(lessThan(q, vec2(1.0))); }
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy), size = imageSize(mv_out);
+    if (any(greaterThanEqual(p, size))) return;
+    vec2 mv = texelFetch(mv_tex, p, 0).xy;
+    float z = texelFetch(depth_tex, p, 0).x;
+    vec2 uv = (vec2(p) + 0.5) / vec2(size);
+    vec3 c = textureLod(sampler2D(cur_tex, lin), uv, 0.0).rgb;
+    float off = inside(uv + mv) ? max3(abs(c - textureLod(sampler2D(prev_tex, lin), uv + mv, 0.0).rgb)) : 1e9;
+    if (off > u.k.y) {
+        float best = u.k.x;
+        vec2 other = mv;
+        bool found = false;
+        vec2 px = mv * vec2(size);
+        if (dot(px, px) > u.k.w * u.k.w) {
+            float e = max3(abs(c - textureLod(sampler2D(prev_tex, lin), uv, 0.0).rgb));
+            if (e <= best && off >= 2.0 * e + u.k.y) {
+                best = e;
+                other = vec2(0.0);
+                found = true;
+            }
+        }
+        vec2 picture = vec2(textureSize(sampler2D(cur_tex, lin), 0));
+        ivec2 block = min(ivec2(uv * picture / u.d.z), textureSize(flow_tex, 0) - 1);
+        vec2 flow = vec2(texelFetch(flow_tex, block, 0).xy) / picture;
+        vec2 fd = (flow - mv) * vec2(size);
+        if (dot(fd, fd) > u.k.w * u.k.w && inside(uv + flow)) {
+            float e = max3(abs(c - textureLod(sampler2D(prev_tex, lin), uv + flow, 0.0).rgb));
+            if (e <= u.k.x && off >= 2.0 * e + u.k.y && (!found || e < best)) {
+                other = flow;
+                found = true;
+            }
+        }
+        if (found) {
+            mv = other;
+            z = min(u.d.x + (z - u.d.x) * u.k.z, 1.0);
+        }
+    }
+    imageStore(mv_out, p, vec4(mv, 0.0, 0.0));
+    imageStore(depth_out, p, vec4(z));
+}

@@ -192,6 +192,7 @@ static void present_repeat(const tex_t *t, uint64_t at_ns, uint64_t value) {
     j.at = at_ns, j.queued = kern_now_ns(), j.value = value;
     j.frame = j.lid = 0;   // no frame of the game's: no thumbnail, no latency record
     j.fg.on = 0;           // nor a frame to generate from: the next game frame starts frame generation's history anew
+    j.fg.why = FG_WHY_REPEAT;
     vk_upload_flush(0);
     __atomic_add_fetch(&gfx_counters.repeats, 1, __ATOMIC_RELAXED);
     present_queue(&j);

@@ -1,6 +1,7 @@
-// NVIDIA DLSS Frame Generation (AC_FRAME_GENERATION = off, auto, 2x, 3x, 4x; astralchain.ini frame_generation, live
-// once NGX was loaded at start): NGX's frame generation feature (NVSDK_NGX_Feature_FrameGeneration) makes one to
-// three frames between two of the game's, and the present thread shows them between the game's presents.
+// Frame generation (AC_FRAME_GENERATION = off, auto, 2x, 3x, 4x; astralchain.ini frame_generation, live once what it
+// needs was set up at start): NVIDIA DLSS Frame Generation (NGX's NVSDK_NGX_Feature_FrameGeneration, one to three
+// frames) or AMD FSR 3 frame generation (vk_ffxfg.c, one frame) makes frames between two of the game's, and the
+// present thread shows them between the game's presents (the two methods: below).
 //
 // The inputs, per game frame (vk_backend.c present_image, on the replay thread, the frame's images still holding it):
 // - the picture the game presents, with its HUD: its window texture (RGBA8);
@@ -40,6 +41,19 @@
 // pictures are HDR (DLSSG.ColorBuffersHDR) and writes its frames in the same format, and the present sends them and the
 // game's frame to the swapchain without encoding them again (vk_dlssg_encoded).
 //
+// Two methods make the frames between (frame_generation_method = auto, dlss, fsr3): NVIDIA DLSS Frame Generation
+// through NGX (vk_dlaa.c vk_ngx_fg_*: one to five frames, RTX 40 or newer), or AMD FSR 3.1.4 frame generation, AMD's
+// optical flow and frame interpolation passes run by our own host (vk_ffxfg.c: one frame, 2x, on any GPU with the
+// subgroup operations and formats it needs). Automatic takes DLSS where NGX offers it and FSR 3 elsewhere; a method that
+// fails turns off for the run, and automatic then goes on with the other. Everything around them is shared: the inputs,
+// the HUD-less picture, the HDR10 encode before them, the pacing, the overlay. FSR 3 makes its own scene change detection
+// (its optical flow), so the scene change hold below is NGX's alone.
+//
+// Every change of what frame generation does is logged once (vk_dlssg_begin, log_state): the setting and the method in
+// use, running and at which multiplier, or why not (off, not offered here, a full-screen movie, no temporal upscaler
+// this frame, no HUD-less picture, the display's refresh holding no frame between, a format), and the method falling
+// back after a failure.
+//
 // Not here, tried in the contribution this comes from and left for later: NGX's UI recomposition (DLSSG.UIAlpha, the
 // HUD's coverage made by changing the HUD draws' alpha blend), which keeps the scene moving under the see-through
 // dialogue box, still to be checked against the rest of the game's UI.
@@ -54,6 +68,7 @@
 #include "gfx.h"
 #include "host.h"
 #include "vk_dlaa.h"
+#include "vk_ffxfg.h"
 #include "platform/platform.h"
 
 #define MAX_GEN 5   // generated frames per game frame: NGX's MultiFrameCountMax on the RTX 50 series
@@ -64,6 +79,9 @@
 #define CREATE_FAILS_OFF 3   // failed feature creations in a row: off for the run
 
 typedef struct { VkImage img; VmaAllocation mem; VkImageView view; } Img;
+
+enum { M_NONE, M_DLSS, M_FSR };   // the method making the frames between
+static const char *const METHOD_NAME[] = {"none", "NVIDIA DLSS Frame Generation", "AMD FSR 3 frame generation"};
 
 static struct {
     // replay thread
@@ -87,54 +105,93 @@ static struct {
     int eval_fails, create_fails;   // in a row (EVAL_FAILS_OFF, CREATE_FAILS_OFF)
     int drop_feat;            // a set was refused: the feature is remade at the next job, once its blit is done
     int capped;               // the multiplier last capped to under FIFO (logged on a change), 0 none
+    int meth;                 // this job's method (M_*)
+    int img_meth;             // the method the images and the feature were made for
+    int state, state_n, state_meth;   // what frame generation did at the last job (log_state), for logging a change
+    unsigned state_logs;      // state changes logged so far
     struct { VkBuffer buf; VmaAllocation mem; void *map; int pending; } hint[HINTS];
     uint64_t sets, held;      // sets evaluated, and of those read back, the ones NGX said not to show (logged)
     VkFgFrame fr;             // this job's inputs
     VkImage win;              // and its window texture, of pw x ph
     uint32_t pw, ph;
+    uint64_t period_ns;       // this job's frame period (FSR 3's time step)
     // any thread
-    volatile int32_t failed;  // off for the run (image creation, or NGX failing again and again)
+    volatile int32_t failed[3];   // per method: off for the run (image creation, the method failing again and again)
     volatile int32_t shown;   // the multiplier last shown, 0 none
     uint64_t shown_ns;        // when (plat_now_ns)
 } G = {.fmt_ok = -1};
 
-// The setting: 0 off, 1 auto, else the multiplier (2..6). Read on every draw of the scene pass and every blit, so kept
-// with the settings' version (cfg_version) it was read at: bits 8 and up the version, bit 7 set once read.
-static int setting(void) {
-    static uint64_t cache;
-    uint64_t c = __atomic_load_n(&cache, __ATOMIC_RELAXED);
+// The settings, read on every draw of the scene pass and every blit, so kept with the settings' version (cfg_version)
+// they were read at: bits 8 and up the version, bit 7 set once read, the value below. A change is logged.
+static int cached(uint64_t *cache, const char *key, int (*parse)(const char *)) {
+    uint64_t c = __atomic_load_n(cache, __ATOMIC_RELAXED);
     unsigned ver = cfg_version();
     if ((c & 0x80) && (unsigned)(c >> 8) == ver) return (int)(c & 0x7f);
-    const char *v = cfg_value("AC_FRAME_GENERATION");
-    int m = 0;
-    if (!strcmp(v, "auto")) m = 1;
-    else if (v[0] >= '2' && v[0] <= '6' && v[1] == 'x' && !v[2]) m = v[0] - '0';
-    __atomic_store_n(&cache, (uint64_t)ver << 8 | 0x80 | (unsigned)m, __ATOMIC_RELAXED);
+    const char *v = cfg_value(key);
+    int m = parse(v);
+    if (!(c & 0x80) || (int)(c & 0x7f) != m) rt_log("dlssg: setting %s = %s", key + 3, v);
+    __atomic_store_n(cache, (uint64_t)ver << 8 | 0x80 | (unsigned)m, __ATOMIC_RELAXED);
     return m;
 }
 
-int vk_dlssg_max_multiplier(void) {
+static int parse_setting(const char *v) {   // 0 off, 1 auto, else the multiplier (2..6)
+    if (!strcmp(v, "auto")) return 1;
+    return v[0] >= '2' && v[0] <= '6' && v[1] == 'x' && !v[2] ? v[0] - '0' : 0;
+}
+static int parse_method(const char *v) { return !strcmp(v, "dlss") ? M_DLSS : !strcmp(v, "fsr3") ? M_FSR : M_NONE; }
+
+static int setting(void) {
+    static uint64_t cache;
+    return cached(&cache, "AC_FRAME_GENERATION", parse_setting);
+}
+static int method_setting(void) {   // the method asked for, M_NONE: automatic
+    static uint64_t cache;
+    return cached(&cache, "AC_FRAME_GENERATION_METHOD", parse_method);
+}
+
+static int method_ok(int m) {
+    unsigned max;
+    if (plat_cas32(&G.failed[m], 0, 0)) return 0;
+    if (m == M_DLSS) return vk_ngx_fg_caps(&max) && max;
+    return m == M_FSR && vk_ffxfg_supported() && !vk_ffxfg_failed();
+}
+
+// The method frame generation uses now: the one asked for where it can run, automatic DLSS before FSR 3
+static int method(void) {
+    int want = method_setting();
+    if (want) return method_ok(want) ? want : M_NONE;
+    return method_ok(M_DLSS) ? M_DLSS : method_ok(M_FSR) ? M_FSR : M_NONE;
+}
+
+static int max_of(int m) {
     unsigned max = 0;
-    if (!vk_ngx_fg_caps(&max) || !max) return 0;
+    if (m == M_FSR) return 2;   // FSR 3.1.4 makes one frame between two
+    if (m != M_DLSS || !vk_ngx_fg_caps(&max) || !max) return 0;
     return max >= MAX_GEN ? MAX_GEN + 1 : (int)max + 1;
 }
+
+int vk_dlssg_max_multiplier(void) { return max_of(method()); }
+
+int vk_dlssg_method_offered(int m) { return m >= M_DLSS && m <= M_FSR && method_ok(m); }
+int vk_dlssg_method_in_use(void) { return method(); }
 
 void vk_dlssg_init(void) {
     int s = setting();
     if (!s) return;
-    int m = vk_dlssg_max_multiplier();
 #ifdef _WIN32
-    const char *model = "nvngx_dlssg.dll next to astralchain.exe";
+    const char *model = "nvngx_dlssg.dll 310.4.0 or newer next to astralchain.exe";
 #else
     const char *model = "libnvidia-ngx-dlssg.so.<version> next to astralchain";
 #endif
-    if (!m) {
-        rt_log("dlssg: frame generation is set but NGX does not offer it here (an NVIDIA RTX 40 or newer GPU, a "
-               "recent driver and %s): off", model);
-        vk_lowlat_fg_unavailable();
-    } else
-        rt_log("dlssg: frame generation %s, up to %dx here; it needs a temporal upscaler running (upscaling)",
-                s == 1 ? "auto" : cfg_value("AC_FRAME_GENERATION"), m);
+    int dlss = max_of(M_DLSS), fsr = vk_ffxfg_supported(), m = method();
+    rt_log("dlssg: frame generation %s, method %s; here NVIDIA DLSS Frame Generation %s%s%s, AMD FSR 3 frame generation "
+           "%s; %s%s", cfg_value("AC_FRAME_GENERATION"), cfg_value("AC_FRAME_GENERATION_METHOD"),
+           dlss ? "up to " : "not offered (an NVIDIA RTX 40 or newer GPU, a recent driver and ",
+           dlss ? (dlss == 2 ? "2x" : dlss == 3 ? "3x" : dlss == 4 ? "4x" : dlss == 5 ? "5x" : "6x") : model,
+           dlss ? "" : ")", fsr ? "2x" : "not offered (vk_ffxfg.c logged why)",
+           m ? "using " : "frame generation off: no method runs here", m ? METHOD_NAME[m] : "");
+    if (!m) vk_lowlat_fg_unavailable();
+    rt_log("dlssg: it needs a temporal upscaler running (upscaling)");
 }
 
 int vk_dlssg_set_at_start(void) {
@@ -143,26 +200,30 @@ int vk_dlssg_set_at_start(void) {
     return on;
 }
 
-int vk_dlssg_scene_wanted(void) {
-    unsigned max;
-    return setting() && !plat_cas32(&G.failed, 0, 0) && vk_ngx_fg_caps(&max);
-}
+int vk_dlssg_scene_wanted(void) { return setting() && method(); }
 
 void vk_dlssg_collect(VkFgFrame *f) {
     f->on = 0;
-    if (!vk_dlssg_scene_wanted()) {
+    if (!setting()) {
+        f->why = FG_WHY_OFF;
+        G.last_on = 0;
+        return;
+    }
+    if (!method()) {
+        f->why = FG_WHY_NO_METHOD;
         G.last_on = 0;
         return;
     }
     if (!vk_lowlat_fg_ok()) {   // set after the start: NVIDIA Reflex and frame generation's present queue are not up
-        static int logged;
-        if (!logged)
-            logged = 1, rt_log("dlssg: frame generation was switched on after the start, without NVIDIA Reflex and its "
-                               "own present queue (vk_device.c, vk_lowlat.c): it waits for a restart");
+        f->why = FG_WHY_RESTART;
         G.last_on = 0;
         return;
     }
-    f->on = f->depth && f->mv && f->hudless && f->rw && f->rh && f->hw && f->hh && !rt_movie_showing();
+    f->why = rt_movie_showing() ? FG_WHY_MOVIE
+             : !f->depth || !f->mv || !f->rw || !f->rh ? FG_WHY_NO_UPSCALER
+             : !f->hudless || !f->hw || !f->hh ? FG_WHY_NO_HUDLESS
+                                               : FG_WHY_RUNS;
+    f->on = f->why == FG_WHY_RUNS;
     if (f->on && !G.last_on) f->reset = 1;   // after frames without it: the history NGX holds is from another moment
     G.last_on = f->on;
 }
@@ -314,14 +375,18 @@ static void free_all(int wait) {
     }
     if (G.feat) vk_ngx_fg_release(G.feat);
     G.feat = NULL;
+    vk_ffxfg_release();
     for (int i = 0; i < MAX_GEN; i++) img_free(&G.gen[i]);
     img_free(&G.hud), img_free(&G.real), img_free(&G.sdr), img_free(&G.hud8);
     G.w = G.h = G.rw = G.rh = 0;
 }
 
+// This job's method fails for the rest of the run; automatic goes on with the other one where it runs here
 static void fail(const char *what) {
-    rt_log("dlssg: %s failed: frame generation off for this run", what);
-    plat_xchg32(&G.failed, 1);
+    plat_xchg32(&G.failed[G.meth], 1);
+    int next = method();
+    rt_log("dlssg: %s failed: %s off for this run%s%s", what, METHOD_NAME[G.meth],
+           next ? "; frame generation goes on with " : "", next ? METHOD_NAME[next] : "");
 }
 
 // NGX's "do not show this set" byte (DLSSG.OutputDisableInterpolation): a small host-visible buffer per set, from a
@@ -378,12 +443,13 @@ static void feat_drop(void) {
 static int ensure(VkCommandBuffer cb, int *fresh) {
     const VkFgFrame *f = &G.fr;
     *fresh = 0;
-    // another size, or HDR output turned on or off (the pictures' format, and NGX's feature made for it)
+    // another size, HDR output turned on or off (the pictures' format, and NGX's feature made for it), another method
     if (G.real.img && (G.w != G.pw || G.h != G.ph || G.rw != f->rw || G.rh != f->rh || G.img_fmt != G.fmt ||
-                       G.img_wfmt != G.wfmt))
+                       G.img_wfmt != G.wfmt || G.img_meth != G.meth))
         free_all(1);
     if (!G.real.img) {
-        G.w = G.pw, G.h = G.ph, G.rw = f->rw, G.rh = f->rh, G.img_fmt = G.fmt, G.img_wfmt = G.wfmt;
+        G.w = G.pw, G.h = G.ph, G.rw = f->rw, G.rh = f->rh, G.img_fmt = G.fmt, G.img_wfmt = G.wfmt, G.img_meth = G.meth;
+        *fresh = 1;
         if (!img_make(cb, &G.real, G.w, G.h, G.fmt) || !img_make(cb, &G.hud, G.w, G.h, G.fmt)) {
             free_all(0);
             fail("image creation");
@@ -402,6 +468,10 @@ static int ensure(VkCommandBuffer cb, int *fresh) {
             fail("image creation");
             return 0;
         }
+    if (G.meth != M_DLSS) {   // FSR 3: vk_ffxfg.c makes its own images at its first evaluation
+        barrier(cb);
+        return 1;
+    }
     if (G.drop_feat) feat_drop();
     if (!G.feat) {
         barrier(cb);   // the new images' layouts before NGX records anything
@@ -532,6 +602,25 @@ static VkImage record(VkCommandBuffer cb, VkImage src, unsigned slot, VkFormat *
         barrier(cb);
     }
     int reset = f->reset || fresh || !G.prev_shown || f->frame_id != G.last_id + 1;
+    if (G.meth == M_FSR) {   // AMD FSR 3: the optical flow and the interpolation into the one frame between
+        FfxFgEval e = {.back = G.real.img, .back_view = G.real.view, .hudless = G.hud.img, .hudless_view = G.hud.view,
+                       .out = G.gen[0].img, .out_view = G.gen[0].view, .format = G.fmt, .w = G.w, .h = G.h,
+                       .depth = f->depth_view, .mv = f->mv_view, .rw = f->rw, .rh = f->rh,
+                       .jitter = {f->jitter[0], f->jitter[1]}, .near_z = f->near_z, .far_z = f->far_z,
+                       .fov_y = f->fov_y, .dt_ms = (float)G.period_ns / 1e6f, .reset = reset, .frame_id = f->frame_id,
+                       .pq = G.hdr, .peak_nits = (float)cfg_double("AC_HDR_PEAK_NITS")};
+        if (!vk_ffxfg_evaluate(cb, &e)) {
+            fail("AMD FSR 3 frame generation");
+            return src;
+        }
+        G.last_id = f->frame_id;
+        G.sets++;
+        G.evaluated = 1;
+        *fmt = G.fmt;
+        if (reset) return G.real.img;
+        G.made = 1;
+        return G.gen[0].img;
+    }
     VkBuffer hint = hint_take(cb);
     if (hint) barrier(cb);   // its fill before NGX writes it
     for (int k = 1; k <= G.n; k++) {
@@ -577,13 +666,40 @@ static VkImage record(VkCommandBuffer cb, VkImage src, unsigned slot, VkFormat *
     return G.gen[0].img;
 }
 
+// What frame generation does at this job, logged when it changes (at most STATE_LOGS lines a run)
+#define STATE_LOGS 500u
+static void log_state(int why, int n, int meth, const char *detail) {
+    if (why == G.state && n == G.state_n && meth == G.state_meth) return;
+    G.state = why, G.state_n = n, G.state_meth = meth;
+    if (G.state_logs >= STATE_LOGS) return;
+    if (++G.state_logs == STATE_LOGS) {
+        rt_log("dlssg: %u state changes logged: the next ones are not", STATE_LOGS);
+        return;
+    }
+    static const char *const WHY[] = {
+        [FG_WHY_RUNS] = "runs", [FG_WHY_OFF] = "off (the setting)",
+        [FG_WHY_NO_METHOD] = "off: no method runs here (frame_generation_method, or a method that failed)",
+        [FG_WHY_RESTART] = "waits for a restart (switched on after the start: NVIDIA Reflex and its present queue)",
+        [FG_WHY_MOVIE] = "paused: a full-screen movie plays",
+        [FG_WHY_NO_UPSCALER] = "paused: no temporal upscaler resolved this frame (upscaling off, a 2D screen, a load)",
+        [FG_WHY_NO_HUDLESS] = "paused: no HUD-less picture this frame",
+        [FG_WHY_FORMAT] = "off: the pictures' format cannot be a storage image here",
+        [FG_WHY_NO_ROOM] = "paused: the display shows no frame between at this frame rate",
+        [FG_WHY_REPEAT] = "paused: the game gave no new frame (its last one is shown again: the menu, a pause)",
+    };
+    if (why == FG_WHY_RUNS) rt_log("dlssg: frame generation runs, %dx, %s%s", n + 1, METHOD_NAME[meth], detail);
+    else rt_log("dlssg: frame generation %s%s", WHY[why], detail);
+}
+
 int vk_dlssg_begin(const VkFgFrame *f, VkImage win, VkFormat fmt, uint32_t w, uint32_t h, uint64_t period_ns) {
     G.armed = 0, G.made = 0, G.evaluated = 0;
-    int s = f->on && !plat_cas32(&G.failed, 0, 0) ? setting() : 0;
-    int max = s ? vk_dlssg_max_multiplier() : 0, hdr = vk_hdr_active();
+    G.meth = f->on ? method() : M_NONE;
+    int s = G.meth ? setting() : 0;
+    int max = s ? max_of(G.meth) : 0, hdr = vk_hdr_active();
     if (!s || !max || !format_ok(fmt, hdr)) {
         G.prev_shown = 0;
         vk_present_pre_record(NULL);
+        log_state(!f->on ? f->why : !s ? FG_WHY_OFF : !max ? FG_WHY_NO_METHOD : FG_WHY_FORMAT, 0, 0, "");
         return 0;
     }
     int m = s;
@@ -606,8 +722,13 @@ int vk_dlssg_begin(const VkFgFrame *f, VkImage win, VkFormat fmt, uint32_t w, ui
     if (m < 2) {
         G.prev_shown = 0;
         vk_present_pre_record(NULL);
+        char d[96];
+        snprintf(d, sizeof d, " (%.0f Hz at %.1f fps)", hz, 1e9 / (double)period_ns);
+        log_state(FG_WHY_NO_ROOM, 0, 0, d);
         return 0;
     }
+    log_state(FG_WHY_RUNS, m - 1, G.meth, hdr ? ", HDR10" : "");
+    G.period_ns = period_ns;
     G.fr = *f, G.win = win, G.wfmt = fmt, G.hdr = hdr, G.fmt = hdr ? HDR_FMT : fmt, G.n = m - 1, G.pw = w, G.ph = h;
     G.armed = 1;
     vk_present_pre_record(record);
@@ -641,6 +762,7 @@ void vk_dlssg_release(void) {
     hints_free();
     capture_free();
     hold_release();
+    vk_ffxfg_shutdown();
 }
 
 // ---------------------------------------------------------------- the menu and the overlay
@@ -654,8 +776,8 @@ const char *vk_dlssg_running(void) {
 
 int vk_dlssg_choice_state(void) {
     if (!setting()) return 0;
-    if (!vk_dlaa_wanted()) return 1;   // NGX was not loaded at start
-    if (!vk_dlssg_max_multiplier() || plat_cas32(&G.failed, 0, 0)) return 2;
+    if (method_setting() == M_DLSS && !vk_dlaa_wanted()) return 1;   // NGX was not loaded at start
+    if (!method()) return 2;
     if (!vk_lowlat_fg_ok()) return 1;   // NVIDIA Reflex and frame generation's present queue: made at the next start
     if (!vk_dlaa_running()) return 3;
     return 0;

@@ -568,6 +568,41 @@ Every guest thread is a host thread. Astral Chain assumes Horizon's scheduler: t
   (`DLSSG.UIAlpha`), which needs the HUD's coverage in the window texture's alpha (the game's HUD writes none; a test
   that changed the HUD draws' alpha blend kept the scene moving under the see-through dialogue box, still to be checked
   against the rest of the game's UI). Not run on the RTX 40 series or in a long play session.
+  The second method, AMD FSR 3.1.4 frame generation (`frame_generation_method = auto | dlss | fsr3`; automatic takes
+  DLSS where NGX offers it, else FSR 3), makes one frame between two (2x) on any GPU with subgroup arithmetic and quad
+  operations in compute and storage images without a format: AMD's optical flow and frame interpolation passes,
+  unmodified, compiled by `tools/ffx_sdk.py` into `ffxfg_spv.h` with each pass's bindings read back from the SPIR-V,
+  and our own host for them (`vk_ffxfg.c`, after the SDK's `ffx_opticalflow.cpp` and `ffx_frameinterpolation.cpp` in
+  FSR 3's interpolation-only use), recorded where NGX's evaluations are, from the same inputs (the HUD-less picture is
+  the interpolation source and the optical flow's input, the picture with its HUD is where the inpainting takes the HUD
+  back from). The search pass's reductions assume 32 or 64 lanes, so a device whose compute runs another width gets
+  its subgroup passes made with a required size of 32. Measured on an Intel Arc 140T (Windows 11, mailbox at 144 Hz),
+  FSR 3 upscaling Quality at 2560x1440 (scene 1696x954), 2x, the new game's motorway: 9.0 to 9.5 ms of GPU time per
+  frame made (timestamps, `ffxfg: GPU time` every 600 frames): the optical flow's search 2.0 ms over its 7 levels, the
+  game's motion vector field 1.8 ms (scattered atomics), the interpolation 1.2 ms, the two inpainting pyramids and the
+  inpainting 1.6 ms, the barriers and copies 0.08 ms; the game's own rate went from 57.1 fps without frame generation
+  to 49.7 fps with it. One pass of the host's is ours (`shaders/ffxfg_check.comp`): AMD's passes move every pixel
+  along the game's motion vector, which is the surface's, and what a pixel shows does not always move with its surface.
+  On the new game's motorway seen from the side the road's vectors were 223 picture pixels a frame beside the bike
+  where the picture itself moved by 64 (what the wet road reflects; AMD's optical flow said 54 to 67), and the red glow
+  of the bike's rear light, 220 pixels long on the road in both of the game's frames, was missing from every frame made:
+  a trail and a ghost of the bike that flickered at the game's rate, worst beside the bike and along the picture's
+  edges, where the frame between has one source only and takes the pixel from half a wrong vector away. The pass checks
+  each dilated vector against the two pictures (the colour it reads in the last one against the pixel's own) and gives
+  the pixel no vector, or the optical flow's for its 8x8 block, where that explains the pixel to within 6 of 255 and
+  twice better than the game's; such a pixel's depth goes back by half in the copy the vector field reads, so that a
+  pixel of the same surface whose vector holds (a lane marking crossing the glow) wins its place. Measured there
+  (the same 7 frames of two runs, 46 fps falling to 32): still content that the frame made showed off by over 8 of 255
+  went from 12.1 % to 4.2 %, the pixels around the bike that matched neither picture nor any vector's answer in the side
+  view from 4.57 % to 0.29 %, and moving detail the game's vectors do explain was off by over 16 for 0.33 % instead of
+  0.19 %; the pass costs about 0.3 ms. Tried and left out: deciding per 8x8 block over 16 reads before the pixels (the
+  right vector for 62 % of the pixels of the still blocks the game's vectors got wrong instead of 57 %, a second pass),
+  and the still test alone, without the optical flow's vectors (1.74 % of those pixels left around the bike in a side
+  view of another run). The present keeps 8 blits in flight with frame generation, so the in-game menu's ImGui back end
+  rotates its vertex buffers over 9 (with 4 it resized a buffer a blit still read). Every change of what frame
+  generation does is logged once (`dlssg: frame generation ...`: running at which multiplier with which method, or
+  paused by a movie, a frame without the upscaler, the game's last frame shown again, the display's refresh, or off and
+  why).
 - Ambient occlusion (`vk_ao.c`, `ao = off | low | high | gi`, live; off by default): the game has none.
   The first light-target pass with the scene depth after the game's R32F linear-depth pass that writes colour is the
   opaque lighting (in play, every other frame, a pass with its colour writes masked off comes before it); when

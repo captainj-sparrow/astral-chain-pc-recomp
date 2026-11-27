@@ -133,8 +133,10 @@ static int p_getp(const NgxParam *p, const char *n, void **v) { return NGX_OK(((
 int vk_dlaa_wanted(void) {
     static int wanted = -1;
     if (wanted < 0) {
+        // frame generation by NVIDIA DLSS (frame_generation_method dlss or auto), not by AMD FSR 3 (vk_ffxfg.c)
         const char *up = cfg_upscaling(), *fg = cfg_value("AC_FRAME_GENERATION");
-        wanted = !strcmp(up, "dlss") || !strcmp(up, "auto") || (fg && *fg && strcmp(fg, "off"));
+        wanted = !strcmp(up, "dlss") || !strcmp(up, "auto") ||
+                 (fg && *fg && strcmp(fg, "off") && strcmp(cfg_value("AC_FRAME_GENERATION_METHOD"), "fsr3"));
     }
     return wanted;
 }

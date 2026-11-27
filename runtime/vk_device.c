@@ -246,6 +246,10 @@ typedef struct {
 // other files are built against.
 static VkQueue g_oob_queue;
 VkQueue vk_oob_present_queue(void) { return g_oob_queue; }
+// The device has NVIDIA Reflex's extensions, enabled or not (vk_lowlat.c: frame generation switched on later waits for
+// the restart that brings Reflex only where Reflex could come)
+static int g_reflex_possible;
+int vk_reflex_possible(void) { return g_reflex_possible; }
 
 static int create_device(void) {
     uint32_t ne = 0;
@@ -339,6 +343,7 @@ static int create_device(void) {
     // Low latency (vk_lowlat.c), only with AC_LOW_LATENCY on or, for Reflex, frame generation set (vk_dlssg.c): Reflex
     // where the driver has it, else Anti-Lag 2. Reflex
     // needs present IDs (VK_KHR_present_id) and timeline semaphores (required above); its extension has no feature.
+    g_reflex_possible = has_ext(ep, ne, VK_NV_LOW_LATENCY_2_EXTENSION_NAME) && has_ext(ep, ne, VK_KHR_PRESENT_ID_EXTENSION_NAME);
     if (vk_lowlat_wants_reflex() && has_ext(ep, ne, VK_NV_LOW_LATENCY_2_EXTENSION_NAME) &&
         has_ext(ep, ne, VK_KHR_PRESENT_ID_EXTENSION_NAME)) {
         g_vk.has_nv_low_latency2 = 1;

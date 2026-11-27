@@ -1016,8 +1016,9 @@ def main():
     stale = stale_shaders(RUNTIME)
     if stale:
         sys.exit(f'{stale[0]}: its SPIR-V header no longer matches; run python tools/build_shaders.py')
-    # AMD FSR 3's passes (runtime/vk_fsr3.c): the pinned SDK files fetched once into toolchain/ffx-sdk and compiled into
-    # out/fsr3_spv.h, which vk_fsr3.c includes through -I out; kept while its recipe is unchanged. Only where runtime/ is
+    # AMD FSR 3's passes (runtime/vk_fsr3.c, and runtime/vk_ffxfg.c for frame generation): the pinned SDK files fetched
+    # once into toolchain/ffx-sdk and compiled into out/fsr3_spv.h and out/ffxfg_spv.h, which those files include through
+    # -I out; each kept while its recipe is unchanged. Only where runtime/ is
     # compiled: an install links the release's prebuilt libacrt.a (--runtime-lib) and ships no tools/ffx_sdk.py.
     if not args.runtime_lib:
         import ffx_sdk

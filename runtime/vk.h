@@ -123,6 +123,7 @@ void vk_present_pre_record(VkImage (*fn)(VkCommandBuffer cb, VkImage src, unsign
 // overlay counts it among the pictures shown but not among the game's frames.
 void vk_present_fg(int oob, int more);
 VkQueue vk_oob_present_queue(void);   // vk_device.c: a second graphics queue for those presents, or VK_NULL_HANDLE
+int vk_reflex_possible(void);         // vk_device.c: the device offers VK_NV_low_latency2 and VK_KHR_present_id
 int vk_lowlat_fg_ok(void);            // vk_lowlat.c: Reflex is up and was told about that queue (or cannot be had)
 void vk_lowlat_fg_unavailable(void);  // vk_lowlat.c: Reflex, on for frame generation alone, goes off again
 // FSR 1 on the present (vk_fsr.c): records EASU (+ RCAS) of src's crop rectangle {x, y, w, h} into the rectangle out

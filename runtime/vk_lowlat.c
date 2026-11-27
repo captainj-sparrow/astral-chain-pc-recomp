@@ -116,9 +116,12 @@ static PFN_vkGetLatencyTimingsNV p_timings;
 static PFN_vkAntiLagUpdateAMD p_antilag;
 static int g_oob_ok;                  // Reflex knows the out-of-band present queue (vk_oob_present_queue)
 // Frame generation may run: Reflex is up with the queue its frames are presented from. Both are made at start when
-// frame generation is set then, so one switched on later waits for a restart. Without Reflex on this device (a driver
-// without VK_NV_low_latency2, AC_LOW_LATENCY_BACKEND naming another back end) it runs once it was set at start.
-int vk_lowlat_fg_ok(void) { return g_backend == LL_REFLEX ? g_oob_ok : vk_dlssg_set_at_start(); }
+// frame generation is set then, so one switched on later waits for a restart where Reflex could run. Where it cannot
+// (no VK_NV_low_latency2: AMD, Intel, the Steam Deck; AC_LOW_LATENCY_BACKEND naming another back end) it runs at once.
+int vk_lowlat_fg_ok(void) {
+    if (g_backend == LL_REFLEX) return g_oob_ok;
+    return vk_dlssg_set_at_start() || !vk_reflex_possible() || !backend_allowed(LL_REFLEX);
+}
 static VkSemaphore g_sem;             // Reflex: the timeline semaphore its sleep signals
 static uint64_t g_sem_val;
 
