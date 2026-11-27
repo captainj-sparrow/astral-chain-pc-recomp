@@ -235,6 +235,11 @@ site fps60 main 5937b0 bd460921 bd460921 @fn:rt_fps_rate_s1     # ldr s1 = 0.03;
 site fps60 main 593990 bd47e921 bd47e921 @fn:rt_fps_rate_s1     # ldr s1 = -0.03; then *= step (zoom out)
 # Legion skill tree cursor (main+0x665560 reads the stick, main+0x66BF40 moves it): speed (0.3 or 2.0) x 8.5 px a frame
 site fps60 main 6662f0 4ea81d00 4ea81d00 @fn:rt_fps_rate_s0     # mov v0,v8 (the speed); then *= step
+# Legion skill learning screen (main+0x61EB40): the stick moves the cursor by speed x 8.5 px a frame (main+0x6537B0,
+# past the edges it scrolls), and the held zoom buttons add +-0.03 a frame to the zoom; now times the step
+site fps60 main 621dbc 4ea81d00 4ea81d00 @fn:rt_fps_rate_s0     # mov v0,v8 (the speed); then *= step
+site fps60 main 6220a8 bd460940 bd460940 @fn:rt_fps_rate_s0     # ldr s0 = 0.03; then *= step (zoom in)
+site fps60 main 6220f0 bd47e920 bd47e920 @fn:rt_fps_rate_s0     # ldr s0 = -0.03; then *= step (zoom out)
 # in-game menu breathing (main+0x6198D0): pane 1's depth moves 0.4 a frame between +-15; now times the step
 site fps60 main 6198f8 bd498d21 bd498d21 @fn:rt_fps_rate_s1     # ldr s1 = 0.4; then *= step (menu breathing)
 # (the cut clock's end test, which a cutscene at 60 needs exact, is in the avsync set below)
