@@ -233,6 +233,8 @@ site fps60 main 592648 aa1303e0 aa1303e0 @fn:rt_fps_rate_s0s1   # mov x0,x19; th
 site fps60 main 6accf8 bd40ca62 bd40ca62 @fn:rt_fps_rate_s2     # ldr s2,[x19,#0xc8]; then the speed *= step
 site fps60 main 5937b0 bd460921 bd460921 @fn:rt_fps_rate_s1     # ldr s1 = 0.03; then *= step (zoom in)
 site fps60 main 593990 bd47e921 bd47e921 @fn:rt_fps_rate_s1     # ldr s1 = -0.03; then *= step (zoom out)
+# Legion skill tree cursor (main+0x665560 reads the stick, main+0x66BF40 moves it): speed (0.3 or 2.0) x 8.5 px a frame
+site fps60 main 6662f0 4ea81d00 4ea81d00 @fn:rt_fps_rate_s0     # mov v0,v8 (the speed); then *= step
 # in-game menu breathing (main+0x6198D0): pane 1's depth moves 0.4 a frame between +-15; now times the step
 site fps60 main 6198f8 bd498d21 bd498d21 @fn:rt_fps_rate_s1     # ldr s1 = 0.4; then *= step (menu breathing)
 # (the cut clock's end test, which a cutscene at 60 needs exact, is in the avsync set below)
