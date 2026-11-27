@@ -255,18 +255,70 @@ static int vtable_ok(void) {
     return ok;
 }
 
+// The version of the frame generation model NGX loaded, {major, minor, build} from the module's version resource
+// (VS_FIXEDFILEINFO, found by its signature), and whether it is the file beside the executable (dir, with its trailing
+// separator) or the driver's. 0 when no such module is in the process, or outside Windows, where the model's version
+// is in its file name and NGX's choice is not looked up: frame generation then stays as NGX reports it.
+static int fg_model_version(unsigned v[3], const wchar_t *dir, int *own) {
+#ifdef _WIN32
+    HMODULE m = GetModuleHandleW(L"nvngx_dlssg.dll");
+    HRSRC r = m ? FindResourceW(m, MAKEINTRESOURCEW(1), (LPCWSTR)RT_VERSION) : NULL;
+    HGLOBAL g = r ? LoadResource(m, r) : NULL;
+    const unsigned char *d = g ? LockResource(g) : NULL;
+    DWORD n = r ? SizeofResource(m, r) : 0;
+    wchar_t path[MAX_PATH * 2];
+    DWORD len = m ? GetModuleFileNameW(m, path, MAX_PATH * 2) : 0;
+    size_t dl = wcslen(dir);
+    *own = len > dl && !_wcsnicmp(path, dir, dl) && !wcschr(path + dl, L'\\');
+    for (DWORD i = 0; d && i + 16 <= n; i += 4) {
+        uint32_t f[4];
+        memcpy(f, d + i, sizeof f);
+        if (f[0] != 0xFEEF04BDu) continue;
+        v[0] = f[2] >> 16, v[1] = f[2] & 0xffff, v[2] = f[3] >> 16;
+        return 1;
+    }
+#else
+    (void)v, (void)dir, (void)own;
+#endif
+    return 0;
+}
+
+// AC_NGX_LOG=1 or 2 (test): NGX's own log lines (2: verbose) in the port's log, through the logging callback of
+// NVSDK_NGX_FeatureCommonInfo. They name what a refused call lacks (a parameter, a resource), which its result code
+// does not.
+static void ngx_log(const char *msg, int level, int feature) {
+    (void)level;
+    size_t n = msg ? strlen(msg) : 0;
+    while (n && (msg[n - 1] == '\n' || msg[n - 1] == '\r')) n--;
+    if (n) rt_log("ngx (feature %d): %.*s", feature, (int)n, msg);
+}
+
 void vk_dlaa_init(void) {
     vk_fsr4_init();   // its library, when the setting is fsr4 at start
     if (!vk_dlaa_wanted() || !core_load()) return;
+    // NVSDK_NGX_FeatureCommonInfo: its PathListInfo, then InternalData and LoggingInfo
+    static const wchar_t *paths[1];
+    static struct {
+        struct { const wchar_t *const *path; unsigned length; } path_list;
+        void *internal;
+        struct { void *callback; int min_level; _Bool disable_other_sinks; } logging;
+    } common;
+    const char *lv = cfg_get("AC_NGX_LOG");
+    if (lv && (lv[0] == '1' || lv[0] == '2') && !lv[1])
+        common.logging.callback = (void *)ngx_log, common.logging.min_level = lv[0] - '0',
+        common.logging.disable_other_sinks = 1;   // or NGX also writes nvngx*.log files beside the executable
 #ifdef _WIN32
-    wchar_t wdir[MAX_PATH];
+    static wchar_t wdir[MAX_PATH];
     DWORD len = GetModuleFileNameW(NULL, wdir, MAX_PATH);
     while (len && wdir[len - 1] != L'\\') len--;
     wdir[len] = 0;
-    const void *info = NULL;   // NGX finds nvngx_dlss.dll in the executable's folder on its own
+    // NGX finds nvngx_dlss.dll in the executable's folder on its own: the common info goes with its log only
+    paths[0] = wdir;
+    common.path_list.path = paths;
+    common.path_list.length = 1;
+    const void *info = common.logging.callback ? &common : NULL;
 #else
     // NGX takes wide paths here too; the folder is the data path and the one place it looks for the DLSS model
-    // (NVSDK_NGX_FeatureCommonInfo: its PathListInfo, then InternalData and LoggingInfo, left empty)
     char exe[PATH_MAX];
     ssize_t len = readlink("/proc/self/exe", exe, sizeof exe - 1);
     if (len <= 0) return;
@@ -275,13 +327,7 @@ void vk_dlaa_init(void) {
     if (cut) cut[1] = 0;
     static wchar_t wdir[PATH_MAX];
     if (mbstowcs(wdir, exe, PATH_MAX - 1) == (size_t)-1) return;
-    static const wchar_t *paths[1];
     paths[0] = wdir;
-    static struct {
-        struct { const wchar_t *const *path; unsigned length; } path_list;
-        void *internal;
-        struct { void *callback; int min_level; _Bool disable_other_sinks; } logging;
-    } common;
     common.path_list.path = paths;
     common.path_list.length = 1;
     const void *info = &common;
@@ -311,8 +357,26 @@ void vk_dlaa_init(void) {
     N.available = avail != 0;
     N.fg_available = fg != 0 && fg_max >= 1;
     N.fg_max = fg_max;
-    rt_log("dlaa: NGX frame generation %s (up to %u generated frames per game frame)%s",
-           N.fg_available ? "available" : "NOT available", fg_max, fg_driver ? "; the driver needs an update" : "");
+    // The model NGX took must be one made for NGX's own interface, which vk_dlssg.c speaks: the DLSS SDK ships frame
+    // generation (its header and nvngx_dlssg.dll) from 310.4.0 on. Without that file beside the executable NGX falls
+    // back on the model in the driver's folder, which reports the feature available whatever its age: the 310.2.1 of
+    // driver 32.0.15.9xxx (RTX 5060 Ti, Windows 11) reads none of the creation parameters, keeps its cached sizes at
+    // zero and refuses every evaluation (bad00005; AC_NGX_LOG=1 shows its reasons).
+    char fg_model[96] = "";
+    unsigned mv[3];
+    int own = 0;
+    if (fg && fg_model_version(mv, wdir, &own)) {
+        snprintf(fg_model, sizeof fg_model, "; model %u.%u.%u %s", mv[0], mv[1], mv[2],
+                 own ? "beside the executable" : "from the driver");
+        if (mv[0] < 310 || (mv[0] == 310 && mv[1] < 4)) {
+            N.fg_available = 0;
+            snprintf(fg_model, sizeof fg_model, "; its model %u.%u.%u %s is older than 310.4.0, the first for NGX's own "
+                     "interface", mv[0], mv[1], mv[2], own ? "beside the executable" : "from the driver");
+        }
+    }
+    rt_log("dlaa: NGX frame generation %s (up to %u generated frames per game frame)%s%s",
+           N.fg_available ? "available" : "NOT available", fg_max, fg_model,
+           fg_driver ? "; the driver needs an update" : "");
 #ifdef _WIN32
     const char *model = "nvngx_dlss.dll next to astralchain.exe";
 #else
@@ -1012,8 +1076,7 @@ int vk_ngx_fg_caps(unsigned *max_count) {
     return N.inited && N.fg_available;
 }
 
-int vk_ngx_fg_create(VkCommandBuffer cb, uint32_t w, uint32_t h, VkFormat fmt, uint32_t rw, uint32_t rh, int uir,
-                     void **feat) {
+int vk_ngx_fg_create(VkCommandBuffer cb, uint32_t w, uint32_t h, VkFormat fmt, uint32_t rw, uint32_t rh, void **feat) {
     *feat = NULL;
     if (!N.inited || !N.fg_available) return 0;
     if (!fg_params && (!NGX_OK(N.alloc_params(&fg_params)) || !fg_params)) {
@@ -1029,9 +1092,8 @@ int vk_ngx_fg_create(VkCommandBuffer cb, uint32_t w, uint32_t h, VkFormat fmt, u
     p_setu(p, "DLSSG.Width", w);
     p_setu(p, "DLSSG.Height", h);
     p_setu(p, "DLSSG.BackbufferFormat", (unsigned)fmt);
-    // UI recomposition: NGX takes the HUD's colour from the picture, the HUD-less picture and the HUD's alpha, makes the
-    // frame between under it and lays the HUD back over it, so a see-through HUD does not hold the scene under it still
-    p_setu(p, "DLSSG.UserInterfaceRecompositionEnabled", uir ? 1u : 0u);
+    // no UI recomposition: the game's HUD writes no alpha of its coverage, which it needs (DLSSG.UIAlpha)
+    p_setu(p, "DLSSG.UserInterfaceRecompositionEnabled", 0);
     // the depth's and the motion vectors' size, also given per evaluation as their subrects; a fixed one (a new size
     // remakes the feature, vk_dlssg.c ensure)
     p_setu(p, "DLSSG.InternalWidth", rw);
@@ -1044,8 +1106,8 @@ int vk_ngx_fg_create(VkCommandBuffer cb, uint32_t w, uint32_t h, VkFormat fmt, u
         rt_log("dlssg: frame generation feature creation at %ux%u (format %d) failed (%08x)", w, h, (int)fmt, (unsigned)r);
         return 0;
     }
-    rt_log("dlssg: frame generation feature created at %ux%u (format %d, scene %ux%u%s) in %.1f ms", w, h, (int)fmt, rw,
-           rh, uir ? ", UI recomposition" : "", (double)(plat_now_ns() - t0) / 1e6);
+    rt_log("dlssg: frame generation feature created at %ux%u (format %d, scene %ux%u) in %.1f ms", w, h, (int)fmt, rw,
+           rh, (double)(plat_now_ns() - t0) / 1e6);
     *feat = f;
     return 1;
 }
@@ -1066,9 +1128,7 @@ int vk_ngx_fg_evaluate(VkCommandBuffer cb, void *feat, const VkFgEval *e) {
     p_setp(p, "DLSSG.OutputInterpolated", &ro);
     p_setp(p, "DLSSG.OutputReal", NULL);
     p_setp(p, "DLSSG.UI", NULL);
-    NgxResourceVK ra = res_image(e->ui_alpha_view, e->ui_alpha, VK_FORMAT_R8_UNORM, e->w, e->h,
-                                 VK_IMAGE_ASPECT_COLOR_BIT, 0);
-    p_setp(p, "DLSSG.UIAlpha", e->ui_alpha ? &ra : NULL);
+    p_setp(p, "DLSSG.UIAlpha", NULL);
     p_setp(p, "DLSSG.BidirectionalDistortionField", NULL);
     // NGX's "do not show this set" (a scene change it saw): a byte it writes into the buffer, read by vk_dlssg.c
     NgxResourceVK rd;
@@ -1122,16 +1182,26 @@ int vk_ngx_fg_evaluate(VkCommandBuffer cb, void *feat, const VkFgEval *e) {
     p_setf(p, "DLSSG.MvecInvalidValue", 0.0f);
     p_setu(p, "DLSSG.MvecDilated", 0);
     p_setu(p, "DLSSG.MenuDetectionEnabled", 0);
-    const char *rect[][2] = {{"DLSSG.MVecsSubrect", "m"}, {"DLSSG.DepthSubrect", "z"},
-                             {"DLSSG.HUDLessSubrect", "c"}, {"DLSSG.InputBackbufferSubrect", "c"},
-                             {"DLSSG.OutputInterpolatedSubrect", "c"}, {"DLSSG.UIAlphaSubrect", "c"}};
-    for (int i = 0; i < (e->ui_alpha ? 6 : 5); i++) {
-        char k[64];
-        uint32_t w = rect[i][1][0] == 'c' ? e->w : f->rw, h = rect[i][1][0] == 'c' ? e->h : f->rh;
-        snprintf(k, sizeof k, "%sBaseX", rect[i][0]), p_setu(p, k, 0);
-        snprintf(k, sizeof k, "%sBaseY", rect[i][0]), p_setu(p, k, 0);
-        snprintf(k, sizeof k, "%sWidth", rect[i][0]), p_setu(p, k, w);
-        snprintf(k, sizeof k, "%sHeight", rect[i][0]), p_setu(p, k, h);
+    // the whole of each image: the vectors and the depth at the scene's size (the first two), the pictures at theirs.
+    // BackbufferSubrect is the older name of InputBackbufferSubrect (deprecated in the SDK's header) and the only one
+    // the model in NVIDIA's Windows driver reads (nvngx_dlssg.dll 310.2.1): without it that model took the extent for
+    // (0, 0) and refused every evaluation (bad00005, "BackbufferExtent should be constant", AC_NGX_LOG).
+    static const char *const rect[6][4] = {
+        {"DLSSG.MVecsSubrectBaseX", "DLSSG.MVecsSubrectBaseY", "DLSSG.MVecsSubrectWidth", "DLSSG.MVecsSubrectHeight"},
+        {"DLSSG.DepthSubrectBaseX", "DLSSG.DepthSubrectBaseY", "DLSSG.DepthSubrectWidth", "DLSSG.DepthSubrectHeight"},
+        {"DLSSG.HUDLessSubrectBaseX", "DLSSG.HUDLessSubrectBaseY", "DLSSG.HUDLessSubrectWidth",
+         "DLSSG.HUDLessSubrectHeight"},
+        {"DLSSG.InputBackbufferSubrectBaseX", "DLSSG.InputBackbufferSubrectBaseY", "DLSSG.InputBackbufferSubrectWidth",
+         "DLSSG.InputBackbufferSubrectHeight"},
+        {"DLSSG.OutputInterpolatedSubrectBaseX", "DLSSG.OutputInterpolatedSubrectBaseY",
+         "DLSSG.OutputInterpolatedSubrectWidth", "DLSSG.OutputInterpolatedSubrectHeight"},
+        {"DLSSG.BackbufferSubrectBaseX", "DLSSG.BackbufferSubrectBaseY", "DLSSG.BackbufferSubrectWidth",
+         "DLSSG.BackbufferSubrectHeight"}};
+    for (int i = 0; i < 6; i++) {
+        p_setu(p, rect[i][0], 0);
+        p_setu(p, rect[i][1], 0);
+        p_setu(p, rect[i][2], i < 2 ? f->rw : e->w);
+        p_setu(p, rect[i][3], i < 2 ? f->rh : e->h);
     }
     return N.evaluate(cb, feat, p, NULL);
 }

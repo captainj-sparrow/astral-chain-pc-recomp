@@ -16,7 +16,8 @@
 // that shows the first of them (gfx_present.c vk_present_pre_record): that submission comes before the next frame's
 // work (vk_present_drain), so the depth, the motion vectors and the scene still hold this frame there. The same
 // command buffer copies the window texture, so the game frame can be shown last, after the game drew into the window
-// texture again.
+// texture again. A full-screen movie (rt_movie_showing) is shown without generated frames: its picture does not move
+// with the scene's motion vectors.
 //
 // Pacing (vk_backend.c present_main): the game frame due at its display time T is shown n/(n+1) of a frame period
 // later, and the n generated frames before it at even steps from T on; a frame without generated frames (no motion
@@ -28,16 +29,8 @@
 // NGX also gets each game frame's number (DLSSG.BackbufferFrameID; a gap is a new history here too) and a buffer it
 // marks when it sees a scene change between the two frames (DLSSG.OutputDisableInterpolation): the generated frames of
 // such a set are replaced by the game's frame on the GPU (shaders/dlssg_hold.comp), and the log counts them. A set NGX
-// refuses shows the game's frame alone and its feature is remade; five refused sets in a row, or three failed
+// refuses shows the game's frame alone, and a second in a row remakes its feature; five in a row, or three failed
 // creations, turn frame generation off for the run.
-//
-// AC_DLSSG_MVDEBUG = 1 .. 8 (test, no settings row): frame generation's inputs drawn over every frame it shows, after
-// NGX evaluated (so its inputs stay as they were): 1 the motion vectors as a colour tint over the game's frame, 2 the
-// vectors alone, 3 the depth, 4 where the picture differs from the HUD-less one, what NGX keeps still as HUD, 5 and 6
-// the alpha channel of the picture and of the HUD-less one, 7 HUD that UI recomposition misses, 8 HUD alpha over the bare
-// scene (shaders/dlssg_mvdebug.comp has the key). The generated
-// frames show the game's frame too, so the picture holds still and the vectors sit on the surfaces they belong to.
-// AC_DLSSG_MVDEBUG_SCALE: the motion in render pixels that saturates the colour (default 8). Read at each present.
 //
 // With HDR output (an HDR10 swapchain): the present shows the window texture's PQ encode (vk_hdr.c vk_hdr_encode: the
 // scene's pixels from the float scene, highlights and all, the HUD's at the HUD's white). NGX gets that encode instead
@@ -45,8 +38,11 @@
 // with the frame's scene (vk_hdr_encode_fg) into an A2B10G10R10 image of PQ code values, what the present would show of
 // it. The HUD-less one's pixels are all scene, so the two differ only under the HUD, as in SDR. NGX is told the
 // pictures are HDR (DLSSG.ColorBuffersHDR) and writes its frames in the same format, and the present sends them and the
-// game's frame to the swapchain without encoding them again (vk_dlssg_encoded). UI recomposition's alpha comes from the
-// 8-bit copy (the HDR10 alpha has 2 bits).
+// game's frame to the swapchain without encoding them again (vk_dlssg_encoded).
+//
+// Not here, tried in the contribution this comes from and left for later: NGX's UI recomposition (DLSSG.UIAlpha, the
+// HUD's coverage made by changing the HUD draws' alpha blend), which keeps the scene moving under the see-through
+// dialogue box, still to be checked against the rest of the game's UI.
 #include "vk_dlssg.h"
 
 #include <stdio.h>
@@ -54,10 +50,7 @@
 #include <string.h>
 
 #include "cfg.h"
-#include "dlssg_alpha0_spv.h"
 #include "dlssg_hold_spv.h"
-#include "dlssg_mvdebug_spv.h"
-#include "dlssg_uialpha_spv.h"
 #include "gfx.h"
 #include "host.h"
 #include "vk_dlaa.h"
@@ -67,7 +60,7 @@
 #define HDR_FMT VK_FORMAT_A2B10G10R10_UNORM_PACK32   // the pictures with an HDR10 swapchain: PQ code values
 #define HINTS 8     // NGX's "do not show" buffers, a ring: one is read back HINTS - 1 sets after it was written, when
                     // its blit (8 in flight at most, gfx_present.c) has long finished
-#define EVAL_FAILS_OFF 5     // sets in a row NGX refused: off for the run (each refused set remakes the feature)
+#define EVAL_FAILS_OFF 5     // sets in a row NGX refused: off for the run (every second one remakes the feature)
 #define CREATE_FAILS_OFF 3   // failed feature creations in a row: off for the run
 
 typedef struct { VkImage img; VmaAllocation mem; VkImageView view; } Img;
@@ -84,9 +77,6 @@ static struct {
     VkFormat img_fmt, img_wfmt;   // the formats the images below were made in
     Img gen[MAX_GEN], hud, real;
     Img sdr, hud8;            // HDR output: the window texture and the HUD-less picture in its format (encode input)
-    Img dbg;                  // AC_DLSSG_MVDEBUG: a copy of the game's frame the overlay reads
-    Img uia;                  // AC_DLSSG_UI_ALPHA: the HUD's coverage from the picture's alpha (R8)
-    int uir;                  // the feature was made with UI recomposition
     int fmt_ok;               // -1 not checked, else for ok_wfmt and ok_hdr
     VkFormat ok_wfmt;
     int ok_hdr;
@@ -108,13 +98,19 @@ static struct {
     uint64_t shown_ns;        // when (plat_now_ns)
 } G = {.fmt_ok = -1};
 
-// The setting: 0 off, 1 auto, else the multiplier (2..4).
+// The setting: 0 off, 1 auto, else the multiplier (2..6). Read on every draw of the scene pass and every blit, so kept
+// with the settings' version (cfg_version) it was read at: bits 8 and up the version, bit 7 set once read.
 static int setting(void) {
+    static uint64_t cache;
+    uint64_t c = __atomic_load_n(&cache, __ATOMIC_RELAXED);
+    unsigned ver = cfg_version();
+    if ((c & 0x80) && (unsigned)(c >> 8) == ver) return (int)(c & 0x7f);
     const char *v = cfg_value("AC_FRAME_GENERATION");
-    if (!v || !*v || !strcmp(v, "off")) return 0;
-    if (!strcmp(v, "auto")) return 1;
-    int m = v[0] - '0';
-    return m >= 2 && m <= 6 && v[1] == 'x' && !v[2] ? m : 0;
+    int m = 0;
+    if (!strcmp(v, "auto")) m = 1;
+    else if (v[0] >= '2' && v[0] <= '6' && v[1] == 'x' && !v[2]) m = v[0] - '0';
+    __atomic_store_n(&cache, (uint64_t)ver << 8 | 0x80 | (unsigned)m, __ATOMIC_RELAXED);
+    return m;
 }
 
 int vk_dlssg_max_multiplier(void) {
@@ -132,9 +128,12 @@ void vk_dlssg_init(void) {
 #else
     const char *model = "libnvidia-ngx-dlssg.so.<version> next to astralchain";
 #endif
-    if (!m) rt_log("dlssg: frame generation is set but NGX does not offer it here (an NVIDIA RTX 40 or newer GPU, a "
-                   "recent driver and %s): off", model);
-    else rt_log("dlssg: frame generation %s, up to %dx here; it needs a temporal upscaler running (upscaling)",
+    if (!m) {
+        rt_log("dlssg: frame generation is set but NGX does not offer it here (an NVIDIA RTX 40 or newer GPU, a "
+               "recent driver and %s): off", model);
+        vk_lowlat_fg_unavailable();
+    } else
+        rt_log("dlssg: frame generation %s, up to %dx here; it needs a temporal upscaler running (upscaling)",
                 s == 1 ? "auto" : cfg_value("AC_FRAME_GENERATION"), m);
 }
 
@@ -155,15 +154,15 @@ void vk_dlssg_collect(VkFgFrame *f) {
         G.last_on = 0;
         return;
     }
-    if (!vk_lowlat_oob_ok()) {   // Reflex without frame generation's own present queue (set after the start)
+    if (!vk_lowlat_fg_ok()) {   // set after the start: NVIDIA Reflex and frame generation's present queue are not up
         static int logged;
         if (!logged)
-            logged = 1, rt_log("dlssg: NVIDIA Reflex runs without frame generation's present queue (vk_device.c): "
-                               "frame generation waits for a restart");
+            logged = 1, rt_log("dlssg: frame generation was switched on after the start, without NVIDIA Reflex and its "
+                               "own present queue (vk_device.c, vk_lowlat.c): it waits for a restart");
         G.last_on = 0;
         return;
     }
-    f->on = f->depth && f->mv && f->hudless && f->rw && f->rh && f->hw && f->hh;
+    f->on = f->depth && f->mv && f->hudless && f->rw && f->rh && f->hw && f->hh && !rt_movie_showing();
     if (f->on && !G.last_on) f->reset = 1;   // after frames without it: the history NGX holds is from another moment
     G.last_on = f->on;
 }
@@ -230,6 +229,16 @@ static int img_make(VkCommandBuffer cb, Img *i, uint32_t w, uint32_t h, VkFormat
     return 1;
 }
 
+static void barrier(VkCommandBuffer cb) {
+    VkMemoryBarrier2 mb = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+                           .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                           .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                           .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                           .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT};
+    VkDependencyInfo di = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .memoryBarrierCount = 1, .pMemoryBarriers = &mb};
+    vkCmdPipelineBarrier2(cb, &di);
+}
+
 // ---------------------------------------------------------------- the HUD-less picture (the replay thread)
 // The window texture as the game's last scene pass left it, before the first HUD draw (vk_hdr.c vk_hdr_before_draw):
 // the scene exactly as the picture shows it, anti-aliased, without the HUD. The float scene that pass read is from
@@ -241,53 +250,7 @@ static struct {
     VmaAllocation mem;
     uint32_t w, h;
     VkFormat fmt;
-    // AC_DLSSG_UI_ALPHA: the copy's view, and the copy with alpha 0 that goes back into the window texture
-    VkImageView view;
-    Img zero;
 } CAP;
-static void barrier(VkCommandBuffer cb);
-// Compute passes with push descriptors (the passes of ours, below)
-typedef struct Pass {
-    int tried, ok;
-    VkDescriptorSetLayout dsl;
-    VkPipelineLayout layout;
-    VkPipeline pipe;
-} Pass;
-static Pass alpha_pass;
-static VkSampler nearest;
-static int pass_init(Pass *ps, const char *name, const uint32_t *spv, size_t bytes, const VkDescriptorType *types,
-                     uint32_t n);
-static void pass_run(VkCommandBuffer cb, Pass *ps, const VkImageView *views, const VkSampler *samplers, uint32_t n,
-                     uint32_t out, const void *pc, uint32_t pc_bytes, uint32_t w, uint32_t h);
-
-// AC_DLSSG_UI_ALPHA=1 (test): the window texture's alpha set to 0 at the HUD-less copy, so after the HUD's draws it
-// holds their coverage (where they blend their alpha in over the destination's), for frame generation's UI
-// recomposition. The game's scene leaves 1 there, and "over" onto 1 stays 1 (AC_DLSSG_MVDEBUG=5 shows it).
-int vk_dlssg_ui_alpha(void) {
-    const char *v = cfg_get("AC_DLSSG_UI_ALPHA");
-    return v && !strcmp(v, "1");
-}
-
-static void zero_alpha(VkCommandBuffer cb, VkImage win) {
-    static const VkDescriptorType t[2] = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
-    const VkCtx *c = vk_ctx();
-    if (!pass_init(&alpha_pass, "UI alpha", dlssg_alpha0_spv, sizeof dlssg_alpha0_spv, t, 2)) return;
-    if (!CAP.view) {
-        VkImageViewCreateInfo vi = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = CAP.img,
-                                    .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = CAP.fmt,
-                                    .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
-        if (vkCreateImageView(c->device, &vi, NULL, &CAP.view) != VK_SUCCESS) CAP.view = VK_NULL_HANDLE;
-    }
-    if (!CAP.view || (!CAP.zero.img && !img_make(cb, &CAP.zero, CAP.w, CAP.h, CAP.fmt))) return;
-    VkImageView v[2] = {CAP.view, CAP.zero.view};
-    VkSampler sm[2] = {nearest, VK_NULL_HANDLE};
-    int32_t pc[2] = {(int32_t)CAP.w, (int32_t)CAP.h};
-    pass_run(cb, &alpha_pass, v, sm, 2, 1, pc, sizeof pc, CAP.w, CAP.h);
-    barrier(cb);
-    VkImageCopy cp = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
-                      .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .extent = {CAP.w, CAP.h, 1}};
-    vkCmdCopyImage(cb, CAP.zero.img, VK_IMAGE_LAYOUT_GENERAL, win, VK_IMAGE_LAYOUT_GENERAL, 1, &cp);
-}
 
 int vk_dlssg_capture(VkCommandBuffer cb, VkImage win, VkFormat fmt, uint32_t w, uint32_t h) {
     const VkCtx *c = vk_ctx();
@@ -295,10 +258,8 @@ int vk_dlssg_capture(VkCommandBuffer cb, VkImage win, VkFormat fmt, uint32_t w, 
         vk_queue_lock();
         vkDeviceWaitIdle(c->device);
         vk_queue_unlock();
-        if (CAP.view) vkDestroyImageView(c->device, CAP.view, NULL);
-        img_free(&CAP.zero);
         vmaDestroyImage(c->vma, CAP.img, CAP.mem);
-        CAP.img = VK_NULL_HANDLE, CAP.view = VK_NULL_HANDLE;
+        CAP.img = VK_NULL_HANDLE;
     }
     if (!CAP.img) {
         VkImageCreateInfo ii = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D,
@@ -333,18 +294,12 @@ int vk_dlssg_capture(VkCommandBuffer cb, VkImage win, VkFormat fmt, uint32_t w, 
                       .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .extent = {w, h, 1}};
     vkCmdCopyImage(cb, win, VK_IMAGE_LAYOUT_GENERAL, CAP.img, VK_IMAGE_LAYOUT_GENERAL, 1, &cp);
     barrier(cb);   // before the HUD draws write the window texture again
-    if (vk_dlssg_ui_alpha()) {
-        zero_alpha(cb, win);
-        barrier(cb);
-    }
     return 1;
 }
 
 VkImage vk_dlssg_capture_image(void) { return CAP.img; }
 
 static void capture_free(void) {
-    if (CAP.view) vkDestroyImageView(vk_ctx()->device, CAP.view, NULL);
-    img_free(&CAP.zero);
     if (CAP.img) vmaDestroyImage(vk_ctx()->vma, CAP.img, CAP.mem);
     memset(&CAP, 0, sizeof CAP);
 }
@@ -360,18 +315,8 @@ static void free_all(int wait) {
     if (G.feat) vk_ngx_fg_release(G.feat);
     G.feat = NULL;
     for (int i = 0; i < MAX_GEN; i++) img_free(&G.gen[i]);
-    img_free(&G.hud), img_free(&G.real), img_free(&G.dbg), img_free(&G.uia), img_free(&G.sdr), img_free(&G.hud8);
+    img_free(&G.hud), img_free(&G.real), img_free(&G.sdr), img_free(&G.hud8);
     G.w = G.h = G.rw = G.rh = 0;
-}
-
-static void barrier(VkCommandBuffer cb) {
-    VkMemoryBarrier2 mb = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
-                           .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                           .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
-                           .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                           .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT};
-    VkDependencyInfo di = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .memoryBarrierCount = 1, .pMemoryBarriers = &mb};
-    vkCmdPipelineBarrier2(cb, &di);
 }
 
 static void fail(const char *what) {
@@ -460,9 +405,7 @@ static int ensure(VkCommandBuffer cb, int *fresh) {
     if (G.drop_feat) feat_drop();
     if (!G.feat) {
         barrier(cb);   // the new images' layouts before NGX records anything
-        G.uir = vk_dlssg_ui_alpha();
-        if (G.uir && !G.uia.img && !img_make(cb, &G.uia, G.w, G.h, VK_FORMAT_R8_UNORM)) G.uir = 0;
-        if (!vk_ngx_fg_create(cb, G.w, G.h, G.fmt, G.rw, G.rh, G.uir, &G.feat)) {
+        if (!vk_ngx_fg_create(cb, G.w, G.h, G.fmt, G.rw, G.rh, &G.feat)) {
             G.feat = NULL;
             if (++G.create_fails >= CREATE_FAILS_OFF) fail("NGX's feature creation, three times in a row,");
             return 0;   // tried again at the next frame
@@ -473,146 +416,77 @@ static int ensure(VkCommandBuffer cb, int *fresh) {
     return 1;
 }
 
-// ---------------------------------------------------------------- the passes of ours
-// Compute passes with push descriptors: combined image samplers and one storage image (the output), in binding order.
-static PFN_vkCmdPushDescriptorSetKHR push_fn;
-static Pass dbg_pass, ua_pass, hold_pass;
+// ---------------------------------------------------------------- the scene change hold
+// A set NGX said not to show (its byte in hint): the game's frame goes into each generated frame on the GPU
+// (shaders/dlssg_hold.comp), a compute pass with push descriptors.
+static struct {
+    int tried, ok;
+    PFN_vkCmdPushDescriptorSetKHR push;
+    VkSampler nearest;
+    VkDescriptorSetLayout dsl;
+    VkPipelineLayout layout;
+    VkPipeline pipe;
+} HP;
 
-static VkSampler sampler(VkFilter f) {
-    VkSamplerCreateInfo si = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .magFilter = f, .minFilter = f,
-                              .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+static int hold_init(void) {
+    if (HP.tried) return HP.ok;
+    HP.tried = 1;
+    const VkCtx *c = vk_ctx();
+    HP.push = (PFN_vkCmdPushDescriptorSetKHR)vkGetDeviceProcAddr(c->device, "vkCmdPushDescriptorSetKHR");
+    VkSamplerCreateInfo si = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .magFilter = VK_FILTER_NEAREST,
+                              .minFilter = VK_FILTER_NEAREST, .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
                               .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
                               .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
                               .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, .maxLod = 0};
-    VkSampler s = VK_NULL_HANDLE;
-    vkCreateSampler(vk_ctx()->device, &si, NULL, &s);
-    return s;
-}
-
-// types[i]: binding i's descriptor type; push constants up to 48 bytes
-static int pass_init(Pass *ps, const char *name, const uint32_t *spv, size_t bytes, const VkDescriptorType *types,
-                     uint32_t n) {
-    if (ps->tried) return ps->ok;
-    ps->tried = 1;
-    const VkCtx *c = vk_ctx();
-    if (!push_fn) push_fn = (PFN_vkCmdPushDescriptorSetKHR)vkGetDeviceProcAddr(c->device, "vkCmdPushDescriptorSetKHR");
-    if (!nearest) nearest = sampler(VK_FILTER_NEAREST);
-    VkDescriptorSetLayoutBinding b[8];
-    for (uint32_t i = 0; i < n; i++)
-        b[i] = (VkDescriptorSetLayoutBinding){i, types[i], 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL};
+    VkDescriptorSetLayoutBinding b[3] = {
+        {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+        {1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+        {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}};
     VkDescriptorSetLayoutCreateInfo dci = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
                                            .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
-                                           .bindingCount = n, .pBindings = b};
-    VkPushConstantRange pr = {VK_SHADER_STAGE_COMPUTE_BIT, 0, 48};
-    VkShaderModuleCreateInfo mi = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, .codeSize = bytes,
-                                   .pCode = spv};
+                                           .bindingCount = 3, .pBindings = b};
+    VkPushConstantRange pr = {VK_SHADER_STAGE_COMPUTE_BIT, 0, 8};
+    VkShaderModuleCreateInfo mi = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                                   .codeSize = sizeof dlssg_hold_spv, .pCode = dlssg_hold_spv};
     VkShaderModule m = VK_NULL_HANDLE;
     VkResult r = VK_ERROR_INITIALIZATION_FAILED;
-    if (push_fn && nearest && vkCreateDescriptorSetLayout(c->device, &dci, NULL, &ps->dsl) == VK_SUCCESS) {
+    if (HP.push && vkCreateSampler(c->device, &si, NULL, &HP.nearest) == VK_SUCCESS &&
+        vkCreateDescriptorSetLayout(c->device, &dci, NULL, &HP.dsl) == VK_SUCCESS) {
         VkPipelineLayoutCreateInfo li = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1,
-                                         .pSetLayouts = &ps->dsl, .pushConstantRangeCount = 1,
+                                         .pSetLayouts = &HP.dsl, .pushConstantRangeCount = 1,
                                          .pPushConstantRanges = &pr};
-        if (vkCreatePipelineLayout(c->device, &li, NULL, &ps->layout) == VK_SUCCESS &&
+        if (vkCreatePipelineLayout(c->device, &li, NULL, &HP.layout) == VK_SUCCESS &&
             vkCreateShaderModule(c->device, &mi, NULL, &m) == VK_SUCCESS) {
             VkComputePipelineCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
                                               .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                                                         .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = m,
                                                         .pName = "main"},
-                                              .layout = ps->layout};
-            r = vkCreateComputePipelines(c->device, VK_NULL_HANDLE, 1, &ci, NULL, &ps->pipe);
+                                              .layout = HP.layout};
+            r = vkCreateComputePipelines(c->device, VK_NULL_HANDLE, 1, &ci, NULL, &HP.pipe);
             vkDestroyShaderModule(c->device, m, NULL);
         }
     }
-    ps->ok = r == VK_SUCCESS;
-    if (!ps->ok) rt_log("dlssg: the %s pass could not be created", name);
-    return ps->ok;
+    HP.ok = r == VK_SUCCESS;
+    if (!HP.ok) rt_log("dlssg: the scene change hold pass could not be created: NGX's scene changes are shown");
+    return HP.ok;
 }
 
-static void pass_free(Pass *ps) {
+static void hold_release(void) {
     const VkCtx *c = vk_ctx();
-    if (ps->pipe) vkDestroyPipeline(c->device, ps->pipe, NULL);
-    if (ps->layout) vkDestroyPipelineLayout(c->device, ps->layout, NULL);
-    if (ps->dsl) vkDestroyDescriptorSetLayout(c->device, ps->dsl, NULL);
-    memset(ps, 0, sizeof *ps);
+    if (HP.pipe) vkDestroyPipeline(c->device, HP.pipe, NULL);
+    if (HP.layout) vkDestroyPipelineLayout(c->device, HP.layout, NULL);
+    if (HP.dsl) vkDestroyDescriptorSetLayout(c->device, HP.dsl, NULL);
+    if (HP.nearest) vkDestroySampler(c->device, HP.nearest, NULL);
+    memset(&HP, 0, sizeof HP);
 }
 
-static void passes_release(void) {
-    const VkCtx *c = vk_ctx();
-    pass_free(&dbg_pass), pass_free(&alpha_pass), pass_free(&ua_pass), pass_free(&hold_pass);
-    if (nearest) vkDestroySampler(c->device, nearest, NULL);
-    nearest = VK_NULL_HANDLE;
-}
-
-// One dispatch over the picture: views[i] for binding i (the storage image at binding out), samplers[i] for the rest.
-static void pass_run(VkCommandBuffer cb, Pass *ps, const VkImageView *views, const VkSampler *samplers, uint32_t n,
-                     uint32_t out, const void *pc, uint32_t pc_bytes, uint32_t gw, uint32_t gh) {
-    VkDescriptorImageInfo ii[8];
-    VkWriteDescriptorSet wr[8];
-    for (uint32_t i = 0; i < n; i++) {
-        ii[i] = (VkDescriptorImageInfo){i == out ? VK_NULL_HANDLE : samplers[i], views[i], VK_IMAGE_LAYOUT_GENERAL};
-        wr[i] = (VkWriteDescriptorSet){.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = i,
-                                      .descriptorCount = 1,
-                                      .descriptorType = i == out ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
-                                                                 : VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                      .pImageInfo = &ii[i]};
-    }
-    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, ps->pipe);
-    rec_push(push_fn, cb, VK_PIPELINE_BIND_POINT_COMPUTE, ps->layout, 0, n, wr);
-    vkCmdPushConstants(cb, ps->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pc_bytes, pc);
-    vkCmdDispatch(cb, (gw + 7) / 8, (gh + 7) / 8, 1);
-}
-
-// AC_DLSSG_MVDEBUG
-static int mvdebug_mode(void) {
-    const char *v = cfg_get("AC_DLSSG_MVDEBUG");
-    int m = v && *v ? atoi(v) : 0;
-    return m >= 1 && m <= 8 ? m : 0;
-}
-
-// After NGX's evaluations in cb: the overlay into the game's frame (G.real) and each generated frame, all from a copy
-// of the game's frame, so every frame shown is the game's frame with its inputs.
-static void mvdebug(VkCommandBuffer cb, int mode) {
-    static const VkDescriptorType t[5] = {
-        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER};
-    const VkFgFrame *f = &G.fr;
-    if (!dbg_pass.tried)
-        rt_log("dlssg: AC_DLSSG_MVDEBUG=%d: frame generation's inputs drawn over the frames it shows", mode);
-    if (!pass_init(&dbg_pass, "AC_DLSSG_MVDEBUG", dlssg_mvdebug_spv, sizeof dlssg_mvdebug_spv, t, 5)) return;
-    if (!G.dbg.img && !img_make(cb, &G.dbg, G.w, G.h, G.fmt)) return;
-    VkImageCopy cp = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
-                      .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .extent = {G.w, G.h, 1}};
-    vkCmdCopyImage(cb, G.real.img, VK_IMAGE_LAYOUT_GENERAL, G.dbg.img, VK_IMAGE_LAYOUT_GENERAL, 1, &cp);
-    barrier(cb);
-    const char *e = cfg_get("AC_DLSSG_MVDEBUG_SCALE");
-    double sc = e ? atof(e) : 0.0;
-    for (int k = 0; k <= G.n; k++) {
-        VkImageView v[5] = {G.dbg.view, f->mv_view, f->depth_view, k ? G.gen[k - 1].view : G.real.view, G.hud.view};
-        VkSampler sm[5] = {nearest, nearest, nearest, VK_NULL_HANDLE, nearest};
-        struct {
-            int32_t size[2];
-            float rsize[2], scale;
-            int32_t mode;
-            float near_z, far_z;
-            int32_t generated;
-        } pc = {{(int32_t)G.w, (int32_t)G.h}, {(float)f->rw, (float)f->rh}, sc > 0 ? (float)sc : 8.0f, mode,
-                f->near_z, f->far_z, k};
-        pass_run(cb, &dbg_pass, v, sm, 5, 3, &pc, sizeof pc, G.w, G.h);
-    }
-    barrier(cb);
-}
-
-// A set NGX said not to show (its byte in hint): the game's frame goes into each generated frame on the GPU
 static void hold(VkCommandBuffer cb, VkBuffer hint) {
-    static const VkDescriptorType t[3] = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                                          VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
-    if (!pass_init(&hold_pass, "scene change hold", dlssg_hold_spv, sizeof dlssg_hold_spv, t, 3)) return;
-    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, hold_pass.pipe);
+    if (!hold_init()) return;
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, HP.pipe);
     int32_t pc[2] = {(int32_t)G.w, (int32_t)G.h};
-    vkCmdPushConstants(cb, hold_pass.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, pc);
+    vkCmdPushConstants(cb, HP.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, pc);
     for (int k = 0; k < G.n; k++) {
-        VkDescriptorImageInfo ri = {nearest, G.real.view, VK_IMAGE_LAYOUT_GENERAL},
+        VkDescriptorImageInfo ri = {HP.nearest, G.real.view, VK_IMAGE_LAYOUT_GENERAL},
                               oi = {VK_NULL_HANDLE, G.gen[k].view, VK_IMAGE_LAYOUT_GENERAL};
         VkDescriptorBufferInfo bi = {hint, 0, 16};
         VkWriteDescriptorSet wr[3] = {
@@ -622,7 +496,7 @@ static void hold(VkCommandBuffer cb, VkBuffer hint) {
              .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .pImageInfo = &oi},
             {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 2, .descriptorCount = 1,
              .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &bi}};
-        rec_push(push_fn, cb, VK_PIPELINE_BIND_POINT_COMPUTE, hold_pass.layout, 0, 3, wr);
+        rec_push(HP.push, cb, VK_PIPELINE_BIND_POINT_COMPUTE, HP.layout, 0, 3, wr);
         vkCmdDispatch(cb, (G.w + 7) / 8, (G.h + 7) / 8, 1);
     }
     barrier(cb);
@@ -657,16 +531,6 @@ static VkImage record(VkCommandBuffer cb, VkImage src, unsigned slot, VkFormat *
         if (!vk_hdr_encode_fg(cb, slot, in, out, 2, G.wfmt, G.w, G.h)) return src;   // the present's encode fails too
         barrier(cb);
     }
-    if (G.uir) {   // the HUD's coverage the picture's alpha holds (vk_exec_draw.c), as NGX's single channel
-        static const VkDescriptorType t[2] = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
-        if (pass_init(&ua_pass, "UI alpha extraction", dlssg_uialpha_spv, sizeof dlssg_uialpha_spv, t, 2)) {
-            VkImageView v[2] = {G.hdr ? G.sdr.view : G.real.view, G.uia.view};
-            VkSampler sm[2] = {nearest, VK_NULL_HANDLE};
-            int32_t pc[2] = {(int32_t)G.w, (int32_t)G.h};
-            pass_run(cb, &ua_pass, v, sm, 2, 1, pc, sizeof pc, G.w, G.h);
-            barrier(cb);
-        }
-    }
     int reset = f->reset || fresh || !G.prev_shown || f->frame_id != G.last_id + 1;
     VkBuffer hint = hint_take(cb);
     if (hint) barrier(cb);   // its fill before NGX writes it
@@ -674,18 +538,19 @@ static VkImage record(VkCommandBuffer cb, VkImage src, unsigned slot, VkFormat *
         VkFgEval e = {.back = G.real.img, .back_view = G.real.view, .hudless = G.hud.img, .hudless_view = G.hud.view,
                       .out = G.gen[k - 1].img, .out_view = G.gen[k - 1].view, .format = G.fmt, .w = G.w, .h = G.h,
                       .f = f, .count = (uint32_t)G.n, .index = (uint32_t)k, .reset = reset && k == 1,
-                      .ui_alpha = G.uir ? G.uia.img : VK_NULL_HANDLE, .ui_alpha_view = G.uia.view,
                       .hdr = G.hdr, .no_interp = hint, .no_interp_bytes = 16};
         int r = vk_ngx_fg_evaluate(cb, G.feat, &e);
         if (!r || ((unsigned)r & 0xFFF00000u) == 0xBAD00000u) {   // NVSDK_NGX_Result: 1 success, 0xBAD0xxxx failures
-            // The set is not shown and the feature is remade (feat_drop, at the next job): a new history. Only a run of
-            // refused sets turns frame generation off.
+            // The set is not shown and the next one starts a new history. The feature is kept for one more try, since
+            // NGX sets a refused feature up again itself ("Re-initializing DLSS-FG from recoverable error state",
+            // AC_NGX_LOG=1); a second refusal in a row remakes it (feat_drop, at the next job, which waits for the
+            // device), and only a run of refused sets turns frame generation off.
             static int logged;
             if (logged++ < 8)
                 rt_log("dlssg: NGX refused frame %d of %d (%08x): the game's frame alone", k, G.n, (unsigned)r);
             if (k > 1) barrier(cb);   // the frames NGX did write, before the blit reads src
-            G.drop_feat = 1;
             if (++G.eval_fails >= EVAL_FAILS_OFF) fail("NGX's evaluation, five sets in a row,");
+            else if (G.eval_fails % 2 == 0) G.drop_feat = 1;
             return src;
         }
     }
@@ -705,8 +570,6 @@ static VkImage record(VkCommandBuffer cb, VkImage src, unsigned slot, VkFormat *
     G.sets++;
     G.evaluated = 1;
     if (hint && !reset) hold(cb, hint);
-    int dm = mvdebug_mode();
-    if (dm) mvdebug(cb, dm);
     *fmt = G.fmt;
     // a new history gives no frame between the last one and this: only the game's frame is shown, at its delayed time
     if (reset) return G.real.img;
@@ -777,7 +640,7 @@ void vk_dlssg_release(void) {
     free_all(0);
     hints_free();
     capture_free();
-    passes_release();
+    hold_release();
 }
 
 // ---------------------------------------------------------------- the menu and the overlay
@@ -793,7 +656,7 @@ int vk_dlssg_choice_state(void) {
     if (!setting()) return 0;
     if (!vk_dlaa_wanted()) return 1;   // NGX was not loaded at start
     if (!vk_dlssg_max_multiplier() || plat_cas32(&G.failed, 0, 0)) return 2;
-    if (!vk_lowlat_oob_ok()) return 1;   // Reflex without frame generation's present queue: made at the next start
+    if (!vk_lowlat_fg_ok()) return 1;   // NVIDIA Reflex and frame generation's present queue: made at the next start
     if (!vk_dlaa_running()) return 3;
     return 0;
 }

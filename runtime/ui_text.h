@@ -35,6 +35,7 @@ typedef enum {
     UI_MENU_GPU, UI_MENU_GPU_DESC, UI_MENU_GPU_AUTO,
     UI_MENU_PERF_OVERLAY, UI_MENU_PERF_OVERLAY_DESC, UI_MENU_PERF_OFF, UI_MENU_PERF_FPS, UI_MENU_PERF_FULL,
     UI_PERF_LINE_FPS,
+    UI_PERF_LINE_FPS_FG,   // with frame generation: the pictures shown per second, the game's frames, the multiplier
     UI_MENU_GRAPHICS,         // group heading over the resolution rows
     UI_MENU_OUTPUT_RES, UI_MENU_OUTPUT_RES_DESC,   // output_res (resolution.c res_pick): the size the game renders
     UI_MENU_UPSCALER, UI_MENU_UPSCALER_DESC, UI_MENU_UPSCALER_FSR, UI_MENU_UPSCALER_BILINEAR,
@@ -67,6 +68,7 @@ typedef enum {
     // frame generation (vk_dlssg.c)
     UI_MENU_FRAMEGEN, UI_MENU_FRAMEGEN_DESC,
     UI_MENU_FRAMEGEN_NEEDS_TAA,   // the row's note: no temporal upscaler runs, so no frames are generated
+    UI_MENU_FRAMEGEN_RESTART_DESC,   // "Restart now" under the row: frame generation was switched on after the start
     UI_MENU_OUTPUT_RES_AUTO,
     UI_MENU_OUTPUT_RES_NEXT,   // ", %s after restart": the size output_res = auto takes at the next start
 

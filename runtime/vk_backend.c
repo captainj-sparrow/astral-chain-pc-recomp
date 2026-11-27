@@ -87,7 +87,6 @@ static void present_main(void *arg) {
         busy = 1;
         plat_cond_broadcast(&pcv);
         plat_mutex_unlock(&pl);
-        uint64_t picked = kern_now_ns();
         if (flight_on) vk_thumbs_frame(j.frame);
         const int *crop = j.has_crop ? j.crop : NULL;
         uint64_t period = frame_period(j.at);
@@ -98,10 +97,9 @@ static void present_main(void *arg) {
         vk_hdr_set_scene(j.scene, j.scene_format);   // read by the HDR encode in this blit
         vk_fsr_presharp_set(j.presharp);             // and by FSR's step in it
         vk_present_shape_set(j.shape);               // and where the picture goes in the window
-        vk_present_out_of_band(n > 0);               // a generated frame's present: out of Reflex's tracking
+        vk_present_fg(n > 0, 0);                     // a generated frame's present: out of Reflex's tracking
         vk_present_blit(j.image, VK_IMAGE_LAYOUT_GENERAL, j.format, j.w, j.h, crop);
         int made = n ? vk_dlssg_end() : -1;
-        uint64_t blitted = kern_now_ns();
         uint64_t f = vk_sync_submit(NULL, 0);   // a timeline value after the blit: deferred destruction waits for the blit too
         if (j.value && f != j.value)
             rt_fatal("vk: the present of frame %llu signalled %llu, queued as %llu", (unsigned long long)j.frame,
@@ -113,7 +111,7 @@ static void present_main(void *arg) {
         busy = 0;
         plat_cond_broadcast(&pcv);
         plat_mutex_unlock(&pl);
-        uint64_t t0 = kern_now_ns(), gen_at[8] = {0};
+        uint64_t t0 = kern_now_ns();
         if (made < 0) {
             wait_until(j.at);
         } else {
@@ -122,14 +120,13 @@ static void present_main(void *arg) {
             // The later blits read only frame generation's images, so the replay need not wait for them.
             uint64_t base = j.at ? j.at : t0, step = period / (uint64_t)(n + 1);
             for (int k = 1; k <= made; k++) {
-                if (k > 1) vk_present_out_of_band(1);
+                if (k > 1) vk_present_fg(1, 1);
                 if (k > 1) vk_present_blit(vk_dlssg_image(k), VK_IMAGE_LAYOUT_GENERAL, vk_dlssg_format(), j.w, j.h, crop);
                 wait_until(base + (uint64_t)(k - 1) * step);
-                if (k <= 8) gen_at[k - 1] = kern_now_ns();
                 vk_present_flip();
             }
             if (made > 0) {
-                vk_present_out_of_band(0);
+                vk_present_fg(0, 1);   // the game's own frame, the last picture of its set
                 vk_present_frame_id(j.lid);
                 vk_present_blit(vk_dlssg_image(0), VK_IMAGE_LAYOUT_GENERAL, vk_dlssg_format(), j.w, j.h, crop);
             }
@@ -139,21 +136,12 @@ static void present_main(void *arg) {
         vk_present_flip();
         // AC_TRACE=present: one line per present: the host present's interval, the interval of the game's present
         // calls (when the host present went out before back-edge pacing), the wait and how far past its target it went
-        if (rt_trace & RT_TRACE_PRESENT) {
-            char gen[192] = "";
-            if (made >= 0) {   // and when each went out, from the frame's display time
-                double at0 = (double)(j.at ? j.at : t0);
-                int o = snprintf(gen, sizeof gen, ", taken %+.2f ms, blitted %+.2f, %d generated frames before it",
-                                 ((double)picked - at0) / 1e6, ((double)blitted - at0) / 1e6, made);
-                for (int k = 0; k < made && k < 8 && o > 0 && o < (int)sizeof gen; k++)
-                    o += snprintf(gen + o, sizeof gen - (size_t)o, "%s%+.2f", k ? " " : " at ",
-                                  ((double)gen_at[k] - (double)(j.at ? j.at : t0)) / 1e6);
-            }
-            rt_log("present: frame %llu interval %.3f ms, game %.3f ms, waited %.3f ms, %.3f ms past target%s",
+        // and with frame generation the frames made before the game's (-1: none were asked for)
+        if (rt_trace & RT_TRACE_PRESENT)
+            rt_log("present: frame %llu interval %.3f ms, game %.3f ms, waited %.3f ms, %.3f ms past target, %d generated",
                    (unsigned long long)j.frame, last ? (t1 - last) / 1e6 : 0.0,
                    last_queued ? (j.queued - last_queued) / 1e6 : 0.0, (t1 - t0) / 1e6,
-                   j.at && t1 > j.at ? (t1 - j.at) / 1e6 : 0.0, gen);
-        }
+                   j.at && t1 > j.at ? (t1 - j.at) / 1e6 : 0.0, made);
         last = t1;
         last_queued = j.queued;
         vk_pipeline_autosave();   // starts the autosave thread once

@@ -336,7 +336,8 @@ static int create_device(void) {
     }
     // GPU breadcrumbs for a lost device (vk_crumbs.c): AMD's drivers and RADV report it.
     if (has_ext(ep, ne, VK_AMD_BUFFER_MARKER_EXTENSION_NAME)) { g_vk.has_buffer_marker = 1; ext[n_ext++] = VK_AMD_BUFFER_MARKER_EXTENSION_NAME; }
-    // Low latency (vk_lowlat.c), only with AC_LOW_LATENCY on: Reflex where the driver has it, else Anti-Lag 2. Reflex
+    // Low latency (vk_lowlat.c), only with AC_LOW_LATENCY on or, for Reflex, frame generation set (vk_dlssg.c): Reflex
+    // where the driver has it, else Anti-Lag 2. Reflex
     // needs present IDs (VK_KHR_present_id) and timeline semaphores (required above); its extension has no feature.
     if (vk_lowlat_wants_reflex() && has_ext(ep, ne, VK_NV_LOW_LATENCY_2_EXTENSION_NAME) &&
         has_ext(ep, ne, VK_KHR_PRESENT_ID_EXTENSION_NAME)) {

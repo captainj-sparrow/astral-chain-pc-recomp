@@ -25,15 +25,14 @@ Report problems as issues, following [CONTRIBUTING.md](CONTRIBUTING.md).
 - Native code, not emulation. It already runs on very old systems;
 - Externally tested (Reddit, YouTube, ...): playable from intro to credits.
 - [Flat 60FPS on Steam Deck](https://steamdeckhq.com/news/astral-chains-pc-port-60-fps-on-steam-deck/)
-- HDR output (HDR10), with separate brightness for the game and the HUD (on Linux, under a Wayland compositor with HDR:
-  start the game with `SDL_VIDEODRIVER=wayland`, since SDL may otherwise pick XWayland, which offers no HDR10 output)
+- HDR output (HDR10), with separate brightness for the game and the HUD
 - Temporal upscaling and anti-aliasing for the 3D scene up to 4K, from native (DLAA / Native AA) to Ultra Performance: NVIDIA
   DLSS on RTX cards (with `nvngx_dlss.dll` next to `astralchain.exe`, on Linux `libnvidia-ngx-dlss.so.<version>` next
   to `astralchain`), Intel XeSS on most recent GPUs, AMD FSR 3 on any
   GPU, AMD FSR 4 on AMD Radeon RX 6000 series or newer (Windows and Linux);
 - NVIDIA DLSS Frame Generation (2x, and 3x or 4x on the RTX 50 series) on RTX 40 or newer cards, over a temporal upscaler
-  (with `nvngx_dlssg.dll` next to `astralchain.exe`, on Linux `libnvidia-ngx-dlssg.so.<version>` next to `astralchain`),
-  with SDR and HDR output;
+  (with `nvngx_dlssg.dll` 310.4.0 or newer from NVIDIA's DLSS SDK next to `astralchain.exe`, on Linux
+  `libnvidia-ngx-dlssg.so.<version>` next to `astralchain`), with SDR and HDR output and NVIDIA Reflex always on with it;
 - Anisotropic texture filtering up to 16x, for sharp ground into the distance
 - Low latency mode: NVIDIA Reflex or AMD Anti-Lag 2 where the driver offers them, the port's own frame timing on any
   other GPU (Intel, Steam Deck); about a third less time from the controller to the screen at 60 fps, half at 30

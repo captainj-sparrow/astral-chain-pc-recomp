@@ -247,33 +247,9 @@ static void series_shot(const tex_t *t, uint64_t n) {
 // A --seconds run ends at the first present after the world clock (game time since the save's first frame,
 // frame_step_world_us) passed S seconds, so a run covers the same game time at any frame rate; any other frame is
 // counted by the back end only.
-// AC_PRESENT_SHOTS=w<lo>-<hi>:<step> [AC_SHOTS_DIR=dir] (test): what the window showed, the swapchain image of the
-// first present at or after each step of the world clock (seconds), at full size as <dir>/p<ms>.png: with frame
-// generation, its pictures and AC_DLSSG_MVDEBUG's overlay, which AC_SHOTS (the game's window texture) does not have.
-static void present_series(void) {
-    static int parsed;
-    static double lo, hi, step, next;
-    static const char *dir;
-    if (!parsed) {
-        parsed = 1;
-        const char *e = cfg_get("AC_PRESENT_SHOTS");
-        if (!e || e[0] != 'w' || sscanf(e + 1, "%lf-%lf:%lf", &lo, &hi, &step) != 3 || step <= 0) hi = -1;
-        dir = cfg_get("AC_SHOTS_DIR") ? cfg_get("AC_SHOTS_DIR") : ".";
-        if (hi >= 0) plat_file_mkdir_p(dir);
-        next = lo;
-    }
-    int64_t w = frame_step_world_us();
-    if (hi < 0 || w < 0 || (double)w < next * 1e6 || next > hi) return;
-    while (next * 1e6 <= (double)w) next += step;
-    char path[PLAT_PATH_MAX];
-    snprintf(path, sizeof path, "%s/p%06lld.png", dir, (long long)(w / 1000));
-    vk_present_shot(path);
-}
-
 void rt_frame_presented(const tex_t *t, uint64_t n) {
     const RtConfig *cfg = rt_config();
     series_shot(t, n);
-    present_series();
     int64_t w = cfg->seconds ? frame_step_world_us() : -1;
     static int present_shot;   // AC_PRESENT_SHOT=<file>: the window's picture half a second before the run ends
     if (!present_shot && w >= 0 && (double)w >= cfg->seconds * 1e6 - 5e5) {

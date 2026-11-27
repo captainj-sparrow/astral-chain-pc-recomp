@@ -205,6 +205,10 @@ msgctxt "UI_PERF_LINE_FPS"
 msgid "%.0f fps"
 msgstr "%.0f fps"
 
+msgctxt "UI_PERF_LINE_FPS_FG"
+msgid "%.0f fps (%.0f x%d FG)"
+msgstr "%.0f fps (%.0f x%d FG)"
+
 msgctxt "UI_MENU_GRAPHICS"
 msgid "Picture"
 msgstr "Imagem"
@@ -514,12 +518,16 @@ msgid "Frame generation"
 msgstr "Geração de quadros"
 
 msgctxt "UI_MENU_FRAMEGEN_DESC"
-msgid "NVIDIA DLSS Frame Generation: frames made between the game's own, for a smoother picture; the game itself keeps its frame rate. 2x shows one frame between two of the game's, 3x and 4x two and three (RTX 50 series). Automatic fills the display's refresh rate. Needs an NVIDIA RTX 40 or newer GPU, the DLSS SDK's frame generation library next to the game and an upscaler running; adds about half a frame of latency. Turning it on takes effect after a restart, then at once."
-msgstr "NVIDIA DLSS Frame Generation: quadros criados entre os do jogo, para uma imagem mais fluida; o próprio jogo mantém sua taxa de quadros. 2x mostra um quadro entre dois do jogo, 3x e 4x dois e três (série RTX 50). Automático preenche a taxa de atualização da tela. Requer uma GPU NVIDIA RTX 40 ou mais nova, a biblioteca de geração de quadros do DLSS SDK ao lado do jogo e um upscaler ativo; adiciona cerca de meio quadro de latência. Ligar vale após reiniciar, depois na hora."
+msgid "NVIDIA DLSS Frame Generation: frames made between the game's own, for a smoother picture; the game itself keeps its frame rate. 2x shows one frame between two of the game's, 3x and 4x two and three (RTX 50 series). Automatic fills the display's refresh rate. Needs an NVIDIA RTX 40 or newer GPU, the DLSS SDK's frame generation library next to the game and an upscaler running. It adds about half a frame of latency, and NVIDIA Reflex runs with it to keep the rest down, whatever Low latency says. Turning it on takes effect after a restart, then at once."
+msgstr "NVIDIA DLSS Frame Generation: quadros criados entre os do jogo, para uma imagem mais fluida; o próprio jogo mantém sua taxa de quadros. 2x mostra um quadro entre dois do jogo, 3x e 4x dois e três (série RTX 50). Automático preenche a taxa de atualização da tela. Requer uma GPU NVIDIA RTX 40 ou mais nova, a biblioteca de geração de quadros do DLSS SDK ao lado do jogo e um upscaler ativo. Adiciona cerca de meio quadro de latência, e o NVIDIA Reflex funciona junto para reduzir o restante, seja qual for a opção de Baixa latência. Ligar vale após reiniciar, depois na hora."
 
 msgctxt "UI_MENU_FRAMEGEN_NEEDS_TAA"
 msgid "needs an upscaler"
 msgstr "requer um upscaler"
+
+msgctxt "UI_MENU_FRAMEGEN_RESTART_DESC"
+msgid "Closes the game and starts it again with frame generation and NVIDIA Reflex, which it runs with. Progress since your last save is lost."
+msgstr "Fecha o jogo e o abre de novo com a geração de quadros e o NVIDIA Reflex, que funciona junto com ela. O progresso desde o último salvamento é perdido."
 
 msgctxt "UI_MENU_OUTPUT_RES_AUTO"
 msgid "Automatic"

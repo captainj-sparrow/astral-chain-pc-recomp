@@ -28,10 +28,13 @@
 #include "vk.h"
 #include "vk_dlssg.h"
 
-// Blits in flight, each with its command buffer, fence and acquire semaphore. 8 since frame generation (vk_dlssg.c)
-// presents up to four pictures per game frame: with 2, every other blit waited for the one before it, which the GPU
-// runs after the game's next frame. vk_color.c, vk_fsr.c and vk_hdr.c keep 8 slots of their own (slot % 8).
+// Blits in flight, each with its command buffer, fence and acquire semaphore: 2, or 8 while frame generation
+// (vk_dlssg.c) is set, since it presents up to four pictures per game frame: with 2, every other blit waited for the
+// one before it, which the GPU runs after the game's next frame. Without it the present keeps 2, so it runs no further
+// ahead of the GPU than before. A slot is reused only after its fence, so the count can change between two blits.
+// vk_color.c, vk_fsr.c and vk_hdr.c keep 8 slots of their own (slot % 8).
 #define FRAMES 8
+#define FRAMES_PLAIN 2
 #define MAX_IMAGES 16
 #define VSYNC_NS 1000000000ull
 #define VSYNC_HZ 60
@@ -153,7 +156,8 @@ static int g_cap_w, g_cap_h, g_cap_valid;
 static int g_flip_on;            // vk_present_blit submitted the blit of swapchain image g_flip_idx; vk_present_flip presents it
 static uint32_t g_flip_idx;
 static uint64_t g_blit_lid, g_flip_lid;   // the low-latency frame (vk_lowlat.c) of the next blit and of the waiting present
-static int g_blit_oob, g_flip_oob;        // the same for the out-of-band queue (vk_present_out_of_band)
+static int g_blit_oob, g_flip_oob;        // the same for the out-of-band queue (vk_present_fg)
+static int g_blit_more;                   // the next blit shows a further picture of a game frame (vk_present_fg)
 
 // ---- AC_FLIGHT thumbnails (flight.c; g_pl): each present also blits the swapchain image down into slot frame % g_th_n
 // of a host-visible ring. A slot's tag names the frame it holds complete; recording a new frame clears the tag first,
@@ -625,9 +629,10 @@ static VkImage (*g_pre_record)(VkCommandBuffer cb, VkImage src, unsigned slot, V
 void vk_present_pre_record(VkImage (*fn)(VkCommandBuffer cb, VkImage src, unsigned slot, VkFormat *fmt)) {
     g_pre_record = fn;
 }
-void vk_present_out_of_band(int on) {
+void vk_present_fg(int oob, int more) {
     plat_rmutex_lock(&g_pl);
-    g_blit_oob = on && vk_oob_present_queue() != VK_NULL_HANDLE;
+    g_blit_oob = oob && vk_oob_present_queue() != VK_NULL_HANDLE;
+    g_blit_more = more;
     plat_rmutex_unlock(&g_pl);
 }
 
@@ -642,7 +647,7 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
     }
     if (wsys_minimized() || !g_sc) goto out;
 
-    unsigned slot = g_frame % FRAMES;
+    unsigned slot = g_frame % (vk_dlssg_scene_wanted() ? FRAMES : FRAMES_PLAIN);
     if (vkWaitForFences(c->device, 1, &g_fence[slot], VK_TRUE, 5000000000ull) != VK_SUCCESS) {
         rt_log("gfx: present fence wait timed out");
         goto out;
@@ -675,7 +680,7 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
     const char *menu_shot = NULL;
     MenuTarget mt = {c->instance, c->phys, c->device, c->gfx_family, c->gfx_queue,
                      g_sc_hdr ? VK_FORMAT_R8G8B8A8_UNORM : g_sc_fmt, g_sc_ext.width,
-                     g_sc_ext.height, cw, ch, g_scaler};
+                     g_sc_ext.height, cw, ch, g_scaler, g_blit_more};
     // the menu counts a paused game's repeats as frames too, or its test hooks would wait for the game
     uint64_t shown = __atomic_load_n(&gfx_counters.frames, __ATOMIC_RELAXED) +
                      __atomic_load_n(&gfx_counters.repeats, __ATOMIC_RELAXED);
@@ -805,7 +810,7 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
         g_flip_lid = g_blit_lid;   // the present carries the frame of its blit
         g_blit_lid = 0;
         g_flip_oob = g_blit_oob;
-        g_blit_oob = 0;
+        g_blit_oob = g_blit_more = 0;
         if (!defer) flip_locked();
     } else {
         vk_device_fault_report(r);

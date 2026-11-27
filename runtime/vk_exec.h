@@ -202,7 +202,6 @@ void vk_exec_bc_gone(VkImage image);
 extern int vk_hdr_track;
 void vk_hdr_draw(VkExec *ex, const VkPipeInfo *info);
 void vk_hdr_before_draw(VkExec *ex);   // before a draw's pass begins: frame generation's HUD-less copy (vk_hdr.c)
-uint32_t vk_hdr_hud_targets(const VkExec *ex);   // AC_DLSSG_UI_ALPHA: targets that are a window texture's HUD
 // Scissor 0 clipped to the render area of the open pass; extent 0: nothing to draw.
 VkRect2D vk_exec_scissor(const VkExec *ex);
 void vk_exec_noatt_dims(const VkExec *ex, uint32_t *w, uint32_t *h);   // pass size when no attachment is set

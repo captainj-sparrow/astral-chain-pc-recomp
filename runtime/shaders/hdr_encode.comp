@@ -1,15 +1,13 @@
 #version 450
 // HDR10 encode on the present (runtime/vk_hdr.c vk_hdr_encode): the game's picture, crop rectangle at offset, into an
-// RGBA16F image of PQ code values in Rec. 2020 that FSR 1 or the blit then scale into the HDR10 swapchain (frame
-// generation's pictures: an A2B10G10R10 image of the same values, the window's size).
+// RGBA16F image of PQ code values in Rec. 2020 that FSR 1 or the blit then scale into the HDR10 swapchain.
 // src: the window texture the game presents (8-bit: the SMAA'd scene with the HUD and menus over it; an sRGB view
 // decodes it, p.z = 1 when it holds sRGB codes in a UNORM format). scene (p.w = 1, a linear sampler): the tonemap's
 // float target, the window's size or smaller with its shape, sRGB-encoded and continued above 1
 // (shaders/hdr_tonemap.frag). A window pixel equal to the clamped scene
 // pixel, or to its blend with one axis neighbour (SMAA), is the scene, shown at q.x nits for 1.0 and from the scene
 // where that holds light above 1; any other pixel was drawn over it (the HUD, a menu) and is shown at p.x nits.
-// p.y: the display's peak in nits. q.y = 1: the window pixel's alpha is kept (frame generation's UI recomposition,
-// vk_dlssg.c), else 1. PQ: SMPTE ST 2084; the Rec. 709 to Rec. 2020 matrix: ITU-R BT.2087.
+// p.y: the display's peak in nits. PQ: SMPTE ST 2084; the Rec. 709 to Rec. 2020 matrix: ITU-R BT.2087.
 layout(local_size_x = 8, local_size_y = 8) in;
 layout(binding = 0) uniform sampler2D src;
 layout(binding = 1, rgba16f) uniform writeonly image2D dst;
@@ -39,8 +37,7 @@ void main() {
     ivec2 at = ivec2(gl_GlobalInvocationID.xy);
     if (any(greaterThanEqual(at, pc.size))) return;
     ivec2 px = at + pc.offset;
-    vec4 t = texelFetch(src, px, 0);
-    vec3 c = max(t.rgb, vec3(0.0));
+    vec3 c = max(texelFetch(src, px, 0).rgb, vec3(0.0));
     vec3 code = pc.p.z > 0.5 ? clamp(c, 0.0, 1.0) : srgb_encode(clamp(c, 0.0, 1.0));   // the window pixel as stored
     vec3 lin = pc.p.z > 0.5 ? srgb_decode(code) : c;
     vec3 nits = lin * pc.p.x;
@@ -66,5 +63,5 @@ void main() {
     }
     const mat3 to2020 = mat3(0.6274, 0.0691, 0.0164, 0.3293, 0.9195, 0.0880, 0.0433, 0.0114, 0.8956);
     nits = min(max(to2020 * nits, vec3(0.0)), vec3(pc.p.y));
-    imageStore(dst, at, vec4(pq(nits), pc.q.y > 0.5 ? t.a : 1.0));
+    imageStore(dst, at, vec4(pq(nits), 1.0));
 }

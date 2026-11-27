@@ -584,6 +584,10 @@ static void row_output_res(void) {
 // (SMAA, or off) applies while no upscaler runs and is greyed out otherwise. Off Windows, DLSS and XeSS are not offered;
 // FSR 4 only on an AMD RDNA 2 or newer GPU with its library's files there. FSR 4 that cannot run says what runs in its
 // place and which file it lacks.
+// "Restart now" (below, with restart_confirm): the row of a setting that waits for a restart, and its confirmation
+static void restart_row(bool needed, UiTextId desc, UiTextId label = UI_MENU_RESTART, bool rebuild = false);
+static void restart_confirm(void);
+
 static void rows_upscaling(void) {
 #ifdef _WIN32
     static const char *const vals[] = {"off", "auto", "dlss", "xess", "fsr3", "fsr4"};
@@ -666,6 +670,8 @@ static void rows_upscaling(void) {
                 snprintf(note_fg, sizeof note_fg, menu_text(UI_MENU_PRESENT_IN_USE), on), fnote = note_fg;
         }
         opt_choice_list("AC_FRAME_GENERATION", UI_MENU_FRAMEGEN, fv, fn, n, UI_MENU_FRAMEGEN_DESC, fcur, fnote);
+        // switched on after the start: NGX, NVIDIA Reflex and its present queue come up with the device
+        restart_row(vk_dlssg_choice_state() == 1, UI_MENU_FRAMEGEN_RESTART_DESC);
     }
 }
 
@@ -826,6 +832,7 @@ static void tab_screen(float scale) {
     opt_slider("AC_HDR_UI_NITS", UI_MENU_HDR_UI, 80, 500, UI_MENU_HDR_UI_DESC, 1, "%.0f");
     opt_slider("AC_HDR_HUE", UI_MENU_HDR_HUE, 0, 100, UI_MENU_HDR_HUE_DESC, 5, "%.0f %%");
     opt_end();
+    restart_confirm();
 }
 
 static void tab_game(float scale) {
@@ -921,12 +928,25 @@ static const char *prompts_note(bool *restart) {
     }
 }
 
-// The confirmation of "Restart now", over the menu; Cancel has the cursor first. Restart writes astralchain.ini, then closes
+// "Restart now", for a tab with a setting that waits for a restart: restart_row among its rows, shown while needed
+// (label and desc say what the restart brings), and restart_confirm once after its opt_end(), the level
+// BeginPopupModal looks the confirmation up at.
+// The confirmation, over the menu; Cancel has the cursor first. Restart writes astralchain.ini, then closes
 // the game as Quit does and starts it again (gfx_window_request_restart). It waits while the game writes a save, and
 // the game stays when astralchain.ini cannot be written, as the new settings would not come back. From the Cheats tab
-// (restart_rebuild) Restart also lets the next start rebuild for cheats whose last rebuild failed (cheats_rebuild_allow).
-static bool restart_rebuild;
+// (rebuild) Restart also lets the next start rebuild for cheats whose last rebuild failed (cheats_rebuild_allow).
+static bool restart_asked, restart_rebuild;
+static int restart_frame;   // the ImGui frame restart_confirm last ran in: g_modal is this frame's
+static void restart_row(bool needed, UiTextId desc, UiTextId label, bool rebuild) {
+    if (!needed || !opt_button("##restart", label, desc)) return;
+    restart_asked = true;
+    restart_rebuild = rebuild;
+}
+
 static void restart_confirm(void) {
+    restart_frame = ImGui::GetFrameCount();
+    if (restart_asked) ImGui::OpenPopup("##restart_confirm");
+    restart_asked = false;
     g_modal = false;
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     if (!ImGui::BeginPopupModal("##restart_confirm", nullptr,
@@ -1127,7 +1147,7 @@ static void tab_sound(float scale) {
     if (const char *line = audio_output_line(&warn)) opt_text_str(line, warn);
     // The output is fixed when the game opens it: while the one asked for differs, offer the restart right here.
     const int nmix = audout_mix_channels(), want = audio_output_wanted();
-    bool ask = nmix && want && want != nmix && opt_button("##restart", UI_MENU_RESTART, UI_MENU_AUDIO_RESTART_DESC);
+    restart_row(nmix && want && want != nmix, UI_MENU_AUDIO_RESTART_DESC);
 
     if (nmix) {
         opt_group(UI_MENU_AUDIO_GROUP_MIX);
@@ -1143,7 +1163,6 @@ static void tab_sound(float scale) {
         else opt_text(UI_MENU_AUDIO_MIX_HINT);
     }
     opt_end();
-    if (ask) ImGui::OpenPopup("##restart_confirm");   // at the level BeginPopupModal looks it up
     restart_confirm();
 }
 
@@ -1157,7 +1176,7 @@ static void tab_controls(float scale) {
     bool restart;
     const char *note = prompts_note(&restart);
     opt_choice("AC_PROMPTS", UI_MENU_PROMPTS, prompts, 4, UI_MENU_PROMPTS_DESC, note);
-    bool ask = restart && opt_button("##restart", UI_MENU_RESTART, UI_MENU_RESTART_DESC);
+    restart_row(restart, UI_MENU_RESTART_DESC);
     opt_toggle("AC_MOTION", UI_MENU_MOTION, UI_MENU_MOTION_DESC);
     opt_slider("AC_RUMBLE_STRENGTH", UI_MENU_RUMBLE_STRENGTH, 0, 300, UI_MENU_RUMBLE_STRENGTH_DESC, 10, "%.0f %%");
     opt_slider("AC_RUMBLE_CURVE", UI_MENU_RUMBLE_CURVE, 0.2f, 1.5f, UI_MENU_RUMBLE_CURVE_DESC, 0.05f, "%.2f");
@@ -1188,7 +1207,6 @@ static void tab_controls(float scale) {
     binds_rows(scale);
     opt_end();
     binds_after_page();
-    if (ask) ImGui::OpenPopup("##restart_confirm");   // at the level BeginPopupModal looks it up
     restart_confirm();
 }
 
@@ -1272,8 +1290,7 @@ static void tab_mods(float scale) {
             opt_save_soon();
         }
     }
-    bool rebuild =
-        cheats_rebuild_pending() && opt_button("##restart", UI_MENU_CHEATS_REBUILD, UI_MENU_CHEATS_REBUILD_DESC);
+    restart_row(cheats_rebuild_pending(), UI_MENU_CHEATS_REBUILD_DESC, UI_MENU_CHEATS_REBUILD, true);
     static uint64_t open_failed;   // plat_now_ns until which the button says it failed
     if (opt_button("##mods_open", UI_MENU_MODS_OPEN, UI_MENU_MODS_OPEN_DESC,
                    plat_now_ns() < open_failed ? menu_text(UI_MENU_ACTION_FAILED) : "")) {
@@ -1305,10 +1322,6 @@ static void tab_mods(float scale) {
         if (!ok || !plat_open_folder(dir)) dlc_open_failed = plat_now_ns() + 3000000000ull;
     }
     opt_end();
-    if (rebuild) {
-        restart_rebuild = true;
-        ImGui::OpenPopup("##restart_confirm");
-    }
     restart_confirm();
 }
 
@@ -1381,7 +1394,7 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
     ImGui::SameLine();
     if (ImGui::Button(quit, ImVec2(bw, 0))) gfx_window_request_close();
     bool was_modal = g_modal || binds_modal();
-    if (g_tab != TAB_CONTROLS && g_tab != TAB_SOUND) g_modal = false;   // the two tabs with "Restart now"
+    if (restart_frame != ImGui::GetFrameCount()) g_modal = false;   // a tab without "Restart now"
     if (!was_modal && (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false)))
         set_open(0);
     ImGui::End();
@@ -1389,8 +1402,9 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
 
 static int g_save_pending;   // a changed setting still waits for its write to totk.ini (opt_save_tick)
 
-// ---- the performance overlay (TOTK_PERF_OVERLAY), in the top right corner. "fps": the frame rate over the presents of
-// the last half second. "full": a panel of perfmon.c's numbers, in the style of SavageWindRecomp's perf_overlay_draw
+// ---- the performance overlay (AC_PERF_OVERLAY), in the top right corner. "fps": the frame rate over the presents of
+// the last half second; with frame generation (vk_dlssg.c) that of the pictures shown, its frames among them, then the
+// game's own and the multiplier, "120 fps (60 x2 FG)". "full": a panel of perfmon.c's numbers, in the style of SavageWindRecomp's perf_overlay_draw
 // (menu.mm): the machine's load and temperatures, the frame rate and frame times with a graph, the render thread's waits.
 // Off, it costs a cfg_version load per present.
 static unsigned g_perf_ver = ~0u;
@@ -1398,6 +1412,12 @@ static int g_perf_mode;                  // 0 off, 1 fps, 2 full
 static std::atomic<int> g_perf_save;     // F10 changed the mode: totk.ini is written on the present thread
 static uint64_t g_perf_last_ns, g_perf_win_ns, g_perf_max_ns;
 static int g_perf_frames;
+// The same window over the game's own frames (MenuTarget.fg_more leaves frame generation's pictures out), measured
+// from one of them to the next so that their count over it is exact
+static uint64_t g_perf_glast_ns, g_perf_gwin_ns;
+static int g_perf_gframes;
+static float g_perf_shown_fps;   // pictures shown per second over the last window
+static int g_perf_fg_mult;       // frame generation's multiplier while its pictures were among them (2..6), else 0
 static char g_perf_text[96];
 
 static int perf_mode_of(const char *s) { return !strcmp(s, "full") ? 2 : !strcmp(s, "fps") ? 1 : 0; }
@@ -1445,20 +1465,33 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
         }
         g_perf_mode = m;
     }
-    if (g_perf_mode != 1) return;
+    if (!g_perf_mode) return;
     uint64_t d = now - g_perf_last_ns;
     if (!g_perf_last_ns || d > 2000000000ull) {   // first frame, or a stall the window should not average in
-        g_perf_win_ns = g_perf_max_ns = 0;
-        g_perf_frames = 0;
+        g_perf_win_ns = g_perf_max_ns = g_perf_gwin_ns = g_perf_glast_ns = 0;
+        g_perf_frames = g_perf_gframes = 0;
+        g_perf_shown_fps = 0, g_perf_fg_mult = 0;
     } else {
         g_perf_win_ns += d;
         g_perf_frames++;
         if (d > g_perf_max_ns) g_perf_max_ns = d;
-        if (g_perf_win_ns >= 500000000ull) {
-            snprintf(g_perf_text, sizeof g_perf_text, menu_text(UI_PERF_LINE_FPS), g_perf_frames * 1e9 / g_perf_win_ns);
-            g_perf_win_ns = g_perf_max_ns = 0;
-            g_perf_frames = 0;
-        }
+    }
+    if (!t->fg_more) {
+        if (g_perf_glast_ns) g_perf_gwin_ns += now - g_perf_glast_ns, g_perf_gframes++;
+        g_perf_glast_ns = now;
+    }
+    if (g_perf_win_ns >= 500000000ull) {
+        double shown = g_perf_frames * 1e9 / g_perf_win_ns;
+        const char *fg = g_perf_gframes < g_perf_frames && g_perf_gwin_ns ? vk_dlssg_running() : nullptr;
+        g_perf_fg_mult = fg ? atoi(fg) : 0;   // "2x" .. "6x"
+        g_perf_shown_fps = (float)shown;
+        if (g_perf_fg_mult)   // "120 fps (60 x2 FG)": the pictures shown, then the game's own frames
+            snprintf(g_perf_text, sizeof g_perf_text, menu_text(UI_PERF_LINE_FPS_FG), shown,
+                     g_perf_gframes * 1e9 / g_perf_gwin_ns, g_perf_fg_mult);
+        else
+            snprintf(g_perf_text, sizeof g_perf_text, menu_text(UI_PERF_LINE_FPS), shown);
+        g_perf_win_ns = g_perf_max_ns = g_perf_gwin_ns = 0;
+        g_perf_frames = g_perf_gframes = 0;
     }
     g_perf_last_ns = now;
 }
@@ -1514,7 +1547,7 @@ static void perf_picture(const MenuTarget *t, const ImVec4 &c, const PerfStats &
     res_game_size(out);     // the res / res1062 sets: the game resolution
     res_scene_size(scene);  // the scene in it: smaller while an upscaling mode reduced it (resolution.c)
     unsigned rw = scene[0], rh = scene[1];
-    char v[6][64];
+    char v[7][64];
     snprintf(v[0], sizeof v[0], menu_text(UI_MENU_OV_FMT_SIZE), t->width, t->height);
     snprintf(v[1], sizeof v[1], menu_text(UI_MENU_OV_FMT_SIZE), (unsigned)t->image_w, (unsigned)t->image_h);
     snprintf(v[2], sizeof v[2], menu_text(UI_MENU_OV_FMT_SCENE), rw, rh, rw * 100.0 / out[0]);
@@ -1534,28 +1567,28 @@ static void perf_picture(const MenuTarget *t, const ImVec4 &c, const PerfStats &
         snprintf(sc, sizeof sc, "%s", v[3]);
         snprintf(v[3], sizeof v[3], "%s + %s", taa, sc);
     }
-    if (const char *fg = vk_dlssg_running()) {   // frame generation's frames between the game's (vk_dlssg.c)
-        char sc[64];
-        snprintf(sc, sizeof sc, "%s", v[3]);
-        snprintf(v[3], sizeof v[3], "%s, FG %s", sc, fg);
-    }
     double hz = frame_step_limit_hz();
     snprintf(v[4], sizeof v[4], "%s", menu_text(UI_MENU_OV_NONE));
     if (hz > 0) snprintf(v[4], sizeof v[4], menu_text(UI_MENU_OV_FPS), hz);
     const char *pm = present_name(gfx_window_present_mode());
     snprintf(v[5], sizeof v[5], "%s", pm ? pm : menu_text(UI_MENU_OV_NONE));
-    static const UiTextId labels[7] = {UI_MENU_OV_WINDOW, UI_MENU_OV_OUTPUT, UI_MENU_OV_SCENE,
-                                       UI_MENU_OV_SCALING, UI_MENU_OV_LIMIT, UI_MENU_OV_PRESENT, UI_MENU_OV_TEX};
+    // the low latency back end that runs (vk_lowlat.c): NVIDIA Reflex also when frame generation alone turned it on
+    static const char *const ll[] = {nullptr, "NVIDIA Reflex", "AMD Anti-Lag 2", nullptr};
+    int lb = vk_lowlat_backend();
+    snprintf(v[6], sizeof v[6], "%s",
+             lb > 0 && lb < 3 ? ll[lb] : menu_text(lb == 3 ? UI_MENU_LOW_LATENCY_BUILTIN : UI_MENU_LOW_LATENCY_OFF));
+    static const UiTextId labels[8] = {UI_MENU_OV_WINDOW,  UI_MENU_OV_OUTPUT,  UI_MENU_OV_SCENE,   UI_MENU_OV_SCALING,
+                                       UI_MENU_OV_LIMIT,   UI_MENU_OV_PRESENT, UI_MENU_LOW_LATENCY, UI_MENU_OV_TEX};
     if (!ImGui::BeginTable("##perfp", 2, ImGuiTableFlags_SizingFixedFit)) return;
     float vw = 0;
     for (auto &line : v) vw = fmaxf(vw, ImGui::CalcTextSize(line).x);
     vw = fmaxf(vw, ImGui::CalcTextSize(s.tex_mode).x);
     ImGui::TableSetupColumn("##p0", ImGuiTableColumnFlags_WidthStretch);
     ImGui::TableSetupColumn("##p1", ImGuiTableColumnFlags_WidthFixed, vw);
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < 8; i++) {
         perf_label(labels[i], c);
         ImGui::TableNextColumn();
-        perf_right(i == 6 ? s.tex_mode : v[i], false);
+        perf_right(i == 7 ? s.tex_mode : v[i], false);
     }
     ImGui::EndTable();
 }
@@ -1602,12 +1635,20 @@ static void perf_full_draw(const MenuTarget *t, float scale) {
         perf_cell(UI_MENU_OV_FMT_GB, perf_gb(s.ram_used_mb));
         perf_cell(UI_MENU_OV_FMT_GB_OF, perf_gb(s.ram_total_mb));
         perf_cell(UI_MENU_OV_GAME_GB, perf_gb(s.ram_game_mb));
-        ImGui::TableNextColumn();   // the frame row: no label, the rate in its place
+        // The frame row: no label, the rate in its place. With frame generation (vk_dlssg.c) the rate is that of the
+        // pictures shown, and the row's last cell, else empty, holds the game's own rate and the multiplier, so the
+        // panel gets no wider; the frame times stay the game's.
+        ImGui::TableNextColumn();
         char b[64];
-        snprintf(b, sizeof b, menu_text(UI_MENU_OV_FPS), s.fps);
+        snprintf(b, sizeof b, menu_text(UI_MENU_OV_FPS), g_perf_fg_mult ? g_perf_shown_fps : s.fps);
         ImGui::TextColored(fps_c, "%s", b);
         perf_cell(UI_MENU_OV_FRAME_MS, s.frame_ms_avg);
         perf_cell(UI_MENU_OV_MAX_MS, s.frame_ms_max);
+        if (g_perf_fg_mult) {
+            ImGui::TableNextColumn();
+            snprintf(b, sizeof b, "(%.0f x%d FG)", s.fps, g_perf_fg_mult);
+            perf_right(b, false);
+        }
         ImGui::EndTable();
     }
     float top = s.frame_ms_max > 50 ? s.frame_ms_max : 50;

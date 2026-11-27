@@ -192,7 +192,6 @@ static PlatMutex rec_lock = PLAT_MUTEX_INIT;
 // before the next draw into it (vk_hdr_before_draw), 0 neither since the last present
 static struct { VkImage win, src; VkFormat fmt; uint32_t w, h; int fresh, cap; } recs[4];
 static volatile int32_t g_cap_pending;   // recs with cap 1: the per-draw check's fast way out
-static volatile int32_t g_cap_done;      // recs with cap 2: the same for vk_hdr_hud_targets
 static int nrecs;
 
 void vk_hdr_set_active(int on) { plat_xchg32(&g_active, on); }
@@ -238,10 +237,7 @@ void vk_hdr_draw(VkExec *ex, const VkPipeInfo *info) {
     for (int i = 0; i < nrecs; i++)
         if (recs[i].win == t->image) {
             recs[i].src = src, recs[i].fmt = fmt, recs[i].w = sw, recs[i].h = sh, recs[i].fresh = 1;
-            if (vk_dlssg_scene_wanted() && recs[i].cap != 1) {
-                if (recs[i].cap == 2) plat_dec32(&g_cap_done);
-                recs[i].cap = 1, plat_inc32(&g_cap_pending);
-            }
+            if (recs[i].cap != 1 && vk_dlssg_scene_wanted()) recs[i].cap = 1, plat_inc32(&g_cap_pending);
         }
     plat_mutex_unlock(&rec_lock);
 }
@@ -251,7 +247,7 @@ void vk_hdr_draw(VkExec *ex, const VkPipeInfo *info) {
 // window texture, the anti-aliased scene without the HUD, is copied; the draw's pass then begins again, loading it.
 // Without such a draw (no HUD this frame) the window texture itself is HUD-less at the present.
 void vk_hdr_before_draw(VkExec *ex) {
-    if (!plat_cas32(&g_cap_pending, 0, 0)) return;
+    if (!__atomic_load_n(&g_cap_pending, __ATOMIC_RELAXED)) return;   // every draw: a plain load, no locked op
     for (int c = 0; c < 8; c++) {
         const VkExecTarget *t = &ex->color[c];
         if (!t->image || !t->img) continue;
@@ -265,23 +261,10 @@ void vk_hdr_before_draw(VkExec *ex) {
         int ok = vk_dlssg_capture(ex->cb, t->image, t->img->format, t->img->width, t->img->height);
         ex->recorded += 3;
         plat_mutex_lock(&rec_lock);
-        if (recs[r].win == t->image && ok) recs[r].cap = 2, plat_inc32(&g_cap_done);
+        if (recs[r].win == t->image && ok) recs[r].cap = 2;
         plat_mutex_unlock(&rec_lock);
         return;
     }
-}
-
-// AC_DLSSG_UI_ALPHA: the colour targets of this draw (bit i: ex->color[i]) that are window textures whose HUD-less copy
-// was taken: the HUD's draws, which blend their coverage into its alpha (vk_exec_draw.c).
-uint32_t vk_hdr_hud_targets(const VkExec *ex) {
-    if (!plat_cas32(&g_cap_done, 0, 0)) return 0;
-    uint32_t m = 0;
-    plat_mutex_lock(&rec_lock);
-    for (int c = 0; c < 8; c++)
-        for (int i = 0; i < nrecs && ex->color[c].image; i++)
-            if (recs[i].win == ex->color[c].image && recs[i].cap == 2) m |= 1u << c;
-    plat_mutex_unlock(&rec_lock);
-    return m;
 }
 
 // Also for frame generation (vk_dlssg.c), with or without HDR output: fg, when not NULL, gets the fresh scene whether or not the
@@ -309,7 +292,6 @@ void vk_hdr_present_source(const VkTexImage *win, VkImage *scene, VkFormat *form
     }
     if (r >= 0) {
         if (recs[r].cap == 1) plat_dec32(&g_cap_pending);
-        if (recs[r].cap == 2) plat_dec32(&g_cap_done);
         recs[r].fresh = 0, recs[r].cap = 0;
     }
     plat_xchg32(&g_scene_seen, *scene != VK_NULL_HANDLE);
@@ -580,7 +562,7 @@ VkImage vk_hdr_encode(VkCommandBuffer cb, unsigned slot, VkImage src, VkFormat f
 
 // Frame generation (vk_dlssg.c) with an HDR10 swapchain: NGX makes its frames from HDR10 pictures, so the encode
 // runs before it, on images of frame generation's: src[i] (the window texture's copy, or the HUD-less picture, both
-// w x h of src_fmt) into dst[i] (A2B10G10R10, PQ code values, w x h, its alpha kept for UI recomposition), all against
+// w x h of src_fmt) into dst[i] (A2B10G10R10, PQ code values, w x h), all against
 // the scene vk_hdr_set_scene gave this present. The scene stays set (the present's own encode, should frame generation
 // give up after this, still has it). The caller orders its images before and after; the scene is ordered here.
 // slot: the present's slot, whose command buffer the earlier use of its view has finished with.
@@ -609,7 +591,7 @@ int vk_hdr_encode_fg(VkCommandBuffer cb, unsigned slot, const VkImageView *src, 
     int decode = src_fmt == VK_FORMAT_R8G8B8A8_UNORM || src_fmt == VK_FORMAT_B8G8R8A8_UNORM;
     struct { int32_t offset[2], size[2]; float p[4], q[4]; } pc = {
         {0, 0}, {(int32_t)w, (int32_t)h}, {nt.ui, nt.peak, decode ? 1.0f : 0.0f, scene ? 1.0f : 0.0f},
-        {nt.game, 1.0f, 0, 0}};
+        {nt.game, 0, 0, 0}};
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, H.enc);
     for (int i = 0; i < n; i++) {
         VkDescriptorImageInfo ii = {H.sampler, src[i], VK_IMAGE_LAYOUT_GENERAL},
