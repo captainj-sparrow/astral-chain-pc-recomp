@@ -514,8 +514,8 @@ msgid "Frame generation"
 msgstr "Geração de quadros"
 
 msgctxt "UI_MENU_FRAMEGEN_DESC"
-msgid "NVIDIA DLSS Frame Generation: frames made between the game's own, for a smoother picture; the game itself keeps its frame rate. 2x shows one frame between two of the game's, 3x and 4x two and three (RTX 50 series). Automatic fills the display's refresh rate. Needs an NVIDIA RTX 40 or newer GPU, the DLSS SDK's frame generation library next to the game and an upscaler running; adds about half a frame of latency. Not with HDR output yet. Turning it on takes effect after a restart, then at once."
-msgstr "NVIDIA DLSS Frame Generation: quadros criados entre os do jogo, para uma imagem mais fluida; o próprio jogo mantém sua taxa de quadros. 2x mostra um quadro entre dois do jogo, 3x e 4x dois e três (série RTX 50). Automático preenche a taxa de atualização da tela. Requer uma GPU NVIDIA RTX 40 ou mais nova, a biblioteca de geração de quadros do DLSS SDK ao lado do jogo e um upscaler ativo; adiciona cerca de meio quadro de latência. Ainda não funciona com HDR. Ligar vale após reiniciar, depois na hora."
+msgid "NVIDIA DLSS Frame Generation: frames made between the game's own, for a smoother picture; the game itself keeps its frame rate. 2x shows one frame between two of the game's, 3x and 4x two and three (RTX 50 series). Automatic fills the display's refresh rate. Needs an NVIDIA RTX 40 or newer GPU, the DLSS SDK's frame generation library next to the game and an upscaler running; adds about half a frame of latency. Turning it on takes effect after a restart, then at once."
+msgstr "NVIDIA DLSS Frame Generation: quadros criados entre os do jogo, para uma imagem mais fluida; o próprio jogo mantém sua taxa de quadros. 2x mostra um quadro entre dois do jogo, 3x e 4x dois e três (série RTX 50). Automático preenche a taxa de atualização da tela. Requer uma GPU NVIDIA RTX 40 ou mais nova, a biblioteca de geração de quadros do DLSS SDK ao lado do jogo e um upscaler ativo; adiciona cerca de meio quadro de latência. Ligar vale após reiniciar, depois na hora."
 
 msgctxt "UI_MENU_FRAMEGEN_NEEDS_TAA"
 msgid "needs an upscaler"
