@@ -239,6 +239,18 @@ site fps60 main 592648 aa1303e0 aa1303e0 @fn:rt_fps_rate_s0s1   # mov x0,x19; th
 site fps60 main 6accf8 bd40ca62 bd40ca62 @fn:rt_fps_rate_s2     # ldr s2,[x19,#0xc8]; then the speed *= step
 site fps60 main 5937b0 bd460921 bd460921 @fn:rt_fps_rate_s1     # ldr s1 = 0.03; then *= step (zoom in)
 site fps60 main 593990 bd47e921 bd47e921 @fn:rt_fps_rate_s1     # ldr s1 = -0.03; then *= step (zoom out)
+# the Legion skill tree's cursor (main+0x665560 reads the stick once a frame and picks one of 8 directions and a speed,
+# 0.3 past a third of the stick and 2.0 past nine tenths): main+0x66BF40, its only caller, adds speed x 8.5 px a call
+# to the cursor at +0x84/+0x88 of [GOT 0xdbe7f8]+0x110 (kept in 0..1280 x 0..640). Now that per 30 fps frame of real
+# time: the speed times the step
+site fps60 main 6662f0 4ea81d00 4ea81d00 @fn:rt_fps_rate_s0     # mov v0,v8 (the speed); then *= step
+# the Legion skill learning screen (main+0x61EB40) has the same stick cursor: main+0x6537B0 moves it by speed x 8.5 px
+# a call, and what goes past the cursor's box scrolls the view ([GOT 0xdbee28]). Its held zoom buttons (held bits 22 and
+# 23) add 0.03 or -0.03 a frame to the zoom ([GOT 0xdbee20], kept in 1.4..3.0). The d-pad moves once a press or repeat
+# and the category ring turns by the timer's step, so both are right already. The speed and both zoom steps times the step
+site fps60 main 621dbc 4ea81d00 4ea81d00 @fn:rt_fps_rate_s0     # mov v0,v8 (the speed); then *= step
+site fps60 main 6220a8 bd460940 bd460940 @fn:rt_fps_rate_s0     # ldr s0 = 0.03; then *= step (zoom in)
+site fps60 main 6220f0 bd47e920 bd47e920 @fn:rt_fps_rate_s0     # ldr s0 = -0.03; then *= step (zoom out)
 # the in-game menu's breathing (main+0x6198D0, a menu part's update): pane 1's depth moves by 0.4 a frame (+0x80,
 # direction +0x84) and turns at +-15, so above 30 fps the whole menu breathed faster (4x at 120). Now 0.4 per 30 fps
 # frame of real time: times the step
