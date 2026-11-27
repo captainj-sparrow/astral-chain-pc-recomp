@@ -212,6 +212,10 @@ msgctxt "UI_PERF_LINE_FPS"
 msgid "%.0f fps"
 msgstr "%.0f fps"
 
+msgctxt "UI_PERF_LINE_FPS_FG"
+msgid "%.0f fps (%.0f x%d FG)"
+msgstr "%.0f fps (%.0f x%d FG)"
+
 msgctxt "UI_MENU_GRAPHICS"
 msgid "Picture"
 msgstr "Immagine"
@@ -515,6 +519,22 @@ msgstr "No"
 msgctxt "UI_MENU_AA_BY_UPSCALER"
 msgid "the upscaler smooths the edges"
 msgstr "demandato all'upscaler"
+
+msgctxt "UI_MENU_FRAMEGEN"
+msgid "Frame generation"
+msgstr "Generazione di fotogrammi"
+
+msgctxt "UI_MENU_FRAMEGEN_DESC"
+msgid "NVIDIA DLSS Frame Generation: frames made between the game's own, for a smoother picture; the game itself keeps its frame rate. 2x shows one frame between two of the game's, 3x and 4x two and three (RTX 50 series). Automatic fills the display's refresh rate. Needs an NVIDIA RTX 40 or newer GPU, the DLSS SDK's frame generation library next to the game and an upscaler running. It adds about half a frame of latency, and NVIDIA Reflex runs with it to keep the rest down, whatever Low latency says. Turning it on takes effect after a restart, then at once."
+msgstr "NVIDIA DLSS Frame Generation: fotogrammi creati tra quelli del gioco, per un'immagine più fluida; il gioco mantiene la sua frequenza di fotogrammi. 2x mostra un fotogramma tra due del gioco, 3x e 4x due e tre (serie RTX 50). Automatica riempie la frequenza di aggiornamento dello schermo. Richiede una GPU NVIDIA RTX 40 o più recente, la libreria di generazione di fotogrammi del DLSS SDK accanto al gioco e un upscaler attivo. Aggiunge circa mezzo fotogramma di latenza, e NVIDIA Reflex funziona insieme a essa per contenere il resto, qualunque sia l'impostazione di Bassa latenza. Attivarla ha effetto dopo un riavvio, poi subito."
+
+msgctxt "UI_MENU_FRAMEGEN_NEEDS_TAA"
+msgid "needs an upscaler"
+msgstr "richiede un upscaler"
+
+msgctxt "UI_MENU_FRAMEGEN_RESTART_DESC"
+msgid "Closes the game and starts it again with frame generation and NVIDIA Reflex, which it runs with. Progress since your last save is lost."
+msgstr "Chiude il gioco e lo riavvia con la generazione di fotogrammi e NVIDIA Reflex, che funziona insieme a essa. I progressi dall'ultimo salvataggio vengono persi."
 
 msgctxt "UI_MENU_OUTPUT_RES_AUTO"
 msgid "Automatic"

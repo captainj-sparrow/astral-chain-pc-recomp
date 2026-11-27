@@ -41,12 +41,12 @@ static const char *const known[] = {
     "COLOR_PRESET", "COLOR_SATURATION", "CONTACT_DEBUG", "CONTACT_SHADOWS", "CORE_DIAG", "CPU_BOOST", "CPU_BOOST_SPIN_US", "CRIT", "CRIT_OUT",
     "DECK_AA_MIGRATED", "DECK_RES_MIGRATED", "DESC_TEMPLATE", "DEVICE_PROFILE", "DISPATCH_CACHE", "DLAA", "DLAA_JITTER", "DLAA_MV", "DLAA_MVDEBUG", "DLAA_OBJMV", "DLAA_TIMES", "DLC", "DLC_PROBE_DIR", "DLSS", "DRAW_DISTANCE", "DRAW_DISTANCE_PATCH", "DUMP", "DUMP_AUTO", "DUMP_BUF", "DUMP_DIR", "DUMP_DRAWS",
     "DUMP_KEY", "DUMP_LOG", "DUMP_N", "DUMP_SKIP_RUNS", "DUMP_TEX", "DUMP_UBO", "DYN_DELTA", "EXEFS", "FEEDBACK", "FIX_C0", "FIX_ZERO", "FLIGHT", "FLIGHT_AT", "FLIGHT_DIR", "FLIGHT_FRAMES",
-    "FLIGHT_SPIKE_MS", "FLIGHT_THUMBS", "FLUSH_STAMP", "FOV", "FOV_PATCH", "FPS", "FREEZE_IDLE", "FREE_CORES",
+    "FLIGHT_SPIKE_MS", "FLIGHT_THUMBS", "FLUSH_STAMP", "FOV", "FOV_PATCH", "FPS", "FRAME_GENERATION", "FREEZE_IDLE", "FREE_CORES",
     "FSR4_ANY_VERSION", "FSR4_LIB", "FSR4_MODEL", "FULLSCREEN", "FXAA", "GPL", "GPL_DRAW_BUILD", "GPU", "GPU_INDEX", "GPU_NAME", "GPU_PASSES", "HDR", "HDR_GAME_NITS",
     "HDR_HUE", "HDR_PEAK_NITS", "HDR_UI_NITS", "HIGHFPS_FIX", "HOSTFN_DIRECT", "HOST_LIBC", "HOST_LIBC_AB", "HUD", "INPUT", "INPUT_RECORD", "INPUT_SCRIPT", "LANG", "LANG_DIR", "LIB_PREBUILD",
     "LIB_PREBUILD_KEEP", "LIB_PREBUILD_THREADS", "LOCALE", "LOD_GUARD", "LOW_LATENCY", "LOW_LATENCY_BACKEND", "LSTICK_DEADZONE", "MEMORY", "MENU_LANG", "MENU_PAUSE", "MENU_TEST",
     "MENU_TEST_DIR", "MENU_TEST_FOCUS", "MENU_TEST_SET", "MINIMAL_LAYOUT", "MIRROR_CHUNKS", "MIRROR_GAP", "MIRROR_LAZY", "MODS_DIR", "MODS_DISABLED", "MODS_ORDER", "MODS_REBUILD", "MOTION", "MOUSE_SENS", "MOVIE_HOST", "MOVIE_PACE", "MOVIE_TRACK",
-    "NOHUD_PATCH", "ONE_PER_CORE", "OPERATION_MODE", "OUTPUT_RES", "PAD_LAYOUT", "PATCH_OUTPUT", "PATCH_SCENE", "PCSS", "PCSS_K", "PERF_OVERLAY", "PERF_SLOW_MS", "PHOTO_PATCH", "PIPELINE_CACHE", "PIPE_MEMO", "PIPE_PREBUILD", "PIPE_SKIP", "PIPE_SYNC", "PIPE_WAIT",
+    "NGX_LOG", "NOHUD_PATCH", "ONE_PER_CORE", "OPERATION_MODE", "OUTPUT_RES", "PAD_LAYOUT", "PATCH_OUTPUT", "PATCH_SCENE", "PCSS", "PCSS_K", "PERF_OVERLAY", "PERF_SLOW_MS", "PHOTO_PATCH", "PIPELINE_CACHE", "PIPE_MEMO", "PIPE_PREBUILD", "PIPE_SKIP", "PIPE_SYNC", "PIPE_WAIT",
     "PRESENT_SHOT", "PREWARM_XLATE", "PROFILE", "PROFILE_CHAINS", "PROFILE_DIR", "PROFILE_FRAMES",
     "PROFILE_MAIN", "PROFILE_RENDER", "PROMPTS", "PUSH_SKIP", "PUSH_STAGE", "RC_APPLY", "RC_DEBUG", "RC_DEBUG_CASCADE", "RC_LIGHT", "RC_TEMPORAL", "RDOC", "RDOC_DIR", "RDOC_DLL", "REALTIME", "REC_END", "REEXEC",
     "RENDER_SCALE", "REPLAY_ASYNC",
@@ -78,6 +78,7 @@ static const struct { const char *key, *section; } sections[] = {
     {"COLOR_GAMMA", "display"}, {"HDR", "display"}, {"HDR_PEAK_NITS", "display"}, {"HDR_GAME_NITS", "display"},
     {"HDR_UI_NITS", "display"}, {"HDR_HUE", "display"}, {"SHADOW_RES", "display"},
     {"ANTI_ALIASING", "display"}, {"UPSCALING", "display"}, {"UPSCALING_QUALITY", "display"}, {"DLAA", "display"},
+    {"FRAME_GENERATION", "display"},
     {"DLSS", "display"}, {"XESS", "display"},
     {"DEVICE_PROFILE", "display"}, {"DECK_RES_MIGRATED", "display"}, {"DECK_AA_MIGRATED", "display"}, {"ASPECT_MIGRATED", "display"}, {"ASSUME_FOCUS", "display"},
     {"ASSUME_FOCUS_MIGRATED", "display"},
@@ -134,6 +135,8 @@ static const CfgMeta metas[] = {
     {"UPSCALING", "off", "off|auto|dlss|xess|fsr3|fsr4", LIVE},
     {"UPSCALING_QUALITY", "native", "native|quality|balanced|performance|ultra_performance", RESTART},
     {"ANTI_ALIASING", "smaa", "off|smaa", LIVE},
+    // frame generation (vk_dlssg.c): NGX is loaded at start when it is on (vk_dlaa_wanted); live from then on
+    {"FRAME_GENERATION", "off", "off|auto|2x|3x|4x", LIVE},
     {"ASPECT", "wide", "fit|stretch|wide", LIVE}, {"FOV", "100", "70..140", LIVE},
     {"DRAW_DISTANCE", "100", "100..400", LIVE},   // resolution.c res_drawdist_live: on what loads after a change
     {"ANISO", "auto", "auto|game|2|4|8|16", RESTART},   // vk_texture.c sampler_features

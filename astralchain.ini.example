@@ -148,7 +148,8 @@
 # last frames took and sleeps the rest. Measured with the latter on an Intel Arc 140T: from the pad read to the
 # present, 33 ms down to about 23 ms at 60 fps, 67 ms down to about 33 ms at 30 fps, with no more dropped frames.
 # boost: with Reflex the GPU also keeps its clocks up; otherwise a smaller safety margin (shorter waits, a dropped
-# frame now and then). The menu shows which one runs. Read at start.
+# frame now and then). The menu shows which one runs. Read at start. frame_generation set at start turns NVIDIA Reflex
+# on with it whatever this says.
 # low_latency = off
 # Window client area in screen pixels (640x360 to 7680x4320), and borderless fullscreen (on by default). Windows
 # display scaling does not apply: at 150% scale, 1920x1080 covers the area 1280x720 covers at 100%. F11 switches
@@ -295,6 +296,19 @@
 # Up to 1.10.1 one setting, anti_aliasing = smaa | dlaa | xess | fsr3, chose the scene's anti-aliasing (and before it
 # dlaa = 1 / xess = 1): dlaa, xess and fsr3 are read as upscaling = dlss, xess or fsr3 with upscaling_quality = native,
 # the same picture as before, and saved so. The old dlss line is no longer read.
+# NVIDIA DLSS Frame Generation: frames made between the game's own, for a smoother picture; the game keeps its frame
+# rate (fps) and its timing. off (the default), 2x (one frame between two of the game's), 3x or 4x (two or three, the
+# RTX 50 series), or auto (as many as the display's refresh rate holds: 4x at 60 fps on a 240 Hz display). Needs an
+# NVIDIA RTX 40 or newer GPU, nvngx_dlssg.dll 310.4.0 or newer from NVIDIA's DLSS SDK next to astralchain.exe (the
+# older copy some drivers carry is refused: the log says so; on Linux the SDK's libnvidia-ngx-dlssg.so.<version> next
+# to astralchain), and a temporal upscaler running (upscaling, in any mode): its motion vectors and depth are what
+# frame generation follows. The game's frames are shown a little later, behind the generated ones (12.5 ms at 60 fps
+# with 4x); NVIDIA Reflex runs with frame generation whatever low_latency says, to keep the rest of the delay down.
+# Works with HDR output too; full-screen movies are shown without generated frames. With V-Sync on, a multiplier above
+# what the display shows is lowered to fit (4x at 60 fps on a 144 Hz display runs as 2x). NGX and Reflex are set up at
+# start when it is on: switching it on later waits for a restart (the menu offers one), between its values it changes
+# at once. The performance overlay then shows the pictures shown per second, with the game's own and the multiplier.
+# frame_generation = off
 
 # HDR output: hdr = 1 sends the picture as HDR10 (needs HDR on in Windows, "Use HDR", or a Wayland compositor with
 # colour management; without it the picture stays SDR). The game's tonemap keeps highlights up to hdr_peak_nits (your

@@ -206,6 +206,10 @@ msgctxt "UI_PERF_LINE_FPS"
 msgid "%.0f fps"
 msgstr "%.0f fps"
 
+msgctxt "UI_PERF_LINE_FPS_FG"
+msgid "%.0f fps (%.0f x%d FG)"
+msgstr "%.0f fps (%.0f x%d FG)"
+
 msgctxt "UI_MENU_GRAPHICS"
 msgid "Picture"
 msgstr "画面"
@@ -509,6 +513,22 @@ msgstr "关闭"
 msgctxt "UI_MENU_AA_BY_UPSCALER"
 msgid "the upscaler smooths the edges"
 msgstr "边缘由超分辨率平滑"
+
+msgctxt "UI_MENU_FRAMEGEN"
+msgid "Frame generation"
+msgstr "帧生成"
+
+msgctxt "UI_MENU_FRAMEGEN_DESC"
+msgid "NVIDIA DLSS Frame Generation: frames made between the game's own, for a smoother picture; the game itself keeps its frame rate. 2x shows one frame between two of the game's, 3x and 4x two and three (RTX 50 series). Automatic fills the display's refresh rate. Needs an NVIDIA RTX 40 or newer GPU, the DLSS SDK's frame generation library next to the game and an upscaler running. It adds about half a frame of latency, and NVIDIA Reflex runs with it to keep the rest down, whatever Low latency says. Turning it on takes effect after a restart, then at once."
+msgstr "NVIDIA DLSS 帧生成：在游戏的帧之间生成新帧，使画面更流畅；游戏本身保持原有帧率。2x 在游戏的两帧之间显示一帧，3x 和 4x 显示两帧和三帧（RTX 50 系列）。自动会填满显示器的刷新率。需要 NVIDIA RTX 40 或更新的显卡、放在游戏旁边的 DLSS SDK 帧生成库，以及正在运行的超分辨率。会增加约半帧的延迟，无论“低延迟”如何设置，NVIDIA Reflex 都会随之运行以减少其余延迟。开启后需重启生效，之后即时生效。"
+
+msgctxt "UI_MENU_FRAMEGEN_NEEDS_TAA"
+msgid "needs an upscaler"
+msgstr "需要超分辨率"
+
+msgctxt "UI_MENU_FRAMEGEN_RESTART_DESC"
+msgid "Closes the game and starts it again with frame generation and NVIDIA Reflex, which it runs with. Progress since your last save is lost."
+msgstr "关闭游戏并以帧生成和随之运行的 NVIDIA Reflex 重新启动。上次存档之后的进度将会丢失。"
 
 msgctxt "UI_MENU_OUTPUT_RES_AUTO"
 msgid "Automatic"

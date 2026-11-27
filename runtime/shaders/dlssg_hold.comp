@@ -1,0 +1,18 @@
+#version 450
+// DLSS Frame Generation (runtime/vk_dlssg.c): NGX's "do not show this set" (DLSSG.OutputDisableInterpolation, a byte it
+// writes when it sees a scene change between the game's two frames). Where it wrote one, the game's frame goes into the
+// generated frame, so the set shows the new picture rather than frames made across the cut; else nothing is written.
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(binding = 0) uniform sampler2D real;          // the game's frame
+layout(binding = 1) uniform writeonly image2D dst;   // a generated frame, of its size and format
+layout(binding = 2, std430) readonly buffer Hint { uint first; } hint;
+layout(push_constant) uniform P {
+    ivec2 size;
+} pc;
+
+void main() {
+    if ((hint.first & 0xffu) == 0u) return;
+    ivec2 at = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(at, pc.size))) return;
+    imageStore(dst, at, texelFetch(real, at, 0));
+}

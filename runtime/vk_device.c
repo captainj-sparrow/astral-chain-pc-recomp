@@ -15,6 +15,7 @@
 #include "vk.h"
 #include "platform/platform.h"
 #include "vk_dlaa.h"
+#include "vk_dlssg.h"
 #include "vk_xess.h"
 #include "vk_fsr4.h"
 
@@ -241,6 +242,11 @@ typedef struct {
 #endif
 } FeatureChain;
 
+// The out-of-band present queue (create_device), VK_NULL_HANDLE without one. Not in VkCtx, whose layout the runtime's
+// other files are built against.
+static VkQueue g_oob_queue;
+VkQueue vk_oob_present_queue(void) { return g_oob_queue; }
+
 static int create_device(void) {
     uint32_t ne = 0;
     vkEnumerateDeviceExtensionProperties(g_vk.phys, NULL, &ne, NULL);
@@ -330,7 +336,8 @@ static int create_device(void) {
     }
     // GPU breadcrumbs for a lost device (vk_crumbs.c): AMD's drivers and RADV report it.
     if (has_ext(ep, ne, VK_AMD_BUFFER_MARKER_EXTENSION_NAME)) { g_vk.has_buffer_marker = 1; ext[n_ext++] = VK_AMD_BUFFER_MARKER_EXTENSION_NAME; }
-    // Low latency (vk_lowlat.c), only with AC_LOW_LATENCY on: Reflex where the driver has it, else Anti-Lag 2. Reflex
+    // Low latency (vk_lowlat.c), only with AC_LOW_LATENCY on or, for Reflex, frame generation set (vk_dlssg.c): Reflex
+    // where the driver has it, else Anti-Lag 2. Reflex
     // needs present IDs (VK_KHR_present_id) and timeline semaphores (required above); its extension has no feature.
     if (vk_lowlat_wants_reflex() && has_ext(ep, ne, VK_NV_LOW_LATENCY_2_EXTENSION_NAME) &&
         has_ext(ep, ne, VK_KHR_PRESENT_ID_EXTENSION_NAME)) {
@@ -401,14 +408,28 @@ static int create_device(void) {
                has_fbl && c->fbl.attachmentFeedbackLoopLayout, has_lr && c->lr.dynamicRenderingLocalRead);
     }
 
-    float prio = 1.0f;
+    // Frame generation with NVIDIA Reflex (vk_dlssg.c, vk_lowlat.c): a second queue of the graphics family, which
+    // presents the generated frames as an out-of-band queue, so Reflex's latency tracking sees the game's frames only.
+    // Only with both set at start, on a family with a second queue.
+    float prio[2] = {1.0f, 1.0f};
+    uint32_t ngfx = 1;
+    if (vk_dlssg_set_at_start() && g_vk.has_nv_low_latency2) {
+        uint32_t nf = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(g_vk.phys, &nf, NULL);
+        VkQueueFamilyProperties *qf = nf ? calloc(nf, sizeof *qf) : NULL;
+        if (qf) {
+            vkGetPhysicalDeviceQueueFamilyProperties(g_vk.phys, &nf, qf);
+            if (g_vk.gfx_family < nf && qf[g_vk.gfx_family].queueCount >= 2) ngfx = 2;
+            free(qf);
+        }
+    }
     VkDeviceQueueCreateInfo qi[2] = {
-        {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, .queueFamilyIndex = g_vk.gfx_family, .queueCount = 1,
-         .pQueuePriorities = &prio}};
+        {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, .queueFamilyIndex = g_vk.gfx_family, .queueCount = ngfx,
+         .pQueuePriorities = prio}};
     uint32_t nqi = 1;
     if (g_vk.xfer_family != g_vk.gfx_family) {
         qi[1] = (VkDeviceQueueCreateInfo){.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-                                          .queueFamilyIndex = g_vk.xfer_family, .queueCount = 1, .pQueuePriorities = &prio};
+                                          .queueFamilyIndex = g_vk.xfer_family, .queueCount = 1, .pQueuePriorities = prio};
         nqi = 2;
     }
     VkDeviceCreateInfo di = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .pNext = &c->f2, .queueCreateInfoCount = nqi,
@@ -417,6 +438,8 @@ static int create_device(void) {
     free(c);
     if (r != VK_SUCCESS) { rt_log("vk: vkCreateDevice failed (%d)", (int)r); return 0; }
     vkGetDeviceQueue(g_vk.device, g_vk.gfx_family, 0, &g_vk.gfx_queue);
+    g_oob_queue = VK_NULL_HANDLE;
+    if (ngfx == 2) vkGetDeviceQueue(g_vk.device, g_vk.gfx_family, 1, &g_oob_queue);
     if (g_vk.xfer_family != g_vk.gfx_family) vkGetDeviceQueue(g_vk.device, g_vk.xfer_family, 0, &g_vk.xfer_queue);
     else { g_vk.xfer_queue = g_vk.gfx_queue; g_vk.xfer_shared = 1; }
 
@@ -452,6 +475,7 @@ static long g_errors_total;     // outlives the device so the probe can print it
 
 static void destroy_all(void) {
     gfx_window_release_vk();
+    g_oob_queue = VK_NULL_HANDLE;
     if (g_vk.device) vkDeviceWaitIdle(g_vk.device);
     if (g_vk.device) vk_astc_release();
     if (g_vk.device) vk_crumbs_release();
@@ -477,7 +501,7 @@ int vk_init(void) {
     plat_mutex_lock(&g_lock);
     if (!g_ready) {
         memset(&g_vk, 0, sizeof g_vk);
-        if (create_instance() && pick_device() && create_device()) g_ready = 1, vk_headroom_start(), vk_dlaa_init();
+        if (create_instance() && pick_device() && create_device()) g_ready = 1, vk_headroom_start(), vk_dlaa_init(), vk_dlssg_init();
         else destroy_all();
     }
     int ok = g_ready;

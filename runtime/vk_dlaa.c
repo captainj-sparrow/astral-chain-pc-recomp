@@ -40,6 +40,7 @@
 #include "host.h"
 #include "vk.h"
 #include "vk_dlaa.h"
+#include "vk_dlssg.h"
 #include "vk_exec.h"
 #include "vk_rec.h"
 #include "vk_fsr3.h"
@@ -79,7 +80,10 @@ typedef NgxResult (*PFN_DestroyParams)(NgxParam *);
 typedef NgxResult (*PFN_Create)(VkCommandBuffer, int feature, NgxParam *, NgxHandle **);
 typedef NgxResult (*PFN_Evaluate)(VkCommandBuffer, const NgxHandle *, const NgxParam *, void *callback);
 typedef NgxResult (*PFN_Release)(NgxHandle *);
-typedef NgxResult (*PFN_Shutdown)(VkDevice);
+// The core's NVSDK_NGX_VULKAN_Shutdown1 takes a second argument the SDK's header does not show: an int it writes (what
+// is left in use, as the SDK's static loader reads it). Called with the device alone, the core wrote through whatever
+// the register held, a null pointer on Linux, and crashed every exit with NGX up.
+typedef NgxResult (*PFN_Shutdown)(VkDevice, int *left);
 
 static struct {
     void *core;              // the NGX core's module (HMODULE)
@@ -93,6 +97,8 @@ static struct {
     PFN_Shutdown shutdown;   // NVSDK_NGX_VULKAN_Shutdown1; NULL in a core without it
     int tried, loaded, available;
     int inited;              // NVSDK_NGX_VULKAN_Init_Ext2 succeeded: vk_dlaa_release shuts NGX down
+    int fg_available;        // FrameGeneration.Available (vk_dlssg.c)
+    unsigned fg_max;         // DLSSG.MultiFrameCountMax: frames it can generate per game frame
     int wanted;   // -1 not read yet
 } N = {.wanted = -1};
 
@@ -100,6 +106,7 @@ typedef void (*SetI)(NgxParam *, const char *, int);
 typedef void (*SetU)(NgxParam *, const char *, unsigned);
 typedef void (*SetF)(NgxParam *, const char *, float);
 typedef void (*SetP)(NgxParam *, const char *, void *);
+typedef void (*SetULL)(NgxParam *, const char *, unsigned long long);
 typedef NgxResult (*GetI)(const NgxParam *, const char *, int *);
 typedef NgxResult (*GetU)(const NgxParam *, const char *, unsigned *);
 typedef NgxResult (*GetF)(const NgxParam *, const char *, float *);
@@ -113,19 +120,21 @@ static void p_seti(NgxParam *p, const char *n, int v) { ((SetI)p->vt->slot[S_I])
 static void p_setu(NgxParam *p, const char *n, unsigned v) { ((SetU)p->vt->slot[S_U32])(p, n, v); }
 static void p_setf(NgxParam *p, const char *n, float v) { ((SetF)p->vt->slot[S_F])(p, n, v); }
 static void p_setp(NgxParam *p, const char *n, void *v) { ((SetP)p->vt->slot[S_P])(p, n, v); }
+static void p_setull(NgxParam *p, const char *n, unsigned long long v) { ((SetULL)p->vt->slot[S_U64])(p, n, v); }
 static int p_geti(const NgxParam *p, const char *n, int *v) { return NGX_OK(((GetI)p->vt->slot[G_I])(p, n, v)); }
 static int p_getu(const NgxParam *p, const char *n, unsigned *v) { return NGX_OK(((GetU)p->vt->slot[G_U32])(p, n, v)); }
 static int p_getf(const NgxParam *p, const char *n, float *v) { return NGX_OK(((GetF)p->vt->slot[G_F])(p, n, v)); }
 static int p_getp(const NgxParam *p, const char *n, void **v) { return NGX_OK(((GetP)p->vt->slot[G_P])(p, n, v)); }
 
-// NGX is brought up only when the upscaler at start may be DLSS (upscaling = dlss or auto): its device extensions can
-// only be asked for at device creation, and loading the driver's NGX core on every NVIDIA machine would cost start time
-// and change the device without DLSS. So DLSS chosen later applies after a restart; switched off, nothing of it runs.
+// NGX is brought up only when the upscaler at start may be DLSS (upscaling = dlss or auto) or frame generation is on
+// (vk_dlssg.c): its device extensions can only be asked for at device creation, and loading the driver's NGX core on
+// every NVIDIA machine would cost start time and change the device without DLSS. So DLSS or frame generation chosen
+// later applies after a restart; switched off, nothing of it runs.
 int vk_dlaa_wanted(void) {
     static int wanted = -1;
     if (wanted < 0) {
-        const char *up = cfg_upscaling();
-        wanted = !strcmp(up, "dlss") || !strcmp(up, "auto");
+        const char *up = cfg_upscaling(), *fg = cfg_value("AC_FRAME_GENERATION");
+        wanted = !strcmp(up, "dlss") || !strcmp(up, "auto") || (fg && *fg && strcmp(fg, "off"));
     }
     return wanted;
 }
@@ -246,18 +255,70 @@ static int vtable_ok(void) {
     return ok;
 }
 
+// The version of the frame generation model NGX loaded, {major, minor, build} from the module's version resource
+// (VS_FIXEDFILEINFO, found by its signature), and whether it is the file beside the executable (dir, with its trailing
+// separator) or the driver's. 0 when no such module is in the process, or outside Windows, where the model's version
+// is in its file name and NGX's choice is not looked up: frame generation then stays as NGX reports it.
+static int fg_model_version(unsigned v[3], const wchar_t *dir, int *own) {
+#ifdef _WIN32
+    HMODULE m = GetModuleHandleW(L"nvngx_dlssg.dll");
+    HRSRC r = m ? FindResourceW(m, MAKEINTRESOURCEW(1), (LPCWSTR)RT_VERSION) : NULL;
+    HGLOBAL g = r ? LoadResource(m, r) : NULL;
+    const unsigned char *d = g ? LockResource(g) : NULL;
+    DWORD n = r ? SizeofResource(m, r) : 0;
+    wchar_t path[MAX_PATH * 2];
+    DWORD len = m ? GetModuleFileNameW(m, path, MAX_PATH * 2) : 0;
+    size_t dl = wcslen(dir);
+    *own = len > dl && !_wcsnicmp(path, dir, dl) && !wcschr(path + dl, L'\\');
+    for (DWORD i = 0; d && i + 16 <= n; i += 4) {
+        uint32_t f[4];
+        memcpy(f, d + i, sizeof f);
+        if (f[0] != 0xFEEF04BDu) continue;
+        v[0] = f[2] >> 16, v[1] = f[2] & 0xffff, v[2] = f[3] >> 16;
+        return 1;
+    }
+#else
+    (void)v, (void)dir, (void)own;
+#endif
+    return 0;
+}
+
+// AC_NGX_LOG=1 or 2 (test): NGX's own log lines (2: verbose) in the port's log, through the logging callback of
+// NVSDK_NGX_FeatureCommonInfo. They name what a refused call lacks (a parameter, a resource), which its result code
+// does not.
+static void ngx_log(const char *msg, int level, int feature) {
+    (void)level;
+    size_t n = msg ? strlen(msg) : 0;
+    while (n && (msg[n - 1] == '\n' || msg[n - 1] == '\r')) n--;
+    if (n) rt_log("ngx (feature %d): %.*s", feature, (int)n, msg);
+}
+
 void vk_dlaa_init(void) {
     vk_fsr4_init();   // its library, when the setting is fsr4 at start
     if (!vk_dlaa_wanted() || !core_load()) return;
+    // NVSDK_NGX_FeatureCommonInfo: its PathListInfo, then InternalData and LoggingInfo
+    static const wchar_t *paths[1];
+    static struct {
+        struct { const wchar_t *const *path; unsigned length; } path_list;
+        void *internal;
+        struct { void *callback; int min_level; _Bool disable_other_sinks; } logging;
+    } common;
+    const char *lv = cfg_get("AC_NGX_LOG");
+    if (lv && (lv[0] == '1' || lv[0] == '2') && !lv[1])
+        common.logging.callback = (void *)ngx_log, common.logging.min_level = lv[0] - '0',
+        common.logging.disable_other_sinks = 1;   // or NGX also writes nvngx*.log files beside the executable
 #ifdef _WIN32
-    wchar_t wdir[MAX_PATH];
+    static wchar_t wdir[MAX_PATH];
     DWORD len = GetModuleFileNameW(NULL, wdir, MAX_PATH);
     while (len && wdir[len - 1] != L'\\') len--;
     wdir[len] = 0;
-    const void *info = NULL;   // NGX finds nvngx_dlss.dll in the executable's folder on its own
+    // NGX finds nvngx_dlss.dll in the executable's folder on its own: the common info goes with its log only
+    paths[0] = wdir;
+    common.path_list.path = paths;
+    common.path_list.length = 1;
+    const void *info = common.logging.callback ? &common : NULL;
 #else
     // NGX takes wide paths here too; the folder is the data path and the one place it looks for the DLSS model
-    // (NVSDK_NGX_FeatureCommonInfo: its PathListInfo, then InternalData and LoggingInfo, left empty)
     char exe[PATH_MAX];
     ssize_t len = readlink("/proc/self/exe", exe, sizeof exe - 1);
     if (len <= 0) return;
@@ -266,13 +327,7 @@ void vk_dlaa_init(void) {
     if (cut) cut[1] = 0;
     static wchar_t wdir[PATH_MAX];
     if (mbstowcs(wdir, exe, PATH_MAX - 1) == (size_t)-1) return;
-    static const wchar_t *paths[1];
     paths[0] = wdir;
-    static struct {
-        struct { const wchar_t *const *path; unsigned length; } path_list;
-        void *internal;
-        struct { void *callback; int min_level; _Bool disable_other_sinks; } logging;
-    } common;
     common.path_list.path = paths;
     common.path_list.length = 1;
     const void *info = &common;
@@ -288,12 +343,40 @@ void vk_dlaa_init(void) {
     N.inited = 1;
     if (!vtable_ok()) return;
     NgxParam *caps = NULL;
-    int avail = 0, driver = 0;
+    int avail = 0, driver = 0, fg = 0, fg_driver = 0;
+    unsigned fg_max = 0;
     if (NGX_OK(N.caps(&caps)) && caps) {
         p_geti(caps, "SuperSampling.Available", &avail);
         p_geti(caps, "SuperSampling.NeedsUpdatedDriver", &driver);
+        // frame generation (vk_dlssg.c): its model is libnvidia-ngx-dlssg.so.<version> / nvngx_dlssg.dll in the same
+        // folder; MultiFrameCountMax is 1 on the RTX 40 series, more on the RTX 50 series
+        p_geti(caps, "FrameGeneration.Available", &fg);
+        p_geti(caps, "FrameGeneration.NeedsUpdatedDriver", &fg_driver);
+        if (fg && !p_getu(caps, "DLSSG.MultiFrameCountMax", &fg_max)) fg_max = 1;
     }
     N.available = avail != 0;
+    N.fg_available = fg != 0 && fg_max >= 1;
+    N.fg_max = fg_max;
+    // The model NGX took must be one made for NGX's own interface, which vk_dlssg.c speaks: the DLSS SDK ships frame
+    // generation (its header and nvngx_dlssg.dll) from 310.4.0 on. Without that file beside the executable NGX falls
+    // back on the model in the driver's folder, which reports the feature available whatever its age: the 310.2.1 of
+    // driver 32.0.15.9xxx (RTX 5060 Ti, Windows 11) reads none of the creation parameters, keeps its cached sizes at
+    // zero and refuses every evaluation (bad00005; AC_NGX_LOG=1 shows its reasons).
+    char fg_model[96] = "";
+    unsigned mv[3];
+    int own = 0;
+    if (fg && fg_model_version(mv, wdir, &own)) {
+        snprintf(fg_model, sizeof fg_model, "; model %u.%u.%u %s", mv[0], mv[1], mv[2],
+                 own ? "beside the executable" : "from the driver");
+        if (mv[0] < 310 || (mv[0] == 310 && mv[1] < 4)) {
+            N.fg_available = 0;
+            snprintf(fg_model, sizeof fg_model, "; its model %u.%u.%u %s is older than 310.4.0, the first for NGX's own "
+                     "interface", mv[0], mv[1], mv[2], own ? "beside the executable" : "from the driver");
+        }
+    }
+    rt_log("dlaa: NGX frame generation %s (up to %u generated frames per game frame)%s%s",
+           N.fg_available ? "available" : "NOT available", fg_max, fg_model,
+           fg_driver ? "; the driver needs an update" : "");
 #ifdef _WIN32
     const char *model = "nvngx_dlss.dll next to astralchain.exe";
 #else
@@ -392,6 +475,15 @@ static struct {
     uint64_t last_eval_ns;       // plat_now_ns of the previous evaluation (DLSS's FrameTimeDeltaInMsec, FSR 3's dt)
     float proj[16];              // the last camera's projection (rows 4-7 of its block): FSR 3's near, far and fov
     int proj_ok;
+    // frame generation (vk_dlaa_fg_inputs, vk_dlssg.c): this frame's camera and what the upscaler read, kept by mv_pass
+    // and resolve until the game presents the frame
+    double fg_rep[16];           // this frame's reprojection (clip to last frame's clip), row-major for column vectors
+    float fg_view[16];           // this frame's view
+    int fg_rep_ok;               // mv_pass wrote camera motion this frame
+    int fg_reset;                // the upscaler started a new history this frame
+    VkImage fg_z;                // the scene depth resolve read, and its depth view
+    VkImageView fg_zv;
+    VkFormat fg_zf;
 } D = {.mv_ok = -1, .blit_ok = -1};
 
 VkImage vk_dlaa_swap_img;
@@ -706,6 +798,8 @@ static int mv_pass(VkExec *ex, const struct Size *e, VkImageView zv, float jx, f
     }
     const float *vw = cam, *pj = cam + 16, *vp = cam + 32;
     memcpy(D.proj, pj, sizeof D.proj), D.proj_ok = 1;
+    memcpy(D.fg_view, vw, sizeof D.fg_view);
+    D.fg_rep_ok = 0;
     // its y scale, a diagonal element and so the same in either matrix order; the jitter moves the viewport, not this
     double focal = isfinite(pj[5]) ? fabs((double)pj[5]) : 0;
     double cur_vp[16], ci[16], m[16];
@@ -753,6 +847,7 @@ static int mv_pass(VkExec *ex, const struct Size *e, VkImageView zv, float jx, f
     uint32_t ms = D.mvm_slot++ % MVM_SLOTS;
     float *blk = (float *)(D.mvm_map + (size_t)ms * D.mvm_stride);
     for (int i = 0; i < 16; i++) blk[i] = (float)m[i];
+    memcpy(D.fg_rep, m, sizeof D.fg_rep), D.fg_rep_ok = 1;
     vmaFlushAllocation(vk_ctx()->vma, D.mvm_mem, (VkDeviceSize)ms * D.mvm_stride, 64);   // a no-op on coherent memory
     VkDescriptorImageInfo zi = {D.mv_samp, zv, VK_IMAGE_LAYOUT_GENERAL};
     VkDescriptorImageInfo oi = {VK_NULL_HANDLE, e->mv_view, VK_IMAGE_LAYOUT_GENERAL};
@@ -969,6 +1064,185 @@ static NgxResult dl_evaluate(VkCommandBuffer cb, const struct Size *e, VkImage c
     return N.evaluate(cb, e->feat, p, NULL);
 }
 
+// ---------------------------------------------------------------- frame generation's NGX calls (vk_dlssg.c)
+// NVSDK_NGX_Feature_FrameGeneration, made and evaluated through the same core as DLSS, from the present thread with a
+// parameter object of its own (the replay thread uses D.params meanwhile). The parameter names are those of the SDK's
+// nvsdk_ngx_defs_dlssg.h, its helper NGX_VK_CREATE_DLSSG / NGX_VK_EVALUATE_DLSSG sets them the same way.
+#define NGX_FEATURE_FRAMEGEN 11
+static NgxParam *fg_params;
+
+int vk_ngx_fg_caps(unsigned *max_count) {
+    *max_count = N.fg_max;
+    return N.inited && N.fg_available;
+}
+
+int vk_ngx_fg_create(VkCommandBuffer cb, uint32_t w, uint32_t h, VkFormat fmt, uint32_t rw, uint32_t rh, void **feat) {
+    *feat = NULL;
+    if (!N.inited || !N.fg_available) return 0;
+    if (!fg_params && (!NGX_OK(N.alloc_params(&fg_params)) || !fg_params)) {
+        fg_params = NULL;
+        rt_log("dlssg: NGX parameter allocation failed");
+        return 0;
+    }
+    NgxParam *p = fg_params;
+    p_setu(p, "CreationNodeMask", 1);
+    p_setu(p, "VisibilityNodeMask", 1);
+    p_setu(p, "Width", w);
+    p_setu(p, "Height", h);
+    p_setu(p, "DLSSG.Width", w);
+    p_setu(p, "DLSSG.Height", h);
+    p_setu(p, "DLSSG.BackbufferFormat", (unsigned)fmt);
+    // no UI recomposition: the game's HUD writes no alpha of its coverage, which it needs (DLSSG.UIAlpha)
+    p_setu(p, "DLSSG.UserInterfaceRecompositionEnabled", 0);
+    // the depth's and the motion vectors' size, also given per evaluation as their subrects; a fixed one (a new size
+    // remakes the feature, vk_dlssg.c ensure)
+    p_setu(p, "DLSSG.InternalWidth", rw);
+    p_setu(p, "DLSSG.InternalHeight", rh);
+    p_setu(p, "DLSSG.DynamicResolution", 0);
+    NgxHandle *f = NULL;
+    uint64_t t0 = plat_now_ns();
+    NgxResult r = N.create(cb, NGX_FEATURE_FRAMEGEN, p, &f);
+    if (!NGX_OK(r) || !f) {
+        rt_log("dlssg: frame generation feature creation at %ux%u (format %d) failed (%08x)", w, h, (int)fmt, (unsigned)r);
+        return 0;
+    }
+    rt_log("dlssg: frame generation feature created at %ux%u (format %d, scene %ux%u) in %.1f ms", w, h, (int)fmt, rw,
+           rh, (double)(plat_now_ns() - t0) / 1e6);
+    *feat = f;
+    return 1;
+}
+
+int vk_ngx_fg_evaluate(VkCommandBuffer cb, void *feat, const VkFgEval *e) {
+    NgxParam *p = fg_params;
+    const VkFgFrame *f = e->f;
+    if (!p || !feat) return 0;
+    NgxResourceVK rb = res_image(e->back_view, e->back, e->format, e->w, e->h, VK_IMAGE_ASPECT_COLOR_BIT, 0);
+    NgxResourceVK rh = res_image(e->hudless_view, e->hudless, e->format, e->w, e->h, VK_IMAGE_ASPECT_COLOR_BIT, 0);
+    NgxResourceVK ro = res_image(e->out_view, e->out, e->format, e->w, e->h, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+    NgxResourceVK rz = res_image(f->depth_view, f->depth, f->depth_format, f->rw, f->rh, VK_IMAGE_ASPECT_DEPTH_BIT, 0);
+    NgxResourceVK rm = res_image(f->mv_view, f->mv, VK_FORMAT_R16G16_SFLOAT, f->rw, f->rh, VK_IMAGE_ASPECT_COLOR_BIT, 0);
+    p_setp(p, "DLSSG.Backbuffer", &rb);
+    p_setp(p, "DLSSG.HUDLess", &rh);
+    p_setp(p, "DLSSG.Depth", &rz);
+    p_setp(p, "DLSSG.MVecs", &rm);
+    p_setp(p, "DLSSG.OutputInterpolated", &ro);
+    p_setp(p, "DLSSG.OutputReal", NULL);
+    p_setp(p, "DLSSG.UI", NULL);
+    p_setp(p, "DLSSG.UIAlpha", NULL);
+    p_setp(p, "DLSSG.BidirectionalDistortionField", NULL);
+    // NGX's "do not show this set" (a scene change it saw): a byte it writes into the buffer, read by vk_dlssg.c
+    NgxResourceVK rd;
+    memset(&rd, 0, sizeof rd);
+    rd.r.buf.buffer = e->no_interp, rd.r.buf.bytes = e->no_interp_bytes, rd.type = 1, rd.rw = 1;
+    p_setp(p, "DLSSG.OutputDisableInterpolation", e->no_interp ? &rd : NULL);
+    // the game frame's number, one more than the last (NGX finds a gap in it)
+    p_setull(p, "DLSSG.BackbufferFrameID", (unsigned long long)f->frame_id);
+    p_setu(p, "DLSSG.MultiFrameCount", e->count);
+    p_setu(p, "DLSSG.MultiFrameIndex", e->index);
+    // NGX reads the matrices while the evaluation is recorded, which is now
+    static float lens[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+    p_setp(p, "DLSSG.CameraViewToClip", (void *)f->view_to_clip);
+    p_setp(p, "DLSSG.ClipToCameraView", (void *)f->clip_to_view);
+    p_setp(p, "DLSSG.ClipToLensClip", lens);
+    p_setp(p, "DLSSG.ClipToPrevClip", (void *)f->clip_to_prev);
+    p_setp(p, "DLSSG.PrevClipToClip", (void *)f->prev_to_clip);
+    p_setf(p, "DLSSG.JitterOffsetX", f->jitter[0]);
+    p_setf(p, "DLSSG.JitterOffsetY", f->jitter[1]);
+    // The vectors as they are, in render pixels: scale 1. The SDK's header says the scale takes them to [-1, 1], which
+    // is Streamline's convention, not NGX's: with 1 / render size NGX saw almost no motion and made its frames from its
+    // own optical flow, so railings bent and kinked in a camera pan; with 1 they stay straight (A/B in the same pan).
+    p_setf(p, "DLSSG.MvecScaleX", 1.0f);
+    p_setf(p, "DLSSG.MvecScaleY", 1.0f);
+    p_setf(p, "DLSSG.CameraPinholeOffsetX", 0.0f);
+    p_setf(p, "DLSSG.CameraPinholeOffsetY", 0.0f);
+    p_setf(p, "DLSSG.CameraPosX", f->cam_pos[0]);
+    p_setf(p, "DLSSG.CameraPosY", f->cam_pos[1]);
+    p_setf(p, "DLSSG.CameraPosZ", f->cam_pos[2]);
+    p_setf(p, "DLSSG.CameraUpX", f->cam_up[0]);
+    p_setf(p, "DLSSG.CameraUpY", f->cam_up[1]);
+    p_setf(p, "DLSSG.CameraUpZ", f->cam_up[2]);
+    p_setf(p, "DLSSG.CameraRightX", f->cam_right[0]);
+    p_setf(p, "DLSSG.CameraRightY", f->cam_right[1]);
+    p_setf(p, "DLSSG.CameraRightZ", f->cam_right[2]);
+    p_setf(p, "DLSSG.CameraFwdX", f->cam_fwd[0]);
+    p_setf(p, "DLSSG.CameraFwdY", f->cam_fwd[1]);
+    p_setf(p, "DLSSG.CameraFwdZ", f->cam_fwd[2]);
+    p_setf(p, "DLSSG.CameraNear", f->near_z);
+    p_setf(p, "DLSSG.CameraFar", f->far_z);
+    p_setf(p, "DLSSG.CameraFOV", f->fov_y);
+    p_setf(p, "DLSSG.CameraAspectRatio", f->rh ? (float)f->rw / (float)f->rh : 16.0f / 9.0f);
+    // the 8-bit picture the game presents, or with HDR output its HDR10 encode (PQ code values, vk_dlssg.c)
+    p_setu(p, "DLSSG.ColorBuffersHDR", e->hdr ? 1u : 0u);
+    p_setu(p, "DLSSG.DepthInverted", 0);     // 0 near .. 1 far
+    p_setu(p, "DLSSG.CameraMotionIncluded", 1);
+    p_setu(p, "DLSSG.Reset", e->reset ? 1u : 0u);
+    p_setu(p, "DLSSG.AutomodeOverrideReset", 0);
+    p_setu(p, "DLSSG.NotRenderingGameFrames", 0);
+    p_setu(p, "DLSSG.OrthoProjection", 0);
+    p_setf(p, "DLSSG.MvecInvalidValue", 0.0f);
+    p_setu(p, "DLSSG.MvecDilated", 0);
+    p_setu(p, "DLSSG.MenuDetectionEnabled", 0);
+    // the whole of each image: the vectors and the depth at the scene's size (the first two), the pictures at theirs.
+    // BackbufferSubrect is the older name of InputBackbufferSubrect (deprecated in the SDK's header) and the only one
+    // the model in NVIDIA's Windows driver reads (nvngx_dlssg.dll 310.2.1): without it that model took the extent for
+    // (0, 0) and refused every evaluation (bad00005, "BackbufferExtent should be constant", AC_NGX_LOG).
+    static const char *const rect[6][4] = {
+        {"DLSSG.MVecsSubrectBaseX", "DLSSG.MVecsSubrectBaseY", "DLSSG.MVecsSubrectWidth", "DLSSG.MVecsSubrectHeight"},
+        {"DLSSG.DepthSubrectBaseX", "DLSSG.DepthSubrectBaseY", "DLSSG.DepthSubrectWidth", "DLSSG.DepthSubrectHeight"},
+        {"DLSSG.HUDLessSubrectBaseX", "DLSSG.HUDLessSubrectBaseY", "DLSSG.HUDLessSubrectWidth",
+         "DLSSG.HUDLessSubrectHeight"},
+        {"DLSSG.InputBackbufferSubrectBaseX", "DLSSG.InputBackbufferSubrectBaseY", "DLSSG.InputBackbufferSubrectWidth",
+         "DLSSG.InputBackbufferSubrectHeight"},
+        {"DLSSG.OutputInterpolatedSubrectBaseX", "DLSSG.OutputInterpolatedSubrectBaseY",
+         "DLSSG.OutputInterpolatedSubrectWidth", "DLSSG.OutputInterpolatedSubrectHeight"},
+        {"DLSSG.BackbufferSubrectBaseX", "DLSSG.BackbufferSubrectBaseY", "DLSSG.BackbufferSubrectWidth",
+         "DLSSG.BackbufferSubrectHeight"}};
+    for (int i = 0; i < 6; i++) {
+        p_setu(p, rect[i][0], 0);
+        p_setu(p, rect[i][1], 0);
+        p_setu(p, rect[i][2], i < 2 ? f->rw : e->w);
+        p_setu(p, rect[i][3], i < 2 ? f->rh : e->h);
+    }
+    return N.evaluate(cb, feat, p, NULL);
+}
+
+void vk_ngx_fg_release(void *feat) {
+    if (feat && N.release) N.release(feat);
+}
+
+// The 4x4 transpose of a row-major matrix for column vectors: the same map for row vectors, which NGX takes.
+static void fg_rowvec(const double m[16], float o[16]) {
+    for (int r = 0; r < 4; r++)
+        for (int c = 0; c < 4; c++) o[r * 4 + c] = (float)m[c * 4 + r];
+}
+
+int vk_dlaa_fg_inputs(VkFgFrame *f) {
+    struct Size *e = D.cur;
+    if (!dl_active() || !D.done || !D.resolved || !e || !D.fg_rep_ok || !D.fg_z || !D.proj_ok) return 0;
+    double pj[16], pi[16], ri[16];
+    for (int i = 0; i < 16; i++) pj[i] = D.proj[i];
+    if (!inv4(pj, pi) || !inv4(D.fg_rep, ri)) return 0;
+    fg_rowvec(pj, f->view_to_clip);
+    fg_rowvec(pi, f->clip_to_view);
+    fg_rowvec(D.fg_rep, f->clip_to_prev);
+    fg_rowvec(ri, f->prev_to_clip);
+    // the view's rows are the camera's right, up and back axes in the world; its position is -R^T t. A projection whose
+    // w is -z looks down -z (row 3, column 2 negative).
+    const float *v = D.fg_view;
+    float back = D.proj[14] < 0 ? -1.0f : 1.0f;
+    for (int k = 0; k < 3; k++) {
+        f->cam_right[k] = v[0 * 4 + k], f->cam_up[k] = v[1 * 4 + k], f->cam_fwd[k] = back * v[2 * 4 + k];
+        f->cam_pos[k] = -(v[0 * 4 + k] * v[0 * 4 + 3] + v[1 * 4 + k] * v[1 * 4 + 3] + v[2 * 4 + k] * v[2 * 4 + 3]);
+    }
+    camera_planes(&f->near_z, &f->far_z, &f->fov_y);
+    f->depth = D.fg_z, f->depth_view = D.fg_zv, f->depth_format = D.fg_zf;
+    f->mv = e->mv, f->mv_view = e->mv_view;
+    f->rw = e->w, f->rh = e->h;
+    f->jitter[0] = D.jit_used ? D.ux : 0.0f, f->jitter[1] = D.jit_used ? D.uy : 0.0f;
+    f->reset = D.fg_reset;
+    return 1;
+}
+
 // ---------------------------------------------------------------- sharpening before the HUD
 // One RCAS (vk_fsr.c vk_fsr_rcas, at sharpness) on the upscaler's picture, after the game's tonemap and grading, the
 // range RCAS is made for, and before the game draws its HUD, so the HUD stays as the game drew it. Only where the
@@ -1101,6 +1375,7 @@ static int resolve(VkExec *ex, const VkExecTarget *src) {
         if (!ok) return 0;        // off for the rest of the run (vk_xess.c); this frame keeps the unresolved scene
     }
     vk_mvprev_swap();   // the objects' blocks of this frame become last frame's for the next
+    D.fg_reset = D.reset, D.fg_z = z->image, D.fg_zv = zv, D.fg_zf = z->format;   // for frame generation
     D.reset = 0;
     D.last = e, e->used = D.evals + 1;
     full_barrier(cb);
@@ -1375,6 +1650,7 @@ static const char *running;
 int vk_dlaa_frame(void) {
     int sharpened = D.sharp_done;
     D.sharp_done = 0;
+    D.fg_rep_ok = 0, D.fg_z = VK_NULL_HANDLE;   // frame generation took this frame's (vk_dlaa_fg_inputs)
     vk_dlaa_swap_img = VK_NULL_HANDLE, vk_dlaa_swap_view = VK_NULL_HANDLE, vk_dlaa_swap_pic = VK_NULL_HANDLE;
     int bk = pick();
     static uint64_t evals_seen;   // an evaluation that completed this frame, not only the AA point reached
@@ -1527,6 +1803,7 @@ int vk_dlaa_skip_draw(VkExec *ex, const GfxShader *fs) {
 // process's end, like the back end's other pipelines.
 void vk_dlaa_release(void) {
     const VkCtx *c = vk_ctx();
+    vk_dlssg_release();   // its feature and images, through the NGX core still up
     for (int i = 0; i < 3; i++) {
         struct Size *e = &D.sizes[i];
         if (e->out_view) vkDestroyImageView(c->device, e->out_view, NULL);
@@ -1543,7 +1820,10 @@ void vk_dlaa_release(void) {
         features_sweep(1);
         if (D.params && N.destroy_params) N.destroy_params(D.params);
         D.params = NULL;
-        if (N.inited && N.shutdown) N.shutdown(c->device);
+        if (fg_params && N.destroy_params) N.destroy_params(fg_params);
+        fg_params = NULL;
+        int left = 0;
+        if (N.inited && N.shutdown) N.shutdown(c->device, &left);
         N.inited = N.available = 0;
     }
     vk_xess_release();

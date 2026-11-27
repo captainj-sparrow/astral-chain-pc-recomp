@@ -30,6 +30,9 @@ Report problems as issues, following [CONTRIBUTING.md](CONTRIBUTING.md).
   DLSS on RTX cards (with `nvngx_dlss.dll` next to `astralchain.exe`, on Linux `libnvidia-ngx-dlss.so.<version>` next
   to `astralchain`), Intel XeSS on most recent GPUs, AMD FSR 3 on any
   GPU, AMD FSR 4 on AMD Radeon RX 6000 series or newer (Windows and Linux);
+- NVIDIA DLSS Frame Generation (2x, and 3x or 4x on the RTX 50 series) on RTX 40 or newer cards, over a temporal upscaler
+  (with `nvngx_dlssg.dll` 310.4.0 or newer from NVIDIA's DLSS SDK next to `astralchain.exe`, on Linux
+  `libnvidia-ngx-dlssg.so.<version>` next to `astralchain`), with SDR and HDR output and NVIDIA Reflex always on with it;
 - Anisotropic texture filtering up to 16x, for sharp ground into the distance
 - Low latency mode: NVIDIA Reflex or AMD Anti-Lag 2 where the driver offers them, the port's own frame timing on any
   other GPU (Intel, Steam Deck); about a third less time from the controller to the screen at 60 fps, half at 30

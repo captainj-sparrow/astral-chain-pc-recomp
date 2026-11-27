@@ -378,6 +378,11 @@ mismatches, then a timing table of both per size.
 A change to the per-object motion code (`runtime/vk_mvprev.c`, the "per-object motion" section of
 `runtime/vk_exec_draw.c`) wants the same run with `AC_UPSCALING=xess` to show the `mv_prev:` and `per-object motion:` log lines
 with draws drawn again; `AC_DLAA_MVDEBUG=1` with `--shot` shows the vectors (x red, y green) in place of the picture.
+DLSS Frame Generation (`AC_FRAME_GENERATION=2x` with `AC_UPSCALING=dlss`, on an RTX 40 or newer card, with the DLSS
+SDK's `nvngx_dlssg.dll` 310.4.0 or newer beside the executable) wants a run through `tools/input/new_game.txt` on a
+blank profile with `AC_TRACE=present`: its `present:` lines end in "1 generated" (2x) once the motorway is reached,
+and no `dlssg: NGX refused` line follows the `feature created` one. `AC_NGX_LOG=1` (2: verbose) puts NGX's own log in
+the port's, which names what a refused evaluation lacked.
 `.venv\Scripts\python tools\xess_sdk.py` puts the pinned SDK's `libxess.dll` in `toolchain\xess\`, which
 `build_game.py` then copies next to `astralchain.exe`. AMD FSR 3 (`AC_UPSCALING=fsr3`) needs no step of its own: when it compiles
 `runtime/`, `build_game.py` calls `tools/ffx_sdk.py`, which fetches the pinned FidelityFX SDK files once into

@@ -21,6 +21,7 @@ void gfx_vsync_bind(uint64_t system_event);                // nn::vi vsync event
 uint64_t gfx_vsync_ticks(void);                            // ticks since start
 uint64_t gfx_vsync_time_ns(uint64_t tick);                 // kern_now_ns() time of a tick (pacing)
 double gfx_window_refresh_hz(void);                        // refresh rate of the window's monitor; 0 unknown
+const char *gfx_window_present_mode(void);                 // the swapchain's: "fifo", "mailbox", "immediate"; "" before one
 int gfx_window_focused(void);
 // Low latency (vk_lowlat.c, AC_LOW_LATENCY): the NVN front end and the input service mark a frame's stages. Each
 // returns at once with the setting off and AC_TRACE=latency unset.

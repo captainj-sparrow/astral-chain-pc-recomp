@@ -19,6 +19,12 @@
 // takes the next value.
 //
 // AC_LOW_LATENCY_BACKEND=auto|reflex|antilag|builtin (not in the menu) narrows the choice, for tests.
+//
+// Frame generation (vk_dlssg.c) set at start takes NVIDIA Reflex with it whatever AC_LOW_LATENCY says, as NVIDIA asks of
+// DLSS Frame Generation: the game's frames are shown behind the generated ones, and Reflex takes back what it can of
+// that delay (16-18 ms from the pad read to the present with it at 4x, 46 ms without: docs/architecture.md). The
+// setting stays as the player left it and the menu's Low latency row says what runs; where frame generation turns out
+// not to be offered, Reflex goes off again before the first frame (vk_lowlat_fg_unavailable).
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,6 +34,7 @@
 #include "gfx.h"
 #include "host.h"
 #include "vk.h"
+#include "vk_dlssg.h"
 #include "platform/platform.h"
 
 enum { LL_NONE, LL_REFLEX, LL_ANTILAG, LL_BUILTIN };
@@ -35,6 +42,7 @@ static const char *const ll_name[] = {"off", "NVIDIA Reflex", "AMD Anti-Lag 2", 
 
 static int g_backend;                 // LL_*, set by vk_lowlat_init
 static int g_on;                      // a back end runs, or AC_TRACE=latency: the frames are followed
+static int g_for_fg;                  // Reflex runs for frame generation alone, AC_LOW_LATENCY being off
 
 int vk_lowlat_mode(void) {
     static int mode = -1;
@@ -52,7 +60,9 @@ static int backend_allowed(int b) {
     return (b == LL_REFLEX && !strcmp(e, "reflex")) || (b == LL_ANTILAG && !strcmp(e, "antilag")) ||
            (b == LL_BUILTIN && !strcmp(e, "builtin"));
 }
-int vk_lowlat_wants_reflex(void) { return vk_lowlat_mode() > 0 && backend_allowed(LL_REFLEX); }
+int vk_lowlat_wants_reflex(void) {
+    return (vk_lowlat_mode() > 0 || vk_dlssg_set_at_start()) && backend_allowed(LL_REFLEX);
+}
 int vk_lowlat_wants_antilag(void) { return vk_lowlat_mode() > 0 && backend_allowed(LL_ANTILAG); }
 
 const char *vk_lowlat_backend_name(void) { return ll_name[g_backend]; }
@@ -104,6 +114,11 @@ static PFN_vkLatencySleepNV p_sleep;
 static PFN_vkSetLatencyMarkerNV p_marker;
 static PFN_vkGetLatencyTimingsNV p_timings;
 static PFN_vkAntiLagUpdateAMD p_antilag;
+static int g_oob_ok;                  // Reflex knows the out-of-band present queue (vk_oob_present_queue)
+// Frame generation may run: Reflex is up with the queue its frames are presented from. Both are made at start when
+// frame generation is set then, so one switched on later waits for a restart. Without Reflex on this device (a driver
+// without VK_NV_low_latency2, AC_LOW_LATENCY_BACKEND naming another back end) it runs once it was set at start.
+int vk_lowlat_fg_ok(void) { return g_backend == LL_REFLEX ? g_oob_ok : vk_dlssg_set_at_start(); }
 static VkSemaphore g_sem;             // Reflex: the timeline semaphore its sleep signals
 static uint64_t g_sem_val;
 
@@ -146,19 +161,22 @@ static void reflex_mode_apply(void) {
     plat_mutex_unlock_shared(&sc_lock);
 }
 
-// Before the frame (the game's thread, its core given up): the driver's sleep. vkLatencySleepNV needs the swapchain
-// synchronised with the acquire and the present, which run under the present lock; the wait stays outside it.
+// Before the frame (the game's thread, its core given up): the driver's sleep. Like the markers, vkLatencySleepNV needs
+// no external synchronisation of its swapchain (vk.xml), only that it is not destroyed meanwhile: sc_lock shared, not
+// the present lock. NVIDIA's driver can block in the call itself (about 14 ms in every other call at 60 fps); under the
+// present lock that held back frame generation's presents (vk_backend.c present_main), which then went out bunched:
+// hidden at 4x on 240 Hz, where FIFO has a picture for every refresh, a stutter at 2x. The wait stays outside the lock.
 static void reflex_sleep(void) {
     VkCtx *c = vk_ctx();
-    VkSwapchainKHR sc = vk_present_lock();
     VkResult r = VK_NOT_READY;
     uint64_t val = 0;
-    if (sc) {
+    plat_mutex_lock_shared(&sc_lock);
+    if (g_sc) {
         val = ++g_sem_val;
         VkLatencySleepInfoNV si = {.sType = VK_STRUCTURE_TYPE_LATENCY_SLEEP_INFO_NV, .signalSemaphore = g_sem, .value = val};
-        r = p_sleep(c->device, sc, &si);
+        r = p_sleep(c->device, g_sc, &si);
     }
-    vk_present_unlock();
+    plat_mutex_unlock_shared(&sc_lock);
     if (r != VK_SUCCESS) return;
     VkSemaphoreWaitInfo wi = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO, .semaphoreCount = 1, .pSemaphores = &g_sem,
                               .pValues = &val};
@@ -337,7 +355,7 @@ static void trace_frame(uint64_t id) {
            "frame, first read %.2f ms after the start; start to game present %.2f ms, to GPU done %.2f ms more, then "
            "%.2f ms to the host present; start to slot %.2f ms; slept %.2f ms a frame (margin %.1f ms); %llu frames done "
            "on the GPU after their slot%s",
-           vk_lowlat_mode() ? ll_name[g_backend] : "off", (unsigned long long)T.n, avg, p99,
+           ll_name[g_backend], (unsigned long long)T.n, avg, p99,
            (unsigned long long)T.n_input, T.inputs / n, T.n_input ? T.input_ns / 1e6 / (double)T.n_input : 0.0,
            T.work_ns / 1e6 / n, T.gpu_ns / 1e6 / n, T.wait_ns / 1e6 / n, T.ahead / 1e6 / n, T.slept_ns / 1e6 / n,
            __atomic_load_n(&g_margin, __ATOMIC_RELAXED) / 1e6, (unsigned long long)__atomic_exchange_n(&g_missed, 0, __ATOMIC_RELAXED), drv);
@@ -463,7 +481,7 @@ void vk_lowlat_flip_end(uint64_t id, uint64_t pid) {
 void vk_lowlat_init(VkCtx *c) {
     int mode = vk_lowlat_mode();
     g_backend = LL_NONE;
-    if (mode && c->has_nv_low_latency2) {
+    if (c->has_nv_low_latency2) {   // enabled for the setting, or for frame generation (vk_lowlat_wants_reflex)
         p_set_mode = (PFN_vkSetLatencySleepModeNV)vkGetDeviceProcAddr(c->device, "vkSetLatencySleepModeNV");
         p_sleep = (PFN_vkLatencySleepNV)vkGetDeviceProcAddr(c->device, "vkLatencySleepNV");
         p_marker = (PFN_vkSetLatencyMarkerNV)vkGetDeviceProcAddr(c->device, "vkSetLatencyMarkerNV");
@@ -473,6 +491,20 @@ void vk_lowlat_init(VkCtx *c) {
         VkSemaphoreCreateInfo si = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, .pNext = &ti};
         if (p_set_mode && p_sleep && p_marker && vkCreateSemaphore(c->device, &si, NULL, &g_sem) == VK_SUCCESS)
             g_backend = LL_REFLEX;
+        // Frame generation (vk_dlssg.c) presents its frames from a queue of their own (vk_device.c), which Reflex is
+        // told to leave out: with them on the game's queue, the driver's sleep, which follows the presents, slept most
+        // of a period in every other frame (13 to 14 ms in half the frames at 60 fps with 4x, RTX 5090, driver 615.78),
+        // and the frames reached the present in pairs.
+        VkQueue oob = vk_oob_present_queue();
+        PFN_vkQueueNotifyOutOfBandNV notify =
+            (PFN_vkQueueNotifyOutOfBandNV)vkGetDeviceProcAddr(c->device, "vkQueueNotifyOutOfBandNV");
+        if (g_backend == LL_REFLEX && oob && notify) {
+            VkOutOfBandQueueTypeInfoNV qt = {.sType = VK_STRUCTURE_TYPE_OUT_OF_BAND_QUEUE_TYPE_INFO_NV,
+                                             .queueType = VK_OUT_OF_BAND_QUEUE_TYPE_PRESENT_NV};
+            notify(oob, &qt);
+            g_oob_ok = 1;
+            rt_log("lowlat: frame generation's frames are presented from an out-of-band queue");
+        }
     }
     if (mode && g_backend == LL_NONE && c->has_amd_anti_lag) {
         p_antilag = (PFN_vkAntiLagUpdateAMD)vkGetDeviceProcAddr(c->device, "vkAntiLagUpdateAMD");
@@ -480,10 +512,23 @@ void vk_lowlat_init(VkCtx *c) {
     }
     if (mode && g_backend == LL_NONE && backend_allowed(LL_BUILTIN)) g_backend = LL_BUILTIN;
     g_on = g_backend != LL_NONE || (rt_trace & RT_TRACE_LATENCY);
+    g_for_fg = !mode && g_backend == LL_REFLEX;
     const char *forced = cfg_get("AC_LOW_LATENCY_BACKEND");
-    rt_log("lowlat: %s (AC_LOW_LATENCY=%s%s%s; VK_NV_low_latency2 %s, VK_AMD_anti_lag %s)", ll_name[g_backend],
-           cfg_value("AC_LOW_LATENCY"), forced ? ", AC_LOW_LATENCY_BACKEND=" : "", forced ? forced : "",
+    rt_log("lowlat: %s (AC_LOW_LATENCY=%s%s%s%s; VK_NV_low_latency2 %s, VK_AMD_anti_lag %s)", ll_name[g_backend],
+           cfg_value("AC_LOW_LATENCY"), g_for_fg ? ", on for frame generation" : "",
+           forced ? ", AC_LOW_LATENCY_BACKEND=" : "", forced ? forced : "",
            c->has_nv_low_latency2 ? "on" : "off", c->has_amd_anti_lag ? "on" : "off");
+}
+
+// vk_dlssg.c, once NGX has answered at start and before the first frame: frame generation is set but not offered here,
+// so Reflex, when only frame generation asked for it, goes off again (its extension stays enabled, unused: a swapchain
+// starts with low latency off).
+void vk_lowlat_fg_unavailable(void) {
+    if (!g_for_fg) return;
+    g_for_fg = 0;
+    g_backend = LL_NONE;
+    g_on = (rt_trace & RT_TRACE_LATENCY) != 0;
+    rt_log("lowlat: off: frame generation, which NVIDIA Reflex was on for, is not available here");
 }
 
 void vk_lowlat_release(VkCtx *c) {
@@ -491,6 +536,8 @@ void vk_lowlat_release(VkCtx *c) {
     g_sem = VK_NULL_HANDLE;
     g_backend = LL_NONE;
     g_on = 0;
+    g_oob_ok = 0;
+    g_for_fg = 0;
     p_set_mode = NULL, p_sleep = NULL, p_marker = NULL, p_timings = NULL, p_antilag = NULL;
     plat_mutex_lock(&sc_lock);
     g_sc = VK_NULL_HANDLE;

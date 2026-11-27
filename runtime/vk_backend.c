@@ -32,6 +32,7 @@
 #include "vk_exec.h"
 #include "platform/platform.h"
 #include "vk_dlaa.h"
+#include "vk_dlssg.h"
 
 #define WEAK __attribute__((weak))
 
@@ -43,6 +44,8 @@ typedef struct {
     float shape;            // the shape the frame is shown in (resolution.c res_wide_tick), 0 for the picture's own
     uint64_t frame, at, queued, value;
     uint64_t lid;           // the low-latency frame it shows (vk_lowlat.c), 0 when they are not followed
+    VkFgFrame fg;           // frame generation's inputs (vk_dlssg.c), fg.on 0 without
+    uint64_t work;          // with them: the timeline value of the frame's last submission (vk_lowlat_frame_gpu)
 } PresentJob;
 
 static PlatMutex pl = PLAT_MUTEX_INIT;
@@ -58,6 +61,21 @@ static void wait_until(uint64_t at) {
     while (kern_now_ns() < at) plat_yield();
 }
 
+// The game's frame period, for frame generation's pacing (vk_dlssg.c): the interval of the display times the pacer
+// gives its presents. One that differs from the estimate (a late frame) is ignored, eight in a row (the frame rate
+// setting changed) replace it.
+static uint64_t frame_period(uint64_t at) {
+    static uint64_t prev_at, period = 16666667;
+    static int off;
+    if (at && prev_at && at > prev_at) {
+        uint64_t d = at - prev_at;
+        if (d > period * 6 / 10 && d < period * 16 / 10) period = (period * 7 + d) / 8, off = 0;
+        else if (d > 4000000 && d < 100000000 && ++off >= 8) period = d, off = 0;
+    }
+    prev_at = at;
+    return period;
+}
+
 static void present_main(void *arg) {
     (void)arg;
     uint64_t last = 0, last_queued = 0;
@@ -70,32 +88,60 @@ static void present_main(void *arg) {
         plat_cond_broadcast(&pcv);
         plat_mutex_unlock(&pl);
         if (flight_on) vk_thumbs_frame(j.frame);
-        vk_present_frame_id(j.lid);                  // the blit's present, and the submission after it, are the frame's
+        const int *crop = j.has_crop ? j.crop : NULL;
+        uint64_t period = frame_period(j.at);
+        // frame generation: n frames made from this one and the last go out before it (vk_dlssg.c)
+        int n = vk_dlssg_begin(&j.fg, j.image, j.format, (uint32_t)j.w, (uint32_t)j.h, period);
+        vk_present_frame_id(n ? 0 : j.lid);          // the blit's present, and the submission after it, are the frame's
         vk_lowlat_submit_frame(j.lid);
         vk_hdr_set_scene(j.scene, j.scene_format);   // read by the HDR encode in this blit
         vk_fsr_presharp_set(j.presharp);             // and by FSR's step in it
         vk_present_shape_set(j.shape);               // and where the picture goes in the window
-        vk_present_blit(j.image, VK_IMAGE_LAYOUT_GENERAL, j.format, j.w, j.h, j.has_crop ? j.crop : NULL);
+        vk_present_fg(n > 0, 0);                     // a generated frame's present: out of Reflex's tracking
+        vk_present_blit(j.image, VK_IMAGE_LAYOUT_GENERAL, j.format, j.w, j.h, crop);
+        int made = n ? vk_dlssg_end() : -1;
         uint64_t f = vk_sync_submit(NULL, 0);   // a timeline value after the blit: deferred destruction waits for the blit too
         if (j.value && f != j.value)
             rt_fatal("vk: the present of frame %llu signalled %llu, queued as %llu", (unsigned long long)j.frame,
                      (unsigned long long)f, (unsigned long long)j.value);
-        vk_lowlat_frame_gpu(j.lid, f);          // the frame is on the GPU up to that value
+        // the frame is on the GPU up to that value; with frame generation up to its own work, since its blit waits for
+        // the presents of the frame before (the built-in sleep would take that wait for the frame's work and never sleep)
+        vk_lowlat_frame_gpu(j.lid, made >= 0 && j.work ? j.work : f);
         plat_mutex_lock(&pl);
         busy = 0;
         plat_cond_broadcast(&pcv);
         plat_mutex_unlock(&pl);
         uint64_t t0 = kern_now_ns();
-        wait_until(j.at);
+        if (made < 0) {
+            wait_until(j.at);
+        } else {
+            // The game's frame goes out n/(n+1) of a period after its display time, the generated ones before it at
+            // even steps from that time on (with none made, the first blit showed the game's frame: at the same time).
+            // The later blits read only frame generation's images, so the replay need not wait for them.
+            uint64_t base = j.at ? j.at : t0, step = period / (uint64_t)(n + 1);
+            for (int k = 1; k <= made; k++) {
+                if (k > 1) vk_present_fg(1, 1);
+                if (k > 1) vk_present_blit(vk_dlssg_image(k), VK_IMAGE_LAYOUT_GENERAL, vk_dlssg_format(), j.w, j.h, crop);
+                wait_until(base + (uint64_t)(k - 1) * step);
+                vk_present_flip();
+            }
+            if (made > 0) {
+                vk_present_fg(0, 1);   // the game's own frame, the last picture of its set
+                vk_present_frame_id(j.lid);
+                vk_present_blit(vk_dlssg_image(0), VK_IMAGE_LAYOUT_GENERAL, vk_dlssg_format(), j.w, j.h, crop);
+            }
+            wait_until(base + (uint64_t)n * step);
+        }
         uint64_t t1 = kern_now_ns();
         vk_present_flip();
         // AC_TRACE=present: one line per present: the host present's interval, the interval of the game's present
         // calls (when the host present went out before back-edge pacing), the wait and how far past its target it went
+        // and with frame generation the frames made before the game's (-1: none were asked for)
         if (rt_trace & RT_TRACE_PRESENT)
-            rt_log("present: frame %llu interval %.3f ms, game %.3f ms, waited %.3f ms, %.3f ms past target",
+            rt_log("present: frame %llu interval %.3f ms, game %.3f ms, waited %.3f ms, %.3f ms past target, %d generated",
                    (unsigned long long)j.frame, last ? (t1 - last) / 1e6 : 0.0,
                    last_queued ? (j.queued - last_queued) / 1e6 : 0.0, (t1 - t0) / 1e6,
-                   j.at && t1 > j.at ? (t1 - j.at) / 1e6 : 0.0);
+                   j.at && t1 > j.at ? (t1 - j.at) / 1e6 : 0.0, made);
         last = t1;
         last_queued = j.queued;
         vk_pipeline_autosave();   // starts the autosave thread once
@@ -145,6 +191,7 @@ static void present_repeat(const tex_t *t, uint64_t at_ns, uint64_t value) {
     PresentJob j = last_job;
     j.at = at_ns, j.queued = kern_now_ns(), j.value = value;
     j.frame = j.lid = 0;   // no frame of the game's: no thumbnail, no latency record
+    j.fg.on = 0;           // nor a frame to generate from: the next game frame starts frame generation's history anew
     vk_upload_flush(0);
     __atomic_add_fetch(&gfx_counters.repeats, 1, __ATOMIC_RELAXED);
     present_queue(&j);
@@ -156,6 +203,9 @@ static void present_image(const tex_t *t, const int crop[4], uint64_t at_ns, uin
                           uint64_t value, float shape, uint64_t lid) {
     static volatile int32_t n_skipped;
     vk_exec_frame_log(t, frame);
+    VkFgFrame fg;   // frame generation: the upscaler's inputs of this frame, before vk_dlaa_frame ends it
+    memset(&fg, 0, sizeof fg);
+    if (vk_dlssg_scene_wanted()) vk_dlaa_fg_inputs(&fg);
     int presharp = vk_dlaa_frame();
     vk_ao_frame();
     vk_mem_census(frame);
@@ -177,7 +227,13 @@ static void present_image(const tex_t *t, const int crop[4], uint64_t at_ns, uin
     }
     PresentJob j = {.image = img->image, .format = img->format, .w = (int)img->width, .h = (int)img->height, .frame = frame,
                     .at = at_ns, .queued = queued, .value = value, .presharp = presharp, .shape = shape, .lid = lid};
-    vk_hdr_present_source(img, &j.scene, &j.scene_format);   // AC_HDR: the scene the game drew into it, same size
+    VkFgScene hs;   // AC_HDR: the scene the game drew into it, same size; frame generation: the same, its HUD-less picture
+    vk_hdr_present_source(img, &j.scene, &j.scene_format, &hs);
+    if (fg.depth && hs.image) fg.hudless = hs.image, fg.hudless_format = hs.format, fg.hw = hs.w, fg.hh = hs.h;
+    fg.frame_id = frame;
+    vk_dlssg_collect(&fg);
+    j.fg = fg;
+    j.work = fg.on ? vk_sync_issued() : 0;
     if (crop) {
         j.has_crop = 1;
         for (int i = 0; i < 4; i++) j.crop[i] = (int)lroundf((float)crop[i] * img->scale);

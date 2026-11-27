@@ -205,6 +205,10 @@ msgctxt "UI_PERF_LINE_FPS"
 msgid "%.0f fps"
 msgstr "%.0f к/с"
 
+msgctxt "UI_PERF_LINE_FPS_FG"
+msgid "%.0f fps (%.0f x%d FG)"
+msgstr "%.0f к/с (%.0f x%d FG)"
+
 msgctxt "UI_MENU_GRAPHICS"
 msgid "Picture"
 msgstr "Изображение"
@@ -508,6 +512,22 @@ msgstr "Выкл."
 msgctxt "UI_MENU_AA_BY_UPSCALER"
 msgid "the upscaler smooths the edges"
 msgstr "края сглаживает апскейлер"
+
+msgctxt "UI_MENU_FRAMEGEN"
+msgid "Frame generation"
+msgstr "Генерация кадров"
+
+msgctxt "UI_MENU_FRAMEGEN_DESC"
+msgid "NVIDIA DLSS Frame Generation: frames made between the game's own, for a smoother picture; the game itself keeps its frame rate. 2x shows one frame between two of the game's, 3x and 4x two and three (RTX 50 series). Automatic fills the display's refresh rate. Needs an NVIDIA RTX 40 or newer GPU, the DLSS SDK's frame generation library next to the game and an upscaler running. It adds about half a frame of latency, and NVIDIA Reflex runs with it to keep the rest down, whatever Low latency says. Turning it on takes effect after a restart, then at once."
+msgstr "NVIDIA DLSS Frame Generation: кадры между кадрами игры, для более плавной картинки; сама игра сохраняет свою частоту кадров. 2x показывает один кадр между двумя кадрами игры, 3x и 4x — два и три (серия RTX 50). «Автоматически» заполняет частоту обновления экрана. Нужны видеокарта NVIDIA RTX 40 или новее, библиотека генерации кадров из DLSS SDK рядом с игрой и работающий апскейлер. Добавляет около половины кадра задержки, и вместе с ней работает NVIDIA Reflex, чтобы сократить остальную, что бы ни было выбрано в «Низкая задержка». Включение действует после перезапуска, затем сразу."
+
+msgctxt "UI_MENU_FRAMEGEN_NEEDS_TAA"
+msgid "needs an upscaler"
+msgstr "нужен апскейлер"
+
+msgctxt "UI_MENU_FRAMEGEN_RESTART_DESC"
+msgid "Closes the game and starts it again with frame generation and NVIDIA Reflex, which it runs with. Progress since your last save is lost."
+msgstr "Закрывает игру и запускает её снова с генерацией кадров и NVIDIA Reflex, который работает вместе с ней. Прогресс после последнего сохранения будет потерян."
 
 msgctxt "UI_MENU_OUTPUT_RES_AUTO"
 msgid "Automatic"

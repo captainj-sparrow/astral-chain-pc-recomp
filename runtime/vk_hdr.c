@@ -39,6 +39,7 @@
 #include "host.h"
 #include "nvn_api.h"
 #include "vk_dlaa.h"
+#include "vk_dlssg.h"
 #include "vk_exec.h"
 #include "platform/platform.h"
 
@@ -186,7 +187,11 @@ int vk_hdr_track;                 // vk_exec_draw.c calls vk_hdr_draw: set at th
 static volatile int32_t g_active;   // the swapchain is HDR10 (gfx_present.c vk_hdr_set_active)
 static PlatMutex rec_lock = PLAT_MUTEX_INIT;
 // per presented window image: the scene a draw into it sampled since its last present (fresh), and that scene's format
-static struct { VkImage win, src; VkFormat fmt; int fresh; } recs[4];
+// and size
+// cap (frame generation): 1 the scene pass drew into win and no draw has followed, 2 the window texture was copied
+// before the next draw into it (vk_hdr_before_draw), 0 neither since the last present
+static struct { VkImage win, src; VkFormat fmt; uint32_t w, h; int fresh, cap; } recs[4];
+static volatile int32_t g_cap_pending;   // recs with cap 1: the per-draw check's fast way out
 static int nrecs;
 
 void vk_hdr_set_active(int on) { plat_xchg32(&g_active, on); }
@@ -208,6 +213,7 @@ void vk_hdr_draw(VkExec *ex, const VkPipeInfo *info) {
     // follow sample neither, and leave the scene in place
     VkImage src = VK_NULL_HANDLE;
     VkFormat fmt = VK_FORMAT_UNDEFINED;
+    uint32_t sw = 0, sh = 0;
     for (uint32_t i = 0; i < info->n_bindings && !src; i++) {
         const VkPipeBinding *bd = &info->bindings[i];
         if (bd->kind != GFX_RES_TEX || bd->stage != GFX_STAGE_FS || !bd->res || bd->count > 1) continue;
@@ -220,22 +226,53 @@ void vk_hdr_draw(VkExec *ex, const VkPipeInfo *info) {
             s->width * 4 >= t->width &&
             llabs((long long)s->width * t->height - (long long)s->height * t->width) * 50 <=
                 (long long)t->width * t->height)
-            src = s->image, fmt = s->format;
+            src = s->image, fmt = s->format, sw = s->width, sh = s->height;
     }
     if (!src) return;
     // An upscaled scene (vk_dlaa.c): the blend draw reads the upscaler's picture in the composite's place
     // (vk_exec_draw.c tex_info), so that picture, of the window's size, is the scene the window texture holds.
     if (src == vk_dlaa_swap_img && vk_dlaa_swap_pic && t->width > vk_dlaa_swap_w + 1)
-        src = vk_dlaa_swap_pic, fmt = VK_FORMAT_R16G16B16A16_SFLOAT;
+        src = vk_dlaa_swap_pic, fmt = VK_FORMAT_R16G16B16A16_SFLOAT, sw = t->width, sh = t->height;
     plat_mutex_lock(&rec_lock);
     for (int i = 0; i < nrecs; i++)
-        if (recs[i].win == t->image) recs[i].src = src, recs[i].fmt = fmt, recs[i].fresh = 1;
+        if (recs[i].win == t->image) {
+            recs[i].src = src, recs[i].fmt = fmt, recs[i].w = sw, recs[i].h = sh, recs[i].fresh = 1;
+            if (recs[i].cap != 1 && vk_dlssg_scene_wanted()) recs[i].cap = 1, plat_inc32(&g_cap_pending);
+        }
     plat_mutex_unlock(&rec_lock);
 }
 
-void vk_hdr_present_source(const VkTexImage *win, VkImage *scene, VkFormat *format) {
+// Frame generation's HUD-less picture (vk_dlssg_capture): before a draw that writes a window texture the scene pass
+// drew into (the first HUD draw; vk_exec_draw.c prepare_draw, before its pass begins), the open pass ends and the
+// window texture, the anti-aliased scene without the HUD, is copied; the draw's pass then begins again, loading it.
+// Without such a draw (no HUD this frame) the window texture itself is HUD-less at the present.
+void vk_hdr_before_draw(VkExec *ex) {
+    if (!__atomic_load_n(&g_cap_pending, __ATOMIC_RELAXED)) return;   // every draw: a plain load, no locked op
+    for (int c = 0; c < 8; c++) {
+        const VkExecTarget *t = &ex->color[c];
+        if (!t->image || !t->img) continue;
+        int r = -1;
+        plat_mutex_lock(&rec_lock);
+        for (int i = 0; i < nrecs; i++)
+            if (recs[i].win == t->image && recs[i].cap == 1) r = i, recs[i].cap = 0, plat_dec32(&g_cap_pending);
+        plat_mutex_unlock(&rec_lock);
+        if (r < 0) continue;
+        vk_exec_pass_end(ex);
+        int ok = vk_dlssg_capture(ex->cb, t->image, t->img->format, t->img->width, t->img->height);
+        ex->recorded += 3;
+        plat_mutex_lock(&rec_lock);
+        if (recs[r].win == t->image && ok) recs[r].cap = 2;
+        plat_mutex_unlock(&rec_lock);
+        return;
+    }
+}
+
+// Also for frame generation (vk_dlssg.c), with or without HDR output: fg, when not NULL, gets the fresh scene whether or not the
+// swapchain is HDR10 (its HUD-less picture), with its format and size.
+void vk_hdr_present_source(const VkTexImage *win, VkImage *scene, VkFormat *format, VkFgScene *fg) {
     *scene = VK_NULL_HANDLE;
-    if (!vk_hdr_wanted()) return;
+    if (fg) fg->image = VK_NULL_HANDLE;
+    if (!vk_hdr_wanted() && !(fg && vk_dlssg_scene_wanted())) return;
     vk_hdr_track = 1;
     plat_mutex_lock(&rec_lock);
     int r = -1;
@@ -244,7 +281,19 @@ void vk_hdr_present_source(const VkTexImage *win, VkImage *scene, VkFormat *form
     if (r < 0 && nrecs < 4) r = nrecs++, recs[r].win = win->image, recs[r].src = VK_NULL_HANDLE, recs[r].fresh = 0;
     // only a scene drawn into it since its last present: a movie or loading screen after play has none
     if (r >= 0 && recs[r].fresh && recs[r].src && vk_hdr_active()) *scene = recs[r].src, *format = recs[r].fmt;
-    if (r >= 0) recs[r].fresh = 0;
+    if (fg && r >= 0 && recs[r].fresh && recs[r].src) {
+        VkImage cap = vk_dlssg_capture_image();
+        if (recs[r].cap == 2 && cap)   // the window texture copied before its HUD (vk_hdr_before_draw)
+            fg->image = cap, fg->format = win->format, fg->w = win->width, fg->h = win->height;
+        else if (recs[r].cap == 1)     // no draw after the scene pass: the window texture is HUD-less itself
+            fg->image = win->image, fg->format = win->format, fg->w = win->width, fg->h = win->height;
+        else
+            fg->image = recs[r].src, fg->format = recs[r].fmt, fg->w = recs[r].w, fg->h = recs[r].h;
+    }
+    if (r >= 0) {
+        if (recs[r].cap == 1) plat_dec32(&g_cap_pending);
+        recs[r].fresh = 0, recs[r].cap = 0;
+    }
     plat_xchg32(&g_scene_seen, *scene != VK_NULL_HANDLE);
     plat_mutex_unlock(&rec_lock);
     static int logged;
@@ -385,6 +434,7 @@ static struct {
     Img menu;                       // the in-game menu, RGBA8
     VkImageView src_view[SLOTS];
     VkImageView scene_view[SLOTS];  // the frame's scene beside the window texture (the window texture when none)
+    VkImageView fg_scene_view[SLOTS];   // the same for frame generation's encodes (vk_hdr_encode_fg)
 } H;
 
 static VkShaderModule module(VkCtx *c, const uint32_t *code, size_t size) {
@@ -510,6 +560,58 @@ VkImage vk_hdr_encode(VkCommandBuffer cb, unsigned slot, VkImage src, VkFormat f
     return H.out.img;
 }
 
+// Frame generation (vk_dlssg.c) with an HDR10 swapchain: NGX makes its frames from HDR10 pictures, so the encode
+// runs before it, on images of frame generation's: src[i] (the window texture's copy, or the HUD-less picture, both
+// w x h of src_fmt) into dst[i] (A2B10G10R10, PQ code values, w x h), all against
+// the scene vk_hdr_set_scene gave this present. The scene stays set (the present's own encode, should frame generation
+// give up after this, still has it). The caller orders its images before and after; the scene is ordered here.
+// slot: the present's slot, whose command buffer the earlier use of its view has finished with.
+int vk_hdr_encode_fg(VkCommandBuffer cb, unsigned slot, const VkImageView *src, const VkImageView *dst, int n,
+                     VkFormat src_fmt, uint32_t w, uint32_t h) {
+    VkCtx *c = vk_ctx();
+    if (!H.tried) init(c);
+    if (!H.ok) return 0;
+    slot %= SLOTS;
+    VkImage scene = g_scene;
+    VkFormat scene_fmt = g_scene_fmt;
+    if (H.fg_scene_view[slot]) vkDestroyImageView(c->device, H.fg_scene_view[slot], NULL);
+    H.fg_scene_view[slot] = VK_NULL_HANDLE;
+    if (scene) {
+        VkImageViewCreateInfo vi = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = scene,
+                                    .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = scene_fmt,
+                                    .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+        if (vkCreateImageView(c->device, &vi, NULL, &H.fg_scene_view[slot]) != VK_SUCCESS)
+            H.fg_scene_view[slot] = VK_NULL_HANDLE, scene = VK_NULL_HANDLE;
+    }
+    const VkPipelineStageFlags2 CS = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, ALL = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    if (scene)
+        barrier(cb, scene, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, ALL, VK_ACCESS_2_MEMORY_WRITE_BIT, CS,
+                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    Nits nt = nits();
+    int decode = src_fmt == VK_FORMAT_R8G8B8A8_UNORM || src_fmt == VK_FORMAT_B8G8R8A8_UNORM;
+    struct { int32_t offset[2], size[2]; float p[4], q[4]; } pc = {
+        {0, 0}, {(int32_t)w, (int32_t)h}, {nt.ui, nt.peak, decode ? 1.0f : 0.0f, scene ? 1.0f : 0.0f},
+        {nt.game, 0, 0, 0}};
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, H.enc);
+    for (int i = 0; i < n; i++) {
+        VkDescriptorImageInfo ii = {H.sampler, src[i], VK_IMAGE_LAYOUT_GENERAL},
+                              oi = {VK_NULL_HANDLE, dst[i], VK_IMAGE_LAYOUT_GENERAL},
+                              si = {H.linear, scene ? H.fg_scene_view[slot] : src[i], VK_IMAGE_LAYOUT_GENERAL};
+        VkWriteDescriptorSet wr[3] = {
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 0, .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &ii},
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 1, .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .pImageInfo = &oi},
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 2, .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &si}};
+        rec_push(H.push, cb, VK_PIPELINE_BIND_POINT_COMPUTE, H.enc_layout, 0, 3, wr);
+        vkCmdPushConstants(cb, H.enc_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
+        vkCmdDispatch(cb, (w + 7) / 8, (h + 7) / 8, 1);
+    }
+    if (scene) barrier(cb, scene, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, CS, 0, ALL, 0);
+    return 1;
+}
+
 // The in-game menu's target: an RGBA8 image of the swapchain's size in COLOR_ATTACHMENT_OPTIMAL (its old content
 // dropped); the caller renders the menu into the view with a clear to 0.
 VkImageView vk_hdr_ui_target(VkCommandBuffer cb, uint32_t w, uint32_t h) {
@@ -613,6 +715,9 @@ void vk_hdr_release(void) {
         if (H.src_view[i]) vkDestroyImageView(c->device, H.src_view[i], NULL), H.src_view[i] = VK_NULL_HANDLE;
     for (int i = 0; i < SLOTS; i++)
         if (H.scene_view[i]) vkDestroyImageView(c->device, H.scene_view[i], NULL), H.scene_view[i] = VK_NULL_HANDLE;
+    for (int i = 0; i < SLOTS; i++)
+        if (H.fg_scene_view[i])
+            vkDestroyImageView(c->device, H.fg_scene_view[i], NULL), H.fg_scene_view[i] = VK_NULL_HANDLE;
     img_free(c, &H.out);
     img_free(c, &H.menu);
     if (H.enc) vkDestroyPipeline(c->device, H.enc, NULL);

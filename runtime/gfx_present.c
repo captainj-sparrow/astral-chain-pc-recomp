@@ -26,8 +26,15 @@
 #include "platform/platform.h"
 #include "ui/menu.h"
 #include "vk.h"
+#include "vk_dlssg.h"
 
-#define FRAMES 2
+// Blits in flight, each with its command buffer, fence and acquire semaphore: 2, or 8 while frame generation
+// (vk_dlssg.c) is set, since it presents up to four pictures per game frame: with 2, every other blit waited for the
+// one before it, which the GPU runs after the game's next frame. Without it the present keeps 2, so it runs no further
+// ahead of the GPU than before. A slot is reused only after its fence, so the count can change between two blits.
+// vk_color.c, vk_fsr.c and vk_hdr.c keep 8 slots of their own (slot % 8).
+#define FRAMES 8
+#define FRAMES_PLAIN 2
 #define MAX_IMAGES 16
 #define VSYNC_NS 1000000000ull
 #define VSYNC_HZ 60
@@ -149,6 +156,8 @@ static int g_cap_w, g_cap_h, g_cap_valid;
 static int g_flip_on;            // vk_present_blit submitted the blit of swapchain image g_flip_idx; vk_present_flip presents it
 static uint32_t g_flip_idx;
 static uint64_t g_blit_lid, g_flip_lid;   // the low-latency frame (vk_lowlat.c) of the next blit and of the waiting present
+static int g_blit_oob, g_flip_oob;        // the same for the out-of-band queue (vk_present_fg)
+static int g_blit_more;                   // the next blit shows a further picture of a game frame (vk_present_fg)
 
 // ---- AC_FLIGHT thumbnails (flight.c; g_pl): each present also blits the swapchain image down into slot frame % g_th_n
 // of a host-visible ring. A slot's tag names the frame it holds complete; recording a new frame clears the tag first,
@@ -300,9 +309,12 @@ static void flip_locked(void) {
                            .pNext = vk_lowlat_flip_begin(g_flip_lid, &pid_info, &pid),   // Reflex: the frame's present ID
                            .waitSemaphoreCount = 1, .pWaitSemaphores = &g_render_done[g_flip_idx], .swapchainCount = 1,
                            .pSwapchains = &g_sc, .pImageIndices = &g_flip_idx};
-    vk_queue_lock();
-    VkResult r = vkQueuePresentKHR(vk_ctx()->gfx_queue, &pi);
-    vk_queue_unlock();
+    // frame generation's frames from the out-of-band queue (vk_device.c), which only this thread uses, under g_pl
+    VkQueue oob = g_flip_oob ? vk_oob_present_queue() : VK_NULL_HANDLE;
+    if (!oob) vk_queue_lock();
+    VkResult r = vkQueuePresentKHR(oob ? oob : vk_ctx()->gfx_queue, &pi);
+    if (!oob) vk_queue_unlock();
+    g_flip_oob = 0;
     vk_lowlat_flip_end(g_flip_lid, pid);
     g_flip_lid = 0;
     vk_device_fault_report(r);
@@ -343,6 +355,9 @@ static int create_swapchain(void) {
     for (uint32_t i = 0; i < nf && !found; i++)
         if (fmts[i].format == VK_FORMAT_R8G8B8A8_UNORM && fmts[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) { sf = fmts[i]; found = 1; }
     uint32_t count = caps.minImageCount + 1;
+    // frame generation (vk_dlssg.c): its pictures go out a few milliseconds apart, and in FIFO each one waits for a
+    // display refresh, so the acquire of the next would wait for one too
+    if (vk_dlssg_scene_wanted()) count += 3;
     if (caps.maxImageCount && count > caps.maxImageCount) count = caps.maxImageCount;
     if (count > 8) count = 8;
 
@@ -384,7 +399,8 @@ static int create_swapchain(void) {
     static VkExtent2D logged_ext;
     if (logged_ext.width != ext.width || logged_ext.height != ext.height) {
         logged_ext = ext;
-        rt_log("gfx: swapchain %ux%u (window %dx%d, format %d)", ext.width, ext.height, cw, ch, (int)sf.format);
+        rt_log("gfx: swapchain %ux%u (window %dx%d, format %d, %u images)", ext.width, ext.height, cw, ch,
+               (int)sf.format, g_sc_n);
     }
     VkSemaphoreCreateInfo semi = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
     for (uint32_t i = 0; i < g_sc_n; i++) {
@@ -608,6 +624,18 @@ void gfx_fit_rect(int cw, int ch, int dw, int dh, int out[4]) {
     out[0] = (dw - out[2]) / 2, out[1] = (dh - out[3]) / 2;
 }
 
+// vk_present_pre_record: set and taken on the present thread only (vk_backend.c present_main)
+static VkImage (*g_pre_record)(VkCommandBuffer cb, VkImage src, unsigned slot, VkFormat *fmt);
+void vk_present_pre_record(VkImage (*fn)(VkCommandBuffer cb, VkImage src, unsigned slot, VkFormat *fmt)) {
+    g_pre_record = fn;
+}
+void vk_present_fg(int oob, int more) {
+    plat_rmutex_lock(&g_pl);
+    g_blit_oob = oob && vk_oob_present_queue() != VK_NULL_HANDLE;
+    g_blit_more = more;
+    plat_rmutex_unlock(&g_pl);
+}
+
 static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4], int defer) {
     int general = layout == VK_IMAGE_LAYOUT_GENERAL;
     gfx_window_start();
@@ -619,7 +647,7 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
     }
     if (wsys_minimized() || !g_sc) goto out;
 
-    unsigned slot = g_frame % FRAMES;
+    unsigned slot = g_frame % (vk_dlssg_scene_wanted() ? FRAMES : FRAMES_PLAIN);
     if (vkWaitForFences(c->device, 1, &g_fence[slot], VK_TRUE, 5000000000ull) != VK_SUCCESS) {
         rt_log("gfx: present fence wait timed out");
         goto out;
@@ -652,7 +680,7 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
     const char *menu_shot = NULL;
     MenuTarget mt = {c->instance, c->phys, c->device, c->gfx_family, c->gfx_queue,
                      g_sc_hdr ? VK_FORMAT_R8G8B8A8_UNORM : g_sc_fmt, g_sc_ext.width,
-                     g_sc_ext.height, cw, ch, g_scaler};
+                     g_sc_ext.height, cw, ch, g_scaler, g_blit_more};
     // the menu counts a paused game's repeats as frames too, or its test hooks would wait for the game
     uint64_t shown = __atomic_load_n(&gfx_counters.frames, __ATOMIC_RELAXED) +
                      __atomic_load_n(&gfx_counters.repeats, __ATOMIC_RELAXED);
@@ -668,6 +696,11 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
     vkBeginCommandBuffer(cb, &bi);
     uint64_t crumb = __atomic_load_n(&gfx_counters.frames, __ATOMIC_RELAXED);
     vk_crumb(cb, VK_CRUMB_PRESENT, crumb);
+    if (g_pre_record && general) {   // frame generation (vk_dlssg.c): its evaluations, and the frame shown in src's place
+        VkImage (*fn)(VkCommandBuffer, VkImage, unsigned, VkFormat *) = g_pre_record;
+        g_pre_record = NULL;
+        src = fn(cb, src, slot, &fmt);
+    }
     VkImage dst = g_sc_img[idx];
     sync_barrier(cb, dst, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_TRANSFER_BIT, 0,
                  VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
@@ -683,9 +716,13 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
                      VK_ACCESS_2_TRANSFER_WRITE_BIT);
     }
     // Colour adjustment (AC_COLOR_*, vk_color.c), or on an HDR10 swapchain the PQ encode (vk_hdr.c; the adjustment is
-    // for SDR): a copy of the crop takes the game image's place below
-    VkImage graded = !general ? VK_NULL_HANDLE : g_sc_hdr ? vk_hdr_encode(cb, slot, src, fmt, rect)
-                                                         : vk_color_record(cb, slot, src, fmt, rect);
+    // for SDR): a copy of the crop takes the game image's place below. Frame generation's pictures on an HDR10
+    // swapchain hold PQ code values already (vk_dlssg.c encodes before NGX): they go out as they are.
+    int pq = general && g_sc_hdr && vk_dlssg_encoded(src);
+    if (pq) vk_hdr_set_scene(VK_NULL_HANDLE, VK_FORMAT_UNDEFINED);   // the encode that would have read it
+    VkImage graded = !general || pq ? VK_NULL_HANDLE
+                     : g_sc_hdr     ? vk_hdr_encode(cb, slot, src, fmt, rect)
+                                    : vk_color_record(cb, slot, src, fmt, rect);
     const int grect[4] = {0, 0, cw, ch};
     VkImage psrc = graded ? graded : src;
     VkFormat pfmt = graded ? VK_FORMAT_R16G16B16A16_SFLOAT : fmt;
@@ -772,6 +809,8 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
         g_flip_idx = idx;
         g_flip_lid = g_blit_lid;   // the present carries the frame of its blit
         g_blit_lid = 0;
+        g_flip_oob = g_blit_oob;
+        g_blit_oob = g_blit_more = 0;
         if (!defer) flip_locked();
     } else {
         vk_device_fault_report(r);

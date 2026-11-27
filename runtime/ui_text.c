@@ -76,6 +76,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_PERF_OFF] = "Off", [UI_MENU_PERF_FPS] = "FPS", [UI_MENU_PERF_FULL] = "Full",
     // printf format of the overlay line in FPS mode: the frame rate
     [UI_PERF_LINE_FPS] = "%.0f fps",
+    [UI_PERF_LINE_FPS_FG] = "%.0f fps (%.0f x%d FG)",
     [UI_MENU_GRAPHICS] = "Picture",
     [UI_MENU_OUTPUT_RES] = "Game resolution",
     [UI_MENU_OUTPUT_RES_DESC] = "The size the game draws its picture and interface in. 1280 x 720 is the lightest, for "
@@ -179,6 +180,17 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_AA_DESC] = "The game's own anti-aliasing, SMAA, for when no upscaler runs. Off leaves the edges jagged.",
     [UI_MENU_AA_OFF] = "Off",
     [UI_MENU_AA_BY_UPSCALER] = "the upscaler smooths the edges",
+    [UI_MENU_FRAMEGEN] = "Frame generation",
+    [UI_MENU_FRAMEGEN_DESC] = "NVIDIA DLSS Frame Generation: frames made between the game's own, for a smoother "
+                              "picture; the game itself keeps its frame rate. 2x shows one frame between two of the "
+                              "game's, 3x and 4x two and three (RTX 50 series). Automatic fills the display's refresh "
+                              "rate. Needs an NVIDIA RTX 40 or newer GPU, the DLSS SDK's frame generation library next to "
+                              "the game and an upscaler running. It adds about half a frame of latency, and NVIDIA "
+                              "Reflex runs with it to keep the rest down, whatever Low latency says. Turning it on "
+                              "takes effect after a restart, then at once.",
+    [UI_MENU_FRAMEGEN_NEEDS_TAA] = "needs an upscaler",
+    [UI_MENU_FRAMEGEN_RESTART_DESC] = "Closes the game and starts it again with frame generation and NVIDIA Reflex, which "
+                                      "it runs with. Progress since your last save is lost.",
     [UI_MENU_OUTPUT_RES_AUTO] = "Automatic",
     [UI_MENU_OUTPUT_RES_NEXT] = ", %s after restart",
 
