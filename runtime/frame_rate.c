@@ -16,6 +16,17 @@
 // What remains:
 //   - the frame limit (AC_FPS): 60 fps by default, 30 fps when the patch is off. The pacer (nvn_api_obj.c) holds
 //     frames to that rate where the game presents faster than it.
+//   - EXPERIMENTAL, AC_FPS above 60 (61 .. 999, or uncapped: a 1 ms period): gameplay frames are paced at that rate
+//     instead of the 60 Hz vsync grid (frame_step_gameplay_ns), on the same patch: the step is the real frame time, so
+//     the game keeps its speed (AC_TRACE=perf: speed 1.000 at 120 and uncapped, about 192 fps at 3840x2160 on an
+//     RTX 5090). Cutscenes keep 60 and their held 30, whose steps are in whole vsyncs. The emulated vsync ticker stays
+//     at 60 Hz: the game does not wait on it under the patch, and running it at 120 changed nothing measured.
+//     Measured against 30 and 60 with one scripted walk: the same path and camera; the camera's swing while
+//     strafing leads a little more at higher rates, 30 < 60 < 120 = 240, as input reaches the game sooner.
+//     Known problems from about 110 fps up (a threshold, not a speed-up: measured at 70 .. 180): the title screen's
+//     ZL + ZR sequence, up to the opening movie, takes 1.30 .. 1.39 s against 2.5 .. 2.7 s at 30 .. 100, and PLUS does
+//     not skip the opening movie at 120 (tools/input/new_game.txt). The code behind it is not found yet. The tick-scaled
+//     counters are right (30 ticks a second at 60 and 120), and the map menu's animations keep their timing at 120.
 //   - the world clock (frame_step_world_us): wall time from the first present. Recorded and scripted input
 //     (input.c) runs on it, so a replay presses at the same game time at any frame rate.
 //
@@ -36,6 +47,7 @@
 
 #define STEP_MAX_S (1.0 / 15.0)    // longest step; a longer frame slows the game down
 #define STEP_RESET_S 0.25          // a gap this long (loading, a debugger) restarts the average
+#define FPS_UNCAPPED 1000          // AC_FPS=uncapped: the pacer's period is 1 ms, below any real frame
 
 static double step_now;   // the step the game used this frame (whole vsyncs: interval / 60)
 static uint64_t last_ns;
@@ -636,6 +648,44 @@ void rt_fps_sector_str(Cpu *c) {
 // A float countdown of frames (`fmov s1, #-1.0` before `fadd s0, s0, s1`): s1 = minus the game's step, so it counts
 // 30 fps frames of real time.
 void rt_fps_neg_step_s1(Cpu *c) { FP_SETS(1, -rt_fps_step()); }
+
+// The cloth sway oscillator (main+0x556d10, `fmul s0, s9, s0`): each element's phase gains speed s9 times its rate a
+// call, with no time in it; s0 = s9 * s0 * step makes that a gain per 30 fps frame of real time.
+void rt_fps_sway_s0(Cpu *c) { FP_SETS(0, VSF32(9) * VSF32(0) * rt_fps_step()); }
+// Its push (`mov v0.16b, v8.16b`, the element's weight as the scale of the velocity it adds a call): s0 = s8 * step,
+// a push per 30 fps frame. Only lane 0 is read (the next call scales a vector by v0.s[0]).
+void rt_fps_push_s0(Cpu *c) { FP_SETS(0, VSF32(8) * rt_fps_step()); }
+
+// A rate added once a call with no time in it (the effect shatter radii, main+0x973BC4 and main+0x974974, each after
+// the `ldr s0` of the rate): s0 = s0 * step, a gain per 30 fps frame of real time.
+void rt_fps_rate_s0(Cpu *c) { FP_SETS(0, VSF32(0) * rt_fps_step()); }
+void rt_fps_rate_s1(Cpu *c) { FP_SETS(1, VSF32(1) * rt_fps_step()); }
+void rt_fps_rate_s2(Cpu *c) { FP_SETS(2, VSF32(2) * rt_fps_step()); }
+void rt_fps_rate_s0s1(Cpu *c) {
+    float f = rt_fps_step(), x = VSF32(0) * f, y = VSF32(1) * f;
+    FP_SETS(0, x);
+    FP_SETS(1, y);
+}
+
+// The clock's own scale (main+0x91D6F0, `ldr s0, [x8, #0x1c]`), read without any time channel: by what runs while the
+// game is paused (the menus' objects with their ignore-pause flag, main+0x3BE590) and by float countdowns that take
+// it off once a frame. Times the step it is a scale per 30 fps frame of real time.
+void rt_fps_scale_s0(Cpu *c) {
+    float s; memcpy(&s, (const uint8_t *)(uintptr_t)c->x[8] + 0x1c, 4);
+    FP_SETS(0, s * rt_fps_step());
+}
+// `fmov s0, #1.0` as a time per call (no clock, or the ignore-pause flag of main+0x3BE5B0): the step.
+void rt_fps_step_s0(Cpu *c) { FP_SETS(0, rt_fps_step()); }
+// The talk command's countdown (main+0x443EF4, `fmul s0, s0, s2` after the scale getter above, s2 = -1): the global
+// clock's scale (main+0xDB8568 -> holder -> clock +0x1C) times s2 times the whole ticks in a cutscene at 60, where the
+// command runs only on frames with a tick, else the step.
+void rt_fps_talk_scale_s0(Cpu *c) {
+    uintptr_t holder = *(const volatile uint64_t *)((uintptr_t)MOD_MAIN_BASE + 0xDB8568ull);
+    uintptr_t clk = holder ? *(const uint64_t *)holder : 0;
+    float s = 1.0f;
+    if (clk) memcpy(&s, (const uint8_t *)clk + 0x1c, 4);
+    FP_SETS(0, s * VSF32(2) * (cut60_now ? (float)rt_fps_ticks() : rt_fps_step()));
+}
 
 // `sub w8, w8, #1` (no flags), the r2 bank of tap/buffer counters: max(w8 - ticks, 0).
 void rt_fps_sub_w8(Cpu *c) {
@@ -1262,15 +1312,30 @@ static void frame_limit_live(void) {
     if (freeze && sscanf(freeze, "%u:%u", &fm, &fe) >= 1 && (fm != freeze_ms || fe != freeze_every_ms))
         rt_log("frame rate: test freeze of %u ms, the sound with it, in a cutscene frame every %u ms", fm, fe);
     freeze_ms = fm, freeze_every_ms = fe;
-    int hz = cfg_int("AC_FPS");
+    const char *fps_set = cfg_value("AC_FPS");
+    int hz = fps_set && !strcmp(fps_set, "uncapped") ? FPS_UNCAPPED : cfg_int("AC_FPS");
     int on = hz >= 60;
-    if (on == fps60_on && fps_hz) return;
-    fps60_on = on;
-    // the timer does not run at 30: it ends the cutscene run it was in and starts anew at its next call (rt_fps_timer)
-    atomic_fetch_add_explicit(&fps_switches, 1, memory_order_relaxed);
-    fps_hz = on ? 60 : 30;
-    rt_patch_switch(rt_patch_set("fps60"), on);
-    rt_log("frame rate: %d fps%s", fps_hz, on ? " (60 fps patch)" : " (30 fps)");
+    // above 60 (experimental): gameplay runs and presents at up to that rate on the same patch; cutscenes stay at 60
+    int want = !on ? 30 : hz > FPS_UNCAPPED ? FPS_UNCAPPED : hz;
+    if (on == fps60_on && want == fps_hz) return;
+    fps_hz = want;
+    if (on != fps60_on) {
+        fps60_on = on;
+        // the timer does not run at 30: it ends the cutscene run it was in and starts anew at its next call
+        // (rt_fps_timer)
+        atomic_fetch_add_explicit(&fps_switches, 1, memory_order_relaxed);
+        rt_patch_switch(rt_patch_set("fps60"), on);
+    }
+    if (fps_hz == FPS_UNCAPPED) rt_log("frame rate: uncapped in gameplay (experimental; cutscenes at 60)");
+    else if (fps_hz > 60) rt_log("frame rate: %d fps in gameplay (experimental; cutscenes at 60)", fps_hz);
+    else rt_log("frame rate: %d fps%s", fps_hz, on ? " (60 fps patch)" : " (30 fps)");
+}
+
+// Above 60 (AC_FPS 61 and up, or uncapped): the present period of a gameplay frame, for the pacer (nvn_api_obj.c
+// present_period). 0 at 60 and 30, and in any cutscene: the pacer's own 60 Hz grid then, as before.
+uint64_t frame_step_gameplay_ns(void) {
+    if (!fps60_on || fps_hz <= 60 || in_cutscene) return 0;
+    return (uint64_t)(1e9 / fps_hz + 0.5);
 }
 
 uint64_t frame_step_cap_ns(void) {
@@ -1360,8 +1425,9 @@ void frame_step_present(uint64_t display_ns, int interval) {
     double dt = last_ns && display_ns > last_ns ? (double)(display_ns - last_ns) * 1e-9 : 0;
     if (interval > 0) step_now = interval / 60.0;
     last_ns = display_ns;
-    // The game clock of untimed script lines: what the game stepped this frame, whole vsyncs.
-    double game = step_now;
+    // The game clock of untimed script lines: what the game stepped this frame, whole vsyncs; above 60 in gameplay the
+    // game's own step (a frame is less than a vsync there)
+    double game = frame_step_gameplay_ns() ? rt_fps_step() / 30.0 : step_now;
     atomic_store_explicit(&game_us, atomic_load_explicit(&game_us, memory_order_relaxed) + (uint64_t)(game * 1e6 + 0.5),
                           memory_order_relaxed);
     world_clock(dt, game);
