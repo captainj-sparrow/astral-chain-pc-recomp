@@ -642,6 +642,41 @@ static void probe_feedback(uint32_t pid, uint32_t style) {
           near3(ms[0].dir, 1, 0, 0, 0.01),
           "fusion restart: %d states in the frame of the Start, %d after one sample (sampling %lld, angle %.4f rev)", same,
           next, (long long)ms[0].sampling, (double)ms[0].angle[2]);
+    // A resting controller whose gyro reads 2 deg/s on x and -1.5 on z (a zero-rate bias): after a still half second
+    // the bias is measured and taken off, so the rate reads 0 and the angle stops growing.
+    MotionFusion *b = motion_new();
+    const double biased[3] = {2 * M_PI / 180, 0, -1.5 * M_PI / 180};
+    for (int i = 0; i < 250; i++) motion_feed(b, down, biased, t += 4000000);
+    motion_read(b, ms, 1, t + 1000000);
+    float settled = ms[0].angle[0];
+    for (int i = 0; i < 250; i++) motion_feed(b, down, biased, t += 4000000);
+    motion_read(b, ms, 1, t + 1000000);
+    CHECK(fabs(ms[0].gyro[0]) < 1e-6 && fabs(ms[0].gyro[2]) < 1e-6 && fabs(ms[0].angle[0] - settled) < 1e-5,
+          "gyro bias taken off at rest: rate %.6f %.6f rev/s, angle moved %.6f rev", (double)ms[0].gyro[0],
+          (double)ms[0].gyro[2], (double)(ms[0].angle[0] - settled));
+    // Another controller (motion_reset_bias), resting with a bias of -1 deg/s on y: the old pad's bias is gone at once
+    // (its first sample reads its own raw rate), and after a still half second the new one is taken off.
+    motion_reset_bias(b);
+    const double other[3] = {0, -1 * M_PI / 180, 0};
+    motion_feed(b, down, other, t += 4000000);
+    motion_read(b, ms, 1, t + 1000000);
+    double first[3] = {ms[0].gyro[0], ms[0].gyro[1], ms[0].gyro[2]};
+    for (int i = 0; i < 250; i++) motion_feed(b, down, other, t += 4000000);
+    motion_read(b, ms, 1, t + 1000000);
+    CHECK(fabs(first[0]) < 1e-6 && fabs(first[1] + 1.0 / 360) < 1e-6 && fabs(first[2]) < 1e-6 &&
+              fabs(ms[0].gyro[1]) < 1e-6,
+          "gyro bias reset for another controller: first rate %.6f %.6f %.6f rev/s, then %.6f", first[0], first[1],
+          first[2], (double)ms[0].gyro[1]);
+    // motion_set_turn: a quarter turn to the right (-z) also adds a quarter revolution of -y, which blade mode reads as right
+    MotionFusion *tr = motion_new();
+    const double right[3] = {0, 0, -M_PI / 2};
+    motion_set_turn(tr, 1);
+    motion_feed(tr, down, still, t += 4000000);
+    for (int i = 0; i < 250; i++) motion_feed(tr, down, right, t += 4000000);
+    motion_read(tr, ms, 1, t + 1000000);
+    double rolled = ms[0].angle[1], turned = ms[0].angle[2];
+    CHECK(fabs(rolled + 0.25) < 0.002 && fabs(turned + 0.25) < 0.002 && quarter > 0.249 && fabs(quarter - 0.25) < 0.002,
+          "turn as roll: angle y %.4f, z %.4f rev", rolled, turned);
     printf("hid feedback: vibration handles %#x %#x, six-axis %#x, at rest when stopped; fusion quarter turn %.4f rev\n",
            vh[0], vh[1], sh[0], quarter);
 }

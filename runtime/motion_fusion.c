@@ -7,7 +7,10 @@
 // axis, direction = the controller's three axes in a reference frame whose z is up. The orientation is integrated from
 // the gyro and, while the controller is not being accelerated (|a| within 15 % of 1 G), pulled toward the measured
 // gravity (Mahony, gain 0.5/s: about 2 s), as the Switch's sensor fusion does; yaw has no reference and drifts with the
-// gyro's bias. The newest MOTION_RING samples are kept; reads are newest first. A restart (StartSixAxisSensor) drops
+// gyro's bias. The gyro's zero-rate bias (a resting reading that is not 0, a few degrees a second on some pads, the
+// Steam Controller's among them) is measured while the controller is still and taken off every sample, as the Switch
+// does with its factory and stillness calibration: uncorrected, a resting controller reads as a slow steady turn, and a
+// gyro cursor (blade mode, the bow) creeps across the screen. The newest MOTION_RING samples are kept; reads are newest first. A restart (StartSixAxisSensor) drops
 // the samples before it: reads return nothing until the next sample, which starts a fresh frame and angle; sampling
 // numbers go on. The feeding thread writes, guest threads read, both under the instance's SRW lock.
 #include <math.h>
@@ -20,6 +23,14 @@
 
 enum { MOTION_RING = 64 };
 #define STALE_NS 200000000ull   // no sample for 200 ms: no motion
+// Bias calibration: a stretch of STILL_NS in which every sample's rate is under STILL_RATE, the rates stay within
+// STILL_SPREAD of each other per axis and the acceleration within 10 % of 1 G is a controller at rest (on a desk, or
+// held quite still); its mean rate, when under BIAS_MAX (a slow deliberate turn is not taken for bias), is the bias,
+// blended in by half after the first one.
+#define STILL_NS 500000000ull
+#define STILL_RATE 0.15     // rad/s, about 8.6 deg/s
+#define STILL_SPREAD 0.06   // rad/s
+#define BIAS_MAX 0.07       // rad/s, about 4 deg/s
 
 struct MotionFusion {
     PlatMutex lock;
@@ -29,6 +40,11 @@ struct MotionFusion {
     double R[3][3];   // controller -> reference; row i = reference axis i in controller coordinates
     double angle[3];
     int restart;
+    double bias[3];                         // gyro zero-rate bias, rad/s, taken off every sample
+    int calibrated;
+    int turn;                               // motion_set_turn
+    double still_sum[3], still_lo[3], still_hi[3];
+    uint64_t still_from, still_n;           // still_from: time of the stretch's first sample, 0 none
 };
 
 MotionFusion *motion_new(void) {
@@ -107,8 +123,38 @@ static void integrate(double R[3][3], const double gyro[3], const double acc[3],
     orthonormalize(R);
 }
 
-void motion_feed(MotionFusion *m, const double acc[3], const double gyro[3], uint64_t now) {
+// Under the lock: one raw sample into the still stretch; at its end the bias is updated.
+static void calibrate(MotionFusion *m, const double acc[3], const double gyro[3], uint64_t now) {
+    double n = norm3(acc);
+    int still = fabs(n - 1) < 0.1 && norm3(gyro) < STILL_RATE;
+    for (int i = 0; still && m->still_n && i < 3; i++)
+        still = fmax(m->still_hi[i], gyro[i]) - fmin(m->still_lo[i], gyro[i]) < STILL_SPREAD;
+    if (!still) { m->still_from = m->still_n = 0; return; }
+    if (!m->still_n) {
+        m->still_from = now;
+        for (int i = 0; i < 3; i++) m->still_sum[i] = 0, m->still_lo[i] = m->still_hi[i] = gyro[i];
+    }
+    for (int i = 0; i < 3; i++) {
+        m->still_sum[i] += gyro[i];
+        m->still_lo[i] = fmin(m->still_lo[i], gyro[i]);
+        m->still_hi[i] = fmax(m->still_hi[i], gyro[i]);
+    }
+    m->still_n++;
+    if (now - m->still_from < STILL_NS) return;
+    double mean[3] = {m->still_sum[0] / m->still_n, m->still_sum[1] / m->still_n, m->still_sum[2] / m->still_n};
+    m->still_from = m->still_n = 0;
+    if (norm3(mean) >= BIAS_MAX) return;
+    for (int i = 0; i < 3; i++) m->bias[i] = m->calibrated ? (m->bias[i] + mean[i]) / 2 : mean[i];
+    if (!m->calibrated && m == global)
+        rt_log("motion: gyro bias %.2f %.2f %.2f deg/s, taken off every sample", m->bias[0] * 180 / M_PI,
+               m->bias[1] * 180 / M_PI, m->bias[2] * 180 / M_PI);
+    m->calibrated = 1;
+}
+
+void motion_feed(MotionFusion *m, const double acc[3], const double raw[3], uint64_t now) {
     plat_mutex_lock(&m->lock);
+    calibrate(m, acc, raw, now);
+    const double gyro[3] = {raw[0] - m->bias[0], raw[1] - m->bias[1], raw[2] - m->bias[2]};
     double dt = m->last_ns && now > m->last_ns ? (double)(now - m->last_ns) / 1e9 : 0.004;
     if (dt > 0.05) dt = 0.004;   // a gap (no controller, sensors were off): no integration across it
     m->last_ns = now;
@@ -121,13 +167,28 @@ void motion_feed(MotionFusion *m, const double acc[3], const double gyro[3], uin
     *s = (MotionState){.delta_ns = (int64_t)(dt * 1e9), .sampling = (int64_t)m->produced + 1, .attributes = 1};
     for (int i = 0; i < 3; i++) {
         double rps = gyro[i] / (2 * M_PI);
-        m->angle[i] += rps * dt;
+        // angle y also takes the turn about z, with z's sign: the game's aim reads -y as right, as tested in blade mode
+        m->angle[i] += (i == 1 ? rps + m->turn * gyro[2] / (2 * M_PI) : rps) * dt;
         s->acc[i] = (float)acc[i];
         s->gyro[i] = (float)rps;
         s->angle[i] = (float)m->angle[i];
         for (int j = 0; j < 3; j++) s->dir[i * 3 + j] = (float)m->R[j][i];   // direction i = controller axis i in the reference frame
     }
     m->produced++;
+    plat_mutex_unlock(&m->lock);
+}
+
+void motion_set_turn(MotionFusion *m, int k) {
+    plat_mutex_lock(&m->lock);
+    m->turn = k;
+    plat_mutex_unlock(&m->lock);
+}
+
+void motion_reset_bias(MotionFusion *m) {
+    plat_mutex_lock(&m->lock);
+    memset(m->bias, 0, sizeof m->bias);
+    m->calibrated = 0;
+    m->still_from = m->still_n = 0;
     plat_mutex_unlock(&m->lock);
 }
 
