@@ -225,6 +225,23 @@ site fps60 main 1a043c 1e280842 1e254904 1e240842   # fmul s2,s2,s8 -> fmax s4,s
 site fps60 main 6a3f28 11000508 @fn:rt_fps_cue_up_w8   # add w8,w8,#1 -> w8 += ticks
 site fps60 main 6a3f38 6b08013f @fnz:rt_fps_cue_cmp    # cmp w9,w8 -> Z = entry due
 site fps60 main 6a3f54 6b08013f @fnz:rt_fps_cue_cmp    # cmp w9,w8 -> Z = entry due (next entries)
+# interface parts (main+0x910890): texture flipbook and text reveal count 1 a call; now the whole ticks
+site fps60 main 910b20 11000529 @fn:rt_fps_up_w9   # add w9,w9,#1 -> w9 += ticks (flipbook)
+site fps60 main 910d44 11000529 @fn:rt_fps_up_w9   # add w9,w9,#1 -> w9 += ticks (text reveal)
+# map screen (main+0x592280): stick pan, second cursor and stick zoom move a fixed amount a frame; now times the step
+site fps60 main 592648 aa1303e0 aa1303e0 @fn:rt_fps_rate_s0s1   # mov x0,x19; then the pan (s0, s1) *= step
+site fps60 main 6accf8 bd40ca62 bd40ca62 @fn:rt_fps_rate_s2     # ldr s2,[x19,#0xc8]; then the speed *= step
+site fps60 main 5937b0 bd460921 bd460921 @fn:rt_fps_rate_s1     # ldr s1 = 0.03; then *= step (zoom in)
+site fps60 main 593990 bd47e921 bd47e921 @fn:rt_fps_rate_s1     # ldr s1 = -0.03; then *= step (zoom out)
+# Legion skill tree cursor (main+0x665560 reads the stick, main+0x66BF40 moves it): speed (0.3 or 2.0) x 8.5 px a frame
+site fps60 main 6662f0 4ea81d00 4ea81d00 @fn:rt_fps_rate_s0     # mov v0,v8 (the speed); then *= step
+# Legion skill learning screen (main+0x61EB40): the stick moves the cursor by speed x 8.5 px a frame (main+0x6537B0,
+# past the edges it scrolls), and the held zoom buttons add +-0.03 a frame to the zoom; now times the step
+site fps60 main 621dbc 4ea81d00 4ea81d00 @fn:rt_fps_rate_s0     # mov v0,v8 (the speed); then *= step
+site fps60 main 6220a8 bd460940 bd460940 @fn:rt_fps_rate_s0     # ldr s0 = 0.03; then *= step (zoom in)
+site fps60 main 6220f0 bd47e920 bd47e920 @fn:rt_fps_rate_s0     # ldr s0 = -0.03; then *= step (zoom out)
+# in-game menu breathing (main+0x6198D0): pane 1's depth moves 0.4 a frame between +-15; now times the step
+site fps60 main 6198f8 bd498d21 bd498d21 @fn:rt_fps_rate_s1     # ldr s1 = 0.4; then *= step (menu breathing)
 # (the cut clock's end test, which a cutscene at 60 needs exact, is in the avsync set below)
 # diagnostics (AC_TRACE=perf): the scene clock the event kept, after its update (main+0x8B7C60)
 site fps60 main 8b7cb0 b9402a68 b9402a68 @fn:rt_cut_state   # ldr w8,[x19,#0x28]; then log cut changes and stops
@@ -316,6 +333,47 @@ site fps60 main 282fd0 71000529 @fnz:rt_fps_hs_w9   # +0x46B570
 site fps60 main 282fec 71000529 @fnz:rt_fps_hs_w9   # +0x46B590
 site fps60 main 2832e4 71000529 @fnz:rt_fps_hs_w9   # +0x46AE5C press-repeat window (5 frames)
 site fps60 main 2833a0 1e3e1001 @fn:rt_fps_neg_step_s1   # +0x46ADB4 countdown: fmov s1,#-1.0 -> s1 = -step
+# item button (main+0x323e60): 9-frame tap window and menu delay lose 1.0 a call (the menu hold was 150 ms at 60); now minus the step
+site fps60 main 3242c0 1e3e1001 @fn:rt_fps_neg_step_s1   # +0x1438 tap window: fmov s1,#-1.0 -> s1 = -step
+site fps60 main 3242d8 1e3e1001 @fn:rt_fps_neg_step_s1   # +0x143c menu delay: fmov s1,#-1.0 -> s1 = -step
+# float frame countdowns (fmov s1,#-1.0; fadd; str) in functions measured at one call a frame in gameplay; now minus the step
+site fps60 main 29d528 1e3e1001 @fn:rt_fps_neg_step_s1   # player +0x46ACC8, while flag bit 19 is set; tested against 25 and 10
+site fps60 main 2a96f8 1e3e1001 @fn:rt_fps_neg_step_s1   # player +0x46AE24
+site fps60 main 3273bc 1e3e1001 @fn:rt_fps_neg_step_s1   # player +0x46AD40, input update
+site fps60 main 3275c8 1e3e1001 @fn:rt_fps_neg_step_s1   # player +0x46AD48
+site fps60 main 331138 1e3e1001 @fn:rt_fps_neg_step_s1   # player +0x1424
+site fps60 main 331150 1e3e1001 @fn:rt_fps_neg_step_s1   # player +0x1428
+site fps60 main 3a71f0 1e3e1001 @fn:rt_fps_neg_step_s1   # camera +0x648
+site fps60 main 3fc640 1e3e1001 @fn:rt_fps_neg_step_s1   # main+0x3fbb00 countdown
+site fps60 main 4e60bc 1e3e1001 @fn:rt_fps_neg_step_s1   # +0xC0
+site fps60 main 54c15c 1e3e1001 @fn:rt_fps_neg_step_s1   # +0xE0, per object
+site fps60 main 5d742c 1e3e1001 @fn:rt_fps_neg_step_s1   # +0x84 in state 2, then +0x24 = 0
+site fps60 main 605f94 1e3e1001 @fn:rt_fps_neg_step_s1   # +0x84 in state 2, then +0x24 = 0
+site fps60 main 8ee914 1e3e1001 @fn:rt_fps_neg_step_s1   # global countdown (GOT 0xdc1150)
+site fps60 main 8eea14 1e3e1001 @fn:rt_fps_neg_step_s1   # global countdown (GOT 0xdc1140)
+site fps60 main 49e7bc 1e3e1001 @fn:rt_fps_neg_step_s1   # slot timers +0x80 .. +0x1D0, stride 0x38
+site fps60 main 49e8b0 1e3e1001 @fn:rt_fps_neg_step_s1
+site fps60 main 49ea50 1e3e1001 @fn:rt_fps_neg_step_s1
+site fps60 main 49eb4c 1e3e1001 @fn:rt_fps_neg_step_s1
+site fps60 main 49ed98 1e3e1001 @fn:rt_fps_neg_step_s1
+site fps60 main 49eed8 1e3e1001 @fn:rt_fps_neg_step_s1
+site fps60 main 49ef4c 1e3e1001 @fn:rt_fps_neg_step_s1
+# same form, not reached in the measured scene, left as is: ffd0 1145bc 1a8904 1b7854 1c0470 5d5d28 5d5ebc 5eada0 6c0f18
+# effect objects (main+0x95ED70 .. 0x992174): bounce test countdowns and shatter radii count calls (read statically, not reached in play)
+site fps60 main 970fa4 1e3e1001 @fn:rt_fps_neg_step_s1   # bounce test countdown +0x880 (970f40)
+site fps60 main 97e218 1e3e1001 @fn:rt_fps_neg_step_s1   # bounce test countdown +0x910 (97e1b0)
+site fps60 main 95b228 1e3e1001 @fn:rt_fps_neg_step_s1   # per-particle bounce test countdown [+0x48]+0x30 (95b1f0)
+site fps60 main 973bd0 1e3e1001 @fn:rt_fps_neg_step_s1   # bounce test cadence +0x968 (973960; +0x96C beside it takes +0x1D0)
+site fps60 main 973bc4 bd493260 bd493260 @fn:rt_fps_rate_s0   # ldr s0,[x19,#0x930]; s0 *= step: radius +0x95C (973960)
+site fps60 main 974974 bd490260 bd490260 @fn:rt_fps_rate_s0   # ldr s0,[x19,#0x900]; s0 *= step: radius +0x940 (974880)
+# cloth sway (main+0x556d10, the player's hair among it): the phase gain and wind push are per call; now times the step
+site fps60 main 556e14 1e200920 @fn:rt_fps_sway_s0      # fmul s0,s9,s0 -> s0 = s9 * s0 * step
+site fps60 main 556e84 4ea81d00 @fn:rt_fps_push_s0      # mov v0.16b,v8.16b -> s0 = s8 * step
+# time while paused: the clock-scale getter (main+0x91D6F0) and fixed 1.0 times are per call; now times the step
+site fps60 main 91d6f8 bd401d00 @fn:rt_fps_scale_s0       # ldr s0,[x8,#0x1c] -> s0 = scale * step
+site fps60 main 91d700 1e2e1000 @fn:rt_fps_step_s0        # fmov s0,#1.0 (no clock) -> s0 = step
+site fps60 main 3be5d0 1e2e1000 @fn:rt_fps_step_s0        # fmov s0,#1.0 (ignore-pause flag) -> s0 = step
+site fps60 main 443ef4 1e220800 @fn:rt_fps_talk_scale_s0  # fmul s0,s0,s2 -> s0 = scale * s2 * (ticks in a cutscene at 60, else step)
 # r2 bank of buffer counters (sub w8,w8,#1, no flags)
 site fps60 main 283044 51000508 @fn:rt_fps_sub_w8
 site fps60 main 283054 51000508 @fn:rt_fps_sub_w8
