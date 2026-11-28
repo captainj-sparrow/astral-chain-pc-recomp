@@ -52,6 +52,16 @@ or dirty-tracking correctness on this Mac.
 
 ## CPU and operating-system gaps
 
+CPU baseline on the M6 (Apple clang 21, 2026-11-28):
+
+- `python tests/flags_check.py`: 2,000,484 operand pairs at each of `-O0` and
+  `-O1`, zero mismatches.
+- `python tests/diff/atomic.py --jobs 4`: all 198 instruction tests / 12,672
+  cases pass against Unicorn. The harness uses Apple's linker on Darwin.
+
+These cover integer flags and atomic/exclusive lowering, not FP/SIMD, the
+scheduler, the generated game's functions or gameplay.
+
 - `recomp/lifter.py` contains an ARM64 assembly mode, but `recomp/gen.py` currently
   forces the C mode, and generated chunks include the x86-specific `simd.h`.
 - `runtime/platform/` currently has Windows and Linux backends. Darwin needs its

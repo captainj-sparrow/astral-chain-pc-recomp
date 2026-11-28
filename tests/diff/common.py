@@ -223,7 +223,9 @@ def build_harness(work, bodies, jobs, cflags):
     if any(p.wait() for p in procs):
         raise SystemExit('compile failed')
     exe = work / ('harness.exe' if os.name == 'nt' else 'harness')
-    subprocess.check_call([cc, '-fuse-ld=lld', '-o', str(exe)] + [str(o) for o in objs], env=env)
+    # Apple clang selects the SDK's Mach-O linker. The other hosts use LLD.
+    linker = [] if sys.platform == 'darwin' else ['-fuse-ld=lld']
+    subprocess.check_call([cc, *linker, '-o', str(exe)] + [str(o) for o in objs], env=env)
     return exe
 
 
