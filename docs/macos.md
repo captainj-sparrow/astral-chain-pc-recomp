@@ -4,7 +4,7 @@ Status: boots. Native Apple Silicon, the existing Vulkan renderer through Molten
 game version 1.0.1. On 2026-11-28 a 90-second run on an M6 Mac mini reached the
 game's start screen ("ZL + ZR"), rendered correctly: 5,377 frames at a mean of
 58-60 fps, 12 million NVN calls, none unimplemented, no shader failures and no
-validation errors. Gameplay past the start screen is not checked yet.
+validation errors. The new-game sequence plays to the motorway chase (below).
 
 Build and run (Apple clang from the Xcode tools; Homebrew: ninja, sdl3, vulkan-loader,
 molten-vk, opus, libvpx, zstd; the shader translator as below):
@@ -13,6 +13,17 @@ molten-vk, opus, libvpx, zstd; the shader translator as below):
 .venv/bin/python tools/build_game.py            # build/v101/astralchain
 cd build/v101 && ./astralchain --seconds 90 --shot ../shot.png
 ```
+
+The new-game sequence (title, opening movie skipped, character creation, the
+motorway) runs by itself on an empty profile:
+
+```sh
+.venv/bin/python tools/run_game.py build/v101 --fresh --script tools/input/new_game.txt \
+    --seconds 90 --tag new-game --shot build/new-game.png
+```
+
+On 2026-11-28 it reaches the motorway chase, rendered correctly, at 26-29 fps where
+the game asks for 30 there.
 
 `tools/build_game.py` fetches VMA and AMD's FidelityFX files from GitHub on first
 use. Where IPv6 to GitHub stalls, Python waits a long time on each address; fetch
