@@ -272,3 +272,22 @@ Not passing, and why:
   M6 samples ASTC natively.
 - `--probe-shader`, `--probe-vkexec`: need `build/v101/shaders/jobs.json` from
   `tools/shader_census.py`.
+
+## MetalFX upscaling (`runtime/vk_metalfx.mm`)
+
+Native Apple MetalFX Temporal scaling runs inside the existing Vulkan/MoltenVK
+backend via `VK_EXT_metal_objects` (`upscaling = metalfx`, or `upscaling = auto`
+on macOS; live-switchable with `fsr3` in the menu):
+
+- `vk_device.c` declares `METAL_DEVICE` and `METAL_COMMAND_QUEUE` export intent
+  on `VkInstanceCreateInfo` and enables `VK_EXT_metal_objects` on the device.
+- `vk_dlaa.c` marks its `out` (`RGBA16F`) and `mv` (`RG16F`) work images with
+  `VK_EXPORT_METAL_OBJECT_TYPE_METAL_TEXTURE_BIT_EXT` so they export directly to
+  `id<MTLTexture>` with zero copy.
+- `vk_metalfx.mm` stages the scene color (`RGBA16F` blit) and depth aspect
+  (`D32_SFLOAT(_S8_UINT)` -> `R32_SFLOAT`) into exportable Metal textures,
+  splits the submission with `vk_sync_split_ex()` using a dedicated timeline
+  `VkSemaphore` backed by an exported `MTLSharedEvent`, and encodes
+  `MTLFXTemporalScaler` onto MoltenVK's `MTLCommandQueue` strictly between the
+  pre- and post-upscaler Vulkan submissions.
+

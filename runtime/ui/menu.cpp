@@ -598,6 +598,11 @@ static void rows_upscaling(void) {
     const char *names[] = {menu_text(UI_MENU_UPSCALING_OFF), menu_text(UI_MENU_UPSCALING_AUTO), "NVIDIA DLSS",
                            "Intel XeSS", "AMD FSR 3", "AMD FSR 4"};
     const UiTextId desc = UI_MENU_UPSCALING_DESC;
+#elif defined(__APPLE__)
+    static const char *const vals[] = {"off", "auto", "metalfx", "fsr3"};
+    const char *names[] = {menu_text(UI_MENU_UPSCALING_OFF), menu_text(UI_MENU_UPSCALING_AUTO), "Apple MetalFX",
+                           "AMD FSR 3"};
+    const UiTextId desc = UI_MENU_UPSCALING_DESC_OTHER;
 #else   // DLSS through the driver's libnvidia-ngx.so.1 (vk_dlaa.c); XeSS is Windows only
     static const char *const vals[] = {"off", "auto", "dlss", "fsr3", "fsr4"};
     const char *names[] = {menu_text(UI_MENU_UPSCALING_OFF), menu_text(UI_MENU_UPSCALING_AUTO), "NVIDIA DLSS",
@@ -607,7 +612,11 @@ static void rows_upscaling(void) {
     enum { N = sizeof vals / sizeof *vals };
     const char *up = cfg_upscaling(), *runs = vk_dlaa_upscaler_name();
     // FSR 4, the last entry, only on a GPU it can run on (vk_fsr4.c), or while it is the setting (to say it cannot)
+#ifdef __APPLE__
+    const int n = N;
+#else
     const int n = vk_fsr4_offered() || !strcmp(up, "fsr4") ? N : N - 1;
+#endif
     int cur = -1;
     for (int i = 0; i < n; i++)
         if (!strcmp(up, vals[i])) cur = i;
