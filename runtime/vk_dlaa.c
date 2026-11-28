@@ -43,8 +43,12 @@
 #include "vk_dlssg.h"
 #include "vk_exec.h"
 #include "vk_rec.h"
+#ifdef __APPLE__
+#include <vulkan/vulkan_metal.h>
+#endif
 #include "vk_fsr3.h"
 #include "vk_fsr4.h"
+#include "vk_metalfx.h"
 #include "vk_xess.h"
 #include "nvn_api.h"
 #include "platform/platform.h"
@@ -296,6 +300,7 @@ static void ngx_log(const char *msg, int level, int feature) {
 }
 
 void vk_dlaa_init(void) {
+    vk_metalfx_init();
     vk_fsr4_init();   // its library, when the setting is fsr4 at start
     if (!vk_dlaa_wanted() || !core_load()) return;
     // NVSDK_NGX_FeatureCommonInfo: its PathListInfo, then InternalData and LoggingInfo
@@ -493,59 +498,65 @@ VkImageView vk_dlaa_swap_view;
 uint32_t vk_dlaa_swap_w;
 VkImage vk_dlaa_swap_pic;   // the image behind vk_dlaa_swap_view (vk_hdr.c records it as the frame's scene)
 
-enum { BK_NONE, BK_DLSS, BK_XESS, BK_FSR3, BK_FSR4 };
+enum { BK_NONE, BK_DLSS, BK_XESS, BK_FSR3, BK_FSR4, BK_METALFX };
 
 static int dl_active(void) {
-    return D.backend == BK_DLSS   ? N.available && !D.failed
-           : D.backend == BK_XESS ? vk_xess_available()
-           : D.backend == BK_FSR3 ? vk_fsr3_available()
-           : D.backend == BK_FSR4 ? vk_fsr4_available()
-                                  : 0;
+    return D.backend == BK_DLSS      ? N.available && !D.failed
+           : D.backend == BK_XESS    ? vk_xess_available()
+           : D.backend == BK_FSR3    ? vk_fsr3_available()
+           : D.backend == BK_FSR4    ? vk_fsr4_available()
+           : D.backend == BK_METALFX ? vk_metalfx_available()
+                                     : 0;
 }
 
 // The backend for the setting (cfg.c cfg_upscaling, read at each present: the menu switches it live), among those that
 // can run in this run: DLSS where NGX came up (loaded at start for dlss and auto), XeSS where libxess.dll came up
-// (loaded at start for xess), FSR 3 wherever its pipelines can be made (it is built in). auto is DLSS where it can run,
-// else FSR 3. FSR 4 that cannot run (its files are not there, AMD's library does not take the GPU, it was chosen after
+// (loaded at start for xess), MetalFX on macOS via VK_EXT_metal_objects, FSR 3 wherever its pipelines can be made (it
+// is built in). auto is DLSS where it can run, else MetalFX on macOS, else FSR 3. FSR 4 that cannot run (its files are
+// not there, AMD's library does not take the GPU, it was chosen after
 // the start, it failed) has FSR 3 in its place, at the scene's own size too: the player asked for an AMD temporal
 // upscaler, and vk_fsr4.c's log and the menu say why it is FSR 3. While the scene is reduced (resolution.c) something
 // must scale it: a choice that cannot run (off, a library not loaded at start, a backend that failed in this run)
-// leaves the first that can of DLSS, XeSS and FSR 3, so the game's plain scaling never shows a scene at 33..67 % of
-// the output; the menu says that the choice waits for a restart. can() makes nothing: FSR 3's pipelines are made when
-// it is picked (dl_active).
+// leaves the first that can of DLSS, XeSS, MetalFX and FSR 3, so the game's plain scaling never shows a scene at
+// 33..67 % of the output; the menu says that the choice waits for a restart. can() makes nothing: FSR 3's pipelines are
+// made when it is picked (dl_active).
 static int can(int bk) {
-    return bk == BK_DLSS   ? N.available && !D.failed
-           : bk == BK_XESS ? vk_xess_available()
-           : bk == BK_FSR3 ? !vk_fsr3_failed()
-           : bk == BK_FSR4 ? vk_fsr4_available()
-                           : 0;
+    return bk == BK_DLSS      ? N.available && !D.failed
+           : bk == BK_XESS    ? vk_xess_available()
+           : bk == BK_FSR3    ? !vk_fsr3_failed()
+           : bk == BK_FSR4    ? vk_fsr4_available()
+           : bk == BK_METALFX ? vk_metalfx_available()
+                              : 0;
 }
 
 static int chosen(void) {
     const char *up = cfg_upscaling();
-    return !strcmp(up, "dlss") ? BK_DLSS
-           : !strcmp(up, "xess") ? BK_XESS
-           : !strcmp(up, "fsr3") ? BK_FSR3
-           : !strcmp(up, "fsr4") ? BK_FSR4
-           : !strcmp(up, "auto") ? (can(BK_DLSS) ? BK_DLSS : BK_FSR3)
-                                 : BK_NONE;
+    return !strcmp(up, "dlss")      ? BK_DLSS
+           : !strcmp(up, "xess")    ? BK_XESS
+           : !strcmp(up, "fsr3")    ? BK_FSR3
+           : !strcmp(up, "fsr4")    ? BK_FSR4
+           : !strcmp(up, "metalfx") ? BK_METALFX
+           : !strcmp(up, "auto")    ? (can(BK_DLSS) ? BK_DLSS : can(BK_METALFX) ? BK_METALFX : BK_FSR3)
+                                    : BK_NONE;
 }
 
 static int pick(void) {
     int bk = chosen();
     if (bk != BK_NONE && can(bk)) return bk;
-    if (bk == BK_FSR4 && can(BK_FSR3)) return BK_FSR3;
+    if ((bk == BK_FSR4 || bk == BK_METALFX) && can(BK_FSR3)) return BK_FSR3;
     if (!res_scene_reduced()) return BK_NONE;
+    if (can(BK_METALFX)) return BK_METALFX;
     for (int b = BK_DLSS; b <= BK_FSR3; b++)
         if (can(b)) return b;
     return BK_NONE;
 }
 
 // resolution.c res_settle, after the device exists and before the game runs: the upscaler the setting asks for can run
-// here (NGX answered, libxess.dll came up on this GPU, FSR 3's pipelines can be made; FSR 3 for FSR 4 that cannot run).
+// here (NGX answered, libxess.dll came up on this GPU, MetalFX is supported, FSR 3's pipelines can be made; FSR 3 for
+// FSR 4 or MetalFX that cannot run).
 int vk_dlaa_upscaler_ok(void) {
     int bk = chosen();
-    if (bk == BK_FSR4 && !can(bk)) bk = BK_FSR3;
+    if ((bk == BK_FSR4 || bk == BK_METALFX) && !can(bk)) bk = BK_FSR3;
     if (bk == BK_FSR3) return vk_pipeline_push_fn() ? vk_fsr3_available() : !vk_fsr3_failed();
     return bk != BK_NONE && can(bk);
 }
@@ -559,7 +570,15 @@ static void dl_fail(const char *what, NgxResult r) {
 static int image2d_aspect(uint32_t w, uint32_t h, VkFormat f, VkImageUsageFlags usage, VkImageAspectFlags a,
                           VkImage *img, VmaAllocation *mem, VkImageView *view) {
     const VkCtx *c = vk_ctx();
-    VkImageCreateInfo ii = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D, .format = f,
+#ifdef __APPLE__
+    VkExportMetalObjectCreateInfoEXT em = {.sType = VK_STRUCTURE_TYPE_EXPORT_METAL_OBJECT_CREATE_INFO_EXT,
+                                           .exportObjectType = VK_EXPORT_METAL_OBJECT_TYPE_METAL_TEXTURE_BIT_EXT};
+    const void *img_next = c->has_metal_objects ? &em : NULL;
+#else
+    const void *img_next = NULL;
+#endif
+    VkImageCreateInfo ii = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .pNext = img_next,
+                            .imageType = VK_IMAGE_TYPE_2D, .format = f,
                             .extent = {w, h, 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
                             .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = usage,
                             .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
@@ -963,11 +982,12 @@ static int blit_ok(VkFormat f) {
 
 // The backend's name, at the scene's own size (native) or upscaling.
 static const char *backend_name(int b, int up) {
-    return b == BK_DLSS   ? (up ? "DLSS" : "DLAA")
-           : b == BK_XESS ? (up ? "XeSS" : "XeSS Native AA")
-           : b == BK_FSR3 ? (up ? "FSR 3" : "FSR 3 Native AA")
-           : b == BK_FSR4 ? (up ? "FSR 4" : "FSR 4 Native AA")
-                          : "off";
+    return b == BK_DLSS      ? (up ? "DLSS" : "DLAA")
+           : b == BK_XESS    ? (up ? "XeSS" : "XeSS Native AA")
+           : b == BK_FSR3    ? (up ? "FSR 3" : "FSR 3 Native AA")
+           : b == BK_FSR4    ? (up ? "FSR 4" : "FSR 4 Native AA")
+           : b == BK_METALFX ? (up ? "MetalFX" : "MetalFX Native AA")
+                             : "off";
 }
 
 // The scene camera's near and far plane distance and vertical field of view, for FSR 3's depth to view distance: the
@@ -1355,6 +1375,15 @@ static int resolve(VkExec *ex, const VkExecTarget *src) {
         int ok = vk_fsr4_evaluate(cb, &f);
         vk_exec_draw_new_cb();   // FSR 4 bound pipelines and sets of its own
         if (!ok) return 0;        // off for the rest of the run (vk_fsr4.c)
+    } else if (D.backend == BK_METALFX) {
+        MetalFxEval f = {.color = {t->image, t->format, t->width, t->height, t->level, t->base_layer},
+                         .depth = {z->image, z->format, z->width, z->height, z->level, z->base_layer},
+                         .mv = e->mv, .out = e->out, .w = w, .h = h, .ow = ow, .oh = oh,
+                         .jx = jx, .jy = jy, .reset = D.reset, .hdr = hdr};
+        int ok = vk_metalfx_evaluate(&cb, &f);
+        ex->cb = cb;
+        vk_exec_draw_new_cb();
+        if (!ok) return 0;        // off for the rest of the run (vk_metalfx.mm)
     } else if (D.backend == BK_DLSS) {
         if (!D.params && !NGX_OK(N.alloc_params(&D.params))) return dl_fail("parameter allocation", 0), 0;
         if (!e->feat) {   // the first frame of this pair, unless the pre-warm's test modes made it (vk_dlaa_warm)
@@ -1465,6 +1494,10 @@ void vk_dlaa_warm(void) {
         return;
     }
     int bk = pick();
+    if (bk == BK_METALFX) {
+        vk_metalfx_warm(scene[0], scene[1], up ? out[0] : scene[0], up ? out[1] : scene[1], hdr);
+        return;
+    }
     if (bk != BK_DLSS && bk != BK_XESS) return;
     const char *k = cfg_get("AC_UPSCALER_PREWARM");
     int mode = k && *k ? atoi(k) : 1;
@@ -1665,14 +1698,17 @@ int vk_dlaa_frame(void) {
     // menu's choices would make and free the work images per click). Without DLSS (XeSS, nothing, or DLSS failed) the
     // sizes' DLSS features go, without FSR 3 its internal images, without FSR 4 its contexts; with no temporal AA at all
     // the sizes' work images too. XeSS keeps its context until exit: making it again needs the device idle.
-    static uint32_t no_dlss, no_fsr3, no_fsr4, no_taa;
+    static uint32_t no_dlss, no_fsr3, no_fsr4, no_metalfx, no_taa;
     no_dlss = D.backend == BK_DLSS && dl_active() ? 0 : no_dlss + 1;
     no_fsr3 = D.backend == BK_FSR3 && dl_active() ? 0 : no_fsr3 + 1;
     no_fsr4 = D.backend == BK_FSR4 && dl_active() ? 0 : no_fsr4 + 1;
+    no_metalfx = D.backend == BK_METALFX && dl_active() ? 0 : no_metalfx + 1;
     no_taa = dl_active() ? 0 : no_taa + 1;
     if (no_fsr3 == OFF_PRESENTS) vk_fsr3_release();
     if (no_fsr4 == OFF_PRESENTS) vk_fsr4_trim();
+    if (no_metalfx == OFF_PRESENTS) vk_metalfx_trim();
     vk_fsr4_sweep();
+    vk_metalfx_sweep();
     if (no_dlss == OFF_PRESENTS)
         for (int i = 0; i < 3; i++)
             if (D.sizes[i].feat) retire_feature(D.sizes[i].feat), D.sizes[i].feat = NULL;
@@ -1727,7 +1763,9 @@ int vk_dlaa_choice_state(const char *up) {
     if (!strcmp(up, "off")) return res_scene_reduced() ? 1 : 0;
     if (!strcmp(up, "dlss")) return !N.tried ? 1 : N.available && !D.failed ? 0 : 2;
     if (!strcmp(up, "xess")) return !vk_xess_tried() ? 1 : vk_xess_available() ? 0 : 2;
-    if (!strcmp(up, "fsr3") || !strcmp(up, "auto")) return vk_fsr3_failed() && !can(BK_DLSS) ? 2 : 0;
+    if (!strcmp(up, "metalfx")) return vk_metalfx_available() ? 0 : 2;
+    if (!strcmp(up, "fsr3") || !strcmp(up, "auto"))
+        return vk_fsr3_failed() && !can(BK_DLSS) && !can(BK_METALFX) ? 2 : 0;
     if (!strcmp(up, "fsr4")) return !vk_fsr4_tried() ? 1 : vk_fsr4_available() ? 0 : 2;
     return 0;
 }
@@ -1830,6 +1868,7 @@ void vk_dlaa_release(void) {
     }
     vk_xess_release();
     vk_fsr4_release();
+    vk_metalfx_release();
     vk_fsr3_shutdown();
 }
 

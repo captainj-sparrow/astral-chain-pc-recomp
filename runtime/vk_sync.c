@@ -36,6 +36,8 @@ static CmdSlot *slots;
 static int nslots;
 static int cur_slot;          // the slot vk_sync_submit records into now (an index: take_slot may move slots)
 static uint64_t cur_fence;    // the value of the submission being recorded
+static VkSemaphore next_wait_sem;   // optional timeline wait for the next submission on gfx_queue (sub_lock)
+static uint64_t next_wait_val;
 
 // Shared with the completion thread (st_lock).
 static PlatMutex st_lock = PLAT_MUTEX_INIT;
@@ -359,7 +361,7 @@ static VkCommandBuffer prologue(VkCtx *c, uint64_t fence) {
     return cb;
 }
 
-VkCommandBuffer vk_sync_split(void) {
+VkCommandBuffer vk_sync_split_ex(VkSemaphore sig_sem, uint64_t sig_val, VkSemaphore wait_sem, uint64_t wait_val) {
     VkCtx *c = vk_ctx();
     VkCommandBuffer cb = slots[cur_slot].cb;
     ts_end(cb, cur_fence);
@@ -368,9 +370,19 @@ VkCommandBuffer vk_sync_split(void) {
     VkCommandBuffer pro = prologue(c, cur_fence);
     VkCommandBufferSubmitInfo cbi[2] = {{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO, .commandBuffer = pro},
                                         {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO, .commandBuffer = cb}};
+    VkSemaphoreSubmitInfo wi = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, .semaphore = next_wait_sem,
+                                .value = next_wait_val, .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT};
+    VkSemaphoreSubmitInfo sig = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, .semaphore = sig_sem,
+                                 .value = sig_val, .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT};
     VkLatencySubmissionPresentIdNV lat;
     VkSubmitInfo2 si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2, .pNext = vk_lowlat_submit_info(&lat, 1),
-                        .commandBufferInfoCount = pro ? 2 : 1, .pCommandBufferInfos = pro ? cbi : cbi + 1};
+                        .waitSemaphoreInfoCount = next_wait_sem ? 1u : 0u,
+                        .pWaitSemaphoreInfos = next_wait_sem ? &wi : NULL,
+                        .commandBufferInfoCount = pro ? 2 : 1, .pCommandBufferInfos = pro ? cbi : cbi + 1,
+                        .signalSemaphoreInfoCount = sig_sem ? 1u : 0u,
+                        .pSignalSemaphoreInfos = sig_sem ? &sig : NULL};
+    next_wait_sem = wait_sem;
+    next_wait_val = wait_val;
     ts_submitted();
     vk_queue_lock();
     VkResult r = vkQueueSubmit2(c->gfx_queue, 1, &si, VK_NULL_HANDLE);
@@ -390,6 +402,8 @@ VkCommandBuffer vk_sync_split(void) {
     rec_begin(s->cb);
     return s->cb;
 }
+
+VkCommandBuffer vk_sync_split(void) { return vk_sync_split_ex(VK_NULL_HANDLE, 0, VK_NULL_HANDLE, 0); }
 
 // Asynchronous replay (vk_backend.c): the value the next queued submission or present will signal. Values are handed
 // out in queue order and the replay thread submits them in that order, so each vk_sync_submit gets exactly its value.
@@ -430,13 +444,19 @@ uint64_t vk_sync_submit(const uint64_t *handles, int n) {
     s = &slots[cur_slot];
     VkCommandBufferSubmitInfo cbi[2] = {{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO, .commandBuffer = pro},
                                         {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO, .commandBuffer = s->cb}};
+    VkSemaphoreSubmitInfo wi = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, .semaphore = next_wait_sem,
+                                .value = next_wait_val, .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT};
     VkSemaphoreSubmitInfo sig = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, .semaphore = c->timeline,
                                  .value = fence, .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT};
     VkLatencySubmissionPresentIdNV lat;   // Reflex: the frame this submission belongs to
     VkSubmitInfo2 si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2, .pNext = vk_lowlat_submit_info(&lat, recorded),
+                        .waitSemaphoreInfoCount = next_wait_sem ? 1u : 0u,
+                        .pWaitSemaphoreInfos = next_wait_sem ? &wi : NULL,
                         .commandBufferInfoCount = (pro ? 1u : 0u) + (recorded ? 1u : 0u),
                         .pCommandBufferInfos = pro ? cbi : cbi + 1, .signalSemaphoreInfoCount = 1,
                         .pSignalSemaphoreInfos = &sig};
+    next_wait_sem = VK_NULL_HANDLE;
+    next_wait_val = 0;
     ts_submitted();
     vk_queue_lock();
     VkResult r = vkQueueSubmit2(c->gfx_queue, 1, &si, VK_NULL_HANDLE);
@@ -547,6 +567,8 @@ void vk_sync_shutdown(void) {
         free(slots);
         slots = NULL;
         nslots = 0;
+        next_wait_sem = VK_NULL_HANDLE;
+        next_wait_val = 0;
         plat_mutex_unlock(&sub_lock);
         __atomic_store_n(&started, 0, __ATOMIC_RELEASE);
     }

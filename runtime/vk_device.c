@@ -10,6 +10,10 @@
 #include <windows.h>
 #endif
 
+#ifdef __APPLE__
+#include <vulkan/vulkan_metal.h>
+#endif
+
 #include "cfg.h"
 #include "host.h"
 #include "vk.h"
@@ -100,7 +104,19 @@ static int create_instance(void) {
     if (portability) ext[n_ext++] = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
     VkApplicationInfo app = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO, .pApplicationName = "Astral Chain Recomp",
                              .pEngineName = "Astral Chain Recomp", .apiVersion = VK_API_VERSION_1_3};
-    VkInstanceCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, .pApplicationInfo = &app,
+#ifdef __APPLE__
+    // Declare intent to export MTLDevice and MTLCommandQueue via VK_EXT_metal_objects (vk_metalfx.mm).
+    VkExportMetalObjectCreateInfoEXT exp_dev = {.sType = VK_STRUCTURE_TYPE_EXPORT_METAL_OBJECT_CREATE_INFO_EXT,
+                                                .exportObjectType = VK_EXPORT_METAL_OBJECT_TYPE_METAL_DEVICE_BIT_EXT};
+    VkExportMetalObjectCreateInfoEXT exp_q = {.sType = VK_STRUCTURE_TYPE_EXPORT_METAL_OBJECT_CREATE_INFO_EXT,
+                                              .pNext = &exp_dev,
+                                              .exportObjectType = VK_EXPORT_METAL_OBJECT_TYPE_METAL_COMMAND_QUEUE_BIT_EXT};
+    const void *inst_next = &exp_q;
+#else
+    const void *inst_next = NULL;
+#endif
+    VkInstanceCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, .pNext = inst_next,
+                               .pApplicationInfo = &app,
                                .enabledExtensionCount = n_ext, .ppEnabledExtensionNames = ext,
                                .flags = portability ? VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR : 0,
                                .enabledLayerCount = validate ? 1 : 0, .ppEnabledLayerNames = layers};
@@ -266,6 +282,12 @@ static int create_device(void) {
     // A portability implementation (MoltenVK) must have its subset extension enabled (vulkan_beta.h names it).
     int portability = has_ext(ep, ne, "VK_KHR_portability_subset");
     if (portability) ext[n_ext++] = "VK_KHR_portability_subset";
+#ifdef __APPLE__
+    if (has_ext(ep, ne, VK_EXT_METAL_OBJECTS_EXTENSION_NAME)) {
+        g_vk.has_metal_objects = 1;
+        ext[n_ext++] = VK_EXT_METAL_OBJECTS_EXTENSION_NAME;
+    }
+#endif
 
     FeatureChain *c = calloc(1, sizeof *c);
     void **tail = &c->f2.pNext;

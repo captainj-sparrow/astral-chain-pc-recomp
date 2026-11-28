@@ -162,7 +162,8 @@ elif MAC:
     LINK_FLAGS = ['-mmacosx-version-min=14.4', '-Wl,-stack_size,0x1000000', "'-Wl,-rpath,@executable_path'",
                   '"-Wl,-map,$builddir/totk.map"']
     LINK_LIBS = [f'-L{BREW / "lib"}', '-lvulkan', '-lSDL3', '-lopus', '-lvpx', '-lzstd', '-lc++',
-                 '-framework CoreFoundation', '-framework CoreText', '-framework IOKit']   # platform/macos_posix.c
+                 '-framework CoreFoundation', '-framework CoreText', '-framework IOKit',
+                 '-framework Metal', '-framework MetalFX']   # platform/macos_posix.c, vk_metalfx.mm
     VMA_INCLUDE = BREW / 'include'   # vk_mem_alloc.h when Homebrew has it; else fetched below
 else:
     # -no-pie: the lifted modules' function tables (hundreds of thousands of pointers) need no load-time relocation.
@@ -329,9 +330,9 @@ RUNTIME = ROOT / 'runtime'   # --runtime: a copy of runtime/ lets a task build w
 
 def other_os(name):
     """A runtime file for another OS: Win32 ones (*_win.*, platform/win32.c, totk.rc) off Windows, the SDL window's
-    (*_sdl.*) on Windows, platform/linux.c off Linux and platform/macos*.c off macOS."""
+    (*_sdl.*) on Windows, platform/linux.c off Linux and platform/macos*.c / *.mm off macOS."""
     stem = name.rsplit('.', 1)[0]
-    darwin = stem in ('macos', 'macos_mem', 'macos_posix')
+    darwin = stem in ('macos', 'macos_mem', 'macos_posix') or name.endswith('.mm')
     if WIN:
         return stem.endswith('_sdl') or name == 'linux.c' or darwin
     if MAC:
@@ -340,9 +341,9 @@ def other_os(name):
 
 
 def runtime_sources(skip=()):
-    """Every runtime/*.c, *.cpp, platform/*.c, *.rc, the in-game menu (ui/*.cpp) and Dear ImGui of this OS except the
-    names in skip, so a task adds a file without editing this script."""
-    pats = ('*.c', '*.cpp', 'platform/*.c', '*.rc', 'ui/*.cpp', 'third_party/imgui/*.cpp',
+    """Every runtime/*.c, *.cpp, *.mm, platform/*.c, *.rc, the in-game menu (ui/*.cpp) and Dear ImGui of this OS except
+    the names in skip, so a task adds a file without editing this script."""
+    pats = ('*.c', '*.cpp', '*.mm', 'platform/*.c', '*.rc', 'ui/*.cpp', 'third_party/imgui/*.cpp',
             'third_party/imgui/backends/*.cpp')
     return sorted(p for pat in pats for p in RUNTIME.glob(pat) if p.name not in skip and not other_os(p.name))
 
@@ -429,6 +430,12 @@ def ninja_file(gen, out, mods, pool_depth, skip=(), prebuilt=False, runtime_lib=
         '  depfile = $out.d',
         '  description = CC $in',
         '',
+        'rule cc_mm',
+        '  command = $cc $rtflags -fobjc-arc -MD -MF $out.d -c $in -o $out',
+        '  deps = gcc',
+        '  depfile = $out.d',
+        '  description = OBJCXX $in',
+        '',
         'rule rc',
         f'  command = {cmd_arg(WINDRES.as_posix())} -I {cmd_path(RUNTIME)} -O coff $in -o $out',
         '  description = RC $in',
@@ -464,6 +471,8 @@ def ninja_file(gen, out, mods, pool_depth, skip=(), prebuilt=False, runtime_lib=
         if src.suffix == '.rc':   # windres writes no depfile: the files totk.rc embeds are listed by hand
             lines.append(f'build {ninja_path(o)}: rc {ninja_path(src)} | {ninja_path(RUNTIME / "astralchain.manifest")} '
                          f'{ninja_path(RUNTIME / "astralchain.ico")}')
+        elif src.suffix == '.mm':
+            lines.append(f'build {ninja_path(o)}: cc_mm {ninja_path(src)}')
         else:
             lines.append(f'build {ninja_path(o)}: cc_rt {ninja_path(src)}')
         rt.append(o)

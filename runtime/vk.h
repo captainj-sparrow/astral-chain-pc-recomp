@@ -43,7 +43,8 @@ typedef struct VkCtx {
         has_calibrated,                     // VK_KHR/EXT_calibrated_timestamps (GPU idle split in the perf line)
         has_hdr_metadata,                   // VK_EXT_hdr_metadata (vk_hdr.c vk_hdr_metadata)
         has_nv_low_latency2,                // VK_NV_low_latency2 + VK_KHR_present_id (vk_lowlat.c, Reflex)
-        has_amd_anti_lag;                   // VK_AMD_anti_lag (vk_lowlat.c, Anti-Lag 2)
+        has_amd_anti_lag,                   // VK_AMD_anti_lag (vk_lowlat.c, Anti-Lag 2)
+        has_metal_objects;                  // VK_EXT_metal_objects (vk_metalfx.mm, MoltenVK on macOS)
     // Feedback loops (maxwell.md 1.9, vk_exec_draw.c feedback_prepare): a draw samples a target of its open pass that
     // an earlier draw of the pass wrote. AC_FEEDBACK=0: VK_FEEDBACK_OFF (sampled in GENERAL without a barrier, the
     // old behaviour); VK_FEEDBACK_LAYOUT with VK_EXT_attachment_feedback_loop_layout and dynamicRenderingLocalRead
@@ -562,6 +563,10 @@ int vk_exec_record(VkCommandBuffer cb, const uint64_t *handles, int n, uint64_t 
 // batch) without a signal, and returns a new begun one for the rest of the submission. The submission's timeline value
 // is signalled by its last part, whose signal covers every earlier part in submission order.
 VkCommandBuffer vk_sync_split(void);
+// As vk_sync_split, with an optional timeline semaphore signalled by the submitted part (sig_sem = sig_val) and an
+// optional timeline semaphore waited on by the next submission on gfx_queue (wait_sem = wait_val); used by MetalFX
+// interop (vk_metalfx.mm) to bracket its MTLCommandBuffer with an exported MTLSharedEvent.
+VkCommandBuffer vk_sync_split_ex(VkSemaphore sig_sem, uint64_t sig_val, VkSemaphore wait_sem, uint64_t wait_val);
 // Runs fn(arg) on the completion thread once fence is done on the GPU (event writes, counter reports, sync state).
 // Callbacks run in the order they were added, after those of earlier values; a value already done runs at once there.
 void vk_completion_add(uint64_t fence, void (*fn)(void *), void *arg);
