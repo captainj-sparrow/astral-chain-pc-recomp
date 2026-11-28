@@ -1,5 +1,5 @@
 // Platform layer: threads, time, locks, atomics, files. Runtime code calls this instead of the OS; one implementation
-// per OS (win32.c, linux.c). The FP control register lives in the per-architecture fp_*.h headers, inline, because
+// per OS (win32.c, linux.c, macos*.c). The FP control register lives in the per-architecture fp_*.h headers, inline, because
 // lifted FP code touches it on every operation.
 #pragma once
 #include <stddef.h>
@@ -102,6 +102,8 @@ uint32_t plat_cpu_mhz(void);
 static inline void plat_pause(void) {     // spin-wait hint
 #if defined(__x86_64__) || defined(_M_X64)
     _mm_pause();
+#elif defined(__aarch64__)
+    __asm__ volatile("isb");   // YIELD is a no-op on most ARM64 cores; ISB stalls the pipeline for a moment
 #endif
 }
 
@@ -206,6 +208,13 @@ static inline void *plat_casp(void *volatile *p, void *xchg, void *cmp) {
 
 // ---- virtual memory: ranges reserved at fixed addresses below 2^39, their pages committed, decommitted and protected
 // at 4 KiB granularity.
+//
+// The OS enforces protection per host page, plat_mem_grain bytes: 4 KiB on Windows and Linux, 16 KiB on Apple
+// Silicon. There each host page takes the most permissive state of its 4 KiB pages, so an access to a page that is
+// reserved, inaccessible or read-only but shares a host page with a more permissive one does not fault (a reserved
+// page reads zero). plat_mem_state and plat_mem_written still answer per 4 KiB page. Code that needs the fault (a read
+// that fills a page, an inaccessible range whose first access fetches it) works in whole grains.
+uint64_t plat_mem_grain(void);
 enum { PLAT_PROT_NONE, PLAT_PROT_READ, PLAT_PROT_RW };
 enum { PLAT_MEM_FREE = -2, PLAT_MEM_RESERVED = -1 };   // plat_mem_state besides PLAT_PROT_* for committed pages
 // Reserves [addr, addr + n) inaccessible, exactly there: 0 when any of it is taken. watch: writes to its pages are

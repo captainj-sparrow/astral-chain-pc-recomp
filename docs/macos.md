@@ -96,10 +96,50 @@ emitted all 61,454 discovered functions with no unsupported instructions. All 12
 generated chunks and both dispatch tables compile to Mach-O ARM64 objects at
 `-O1`. This does not yet link a game executable or verify scheduling or gameplay.
 
-- `runtime/platform/` currently has Windows and Linux backends. Darwin needs its
-  own memory tracking, thread interruption and fiber implementations; Linux's
-  userfaultfd/PAGEMAP_SCAN cannot be used directly.
 - The build selects x86 flags and Linux linking on every non-Windows host.
+
+## Darwin platform backend
+
+`runtime/platform/macos.c` (scheduling), `macos_mem.c` (memory and faults) and
+`macos_posix.c` (files and processes) implement `platform.h` for Apple Silicon,
+macOS 14.4 or newer (`os_sync_wait_on_address`). What differs from Linux:
+
+- Locks and condition variables are linux.c's one-word futex design on
+  `os_sync_wait_on_address`: zero-initialised, no allocation, nothing to destroy.
+- Priorities are QoS classes, which also choose performance or efficiency cores.
+  Another thread can only be raised, with a QoS override that ends when the thread
+  next sets its own priority (vk_pipeline.c raises a worker a waiter depends on).
+- Thread interruption suspends the thread through Mach; no handler runs on the
+  game's fiber stack.
+- Guest pages are 4 KiB and host pages 16 KiB. A host page takes the most
+  permissive state of its 4 KiB pages, so nothing that should run faults; the
+  4 KiB state is kept in software for `plat_mem_state`. `plat_mem_grain` tells the
+  runtime the host page size.
+- There is no GetWriteWatch or userfaultfd. A committed, clean, read-write host
+  page of a watched reservation is kept read-only; its first write faults, marks
+  it written and opens it. A query with reset arms it again. Writes are seen per
+  16 KiB, so a written host page reports its four 4 KiB pages. Every protection
+  change of a host page takes its lock bit, so a query's re-arm and a fault's
+  disarm cannot interleave.
+- `plat_mem_replace` moves the staging pages in with `mach_vm_remap`
+  (`VM_FLAGS_OVERWRITE`), atomic like linux.c's `mremap`.
+- Protection faults arrive as SIGBUS, and read, write or fetch comes from the
+  exception syndrome (ESR) in the thread state.
+- Data that must reach the disk uses `F_FULLFSYNC`; children get only the
+  descriptors named in their file actions (`POSIX_SPAWN_CLOEXEC_DEFAULT`).
+
+`tests/macos_platform_test.c` checks the semantics the runtime relies on, not just
+the calls: fibers moving between host threads with their FP state, interruption,
+4 KiB states inside a host page, read and write faults reaching the right hook at
+the faulting byte, decommitted pages reading zero beside kept neighbours, replace,
+and the write watch. Its stress part has four threads writing a watched range
+while queries with reset run; a write that completed between two queries must be
+in the second one's list. Build and run it as its header says.
+
+Observed on the M6, 2026-11-28: 116 checks pass; the stress part ran about 75,000
+faulting writes against 23,000 queries with none missed. Removing the host-page
+lock from the fault handler makes it report about 10 million missed writes, so the
+stress part does detect that race.
 
 ## References
 

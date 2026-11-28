@@ -1084,6 +1084,8 @@ int plat_mem_reserve(uint64_t addr, uint64_t n, int watch) {
     return ok;
 }
 
+uint64_t plat_mem_grain(void) { return PG; }   // x86-64 pages are 4 KiB
+
 void *plat_mem_alloc(size_t n) {
     void *p = mmap(NULL, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
     return p == MAP_FAILED ? NULL : p;

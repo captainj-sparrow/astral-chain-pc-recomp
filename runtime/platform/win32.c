@@ -595,6 +595,8 @@ int plat_mem_reserve(uint64_t addr, uint64_t n, int watch) {
     return p != NULL;
 }
 
+uint64_t plat_mem_grain(void) { return 4096; }   // VirtualProtect works per 4 KiB page
+
 void *plat_mem_alloc(size_t n) { return VirtualAlloc(NULL, n, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); }
 
 int plat_mem_commit(uint64_t addr, size_t n) {
