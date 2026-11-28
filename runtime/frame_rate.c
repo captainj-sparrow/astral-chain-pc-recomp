@@ -33,6 +33,7 @@
 #include "host.h"
 #include "layout.h"
 #include "platform/platform.h"
+#include "simd.h"   // VSF32 and FP_SETS (cpu.h includes it only off AArch64)
 
 #define STEP_MAX_S (1.0 / 15.0)    // longest step; a longer frame slows the game down
 #define STEP_RESET_S 0.25          // a gap this long (loading, a debugger) restarts the average
