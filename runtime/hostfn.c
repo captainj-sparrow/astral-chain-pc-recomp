@@ -34,6 +34,11 @@ __attribute__((section(".ovr$a"), used)) static const RtHostEntry ovr_start[1];
 __attribute__((section(".ovr$z"), used)) static const RtHostEntry ovr_stop[1];
 __attribute__((section(".obs$a"), used)) static const RtHostEntry obs_start[1];
 __attribute__((section(".obs$z"), used)) static const RtHostEntry obs_stop[1];
+#elif defined(__APPLE__)
+// Mach-O: ld64 resolves section$start$<segment>$<section> and section$end$... to the section's bounds, and to one
+// address (an empty table) when no object file has the section.
+extern const RtHostEntry ovr_start[] __asm("section$start$__DATA$ac_ovr"), ovr_stop[] __asm("section$end$__DATA$ac_ovr");
+extern const RtHostEntry obs_start[] __asm("section$start$__DATA$ac_obs"), obs_stop[] __asm("section$end$__DATA$ac_obs");
 #else
 // ELF: the linker defines __start_<section> and __stop_<section> around a section named like a C identifier. A
 // build without observers has no such section, and both bounds are then NULL.

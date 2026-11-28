@@ -12,6 +12,7 @@ Needs no game files. Usage: excl_mt.py [--runtime DIR] [--threads N] [--iters K]
 """
 import argparse
 import os
+import platform
 import subprocess
 import sys
 import tempfile
@@ -153,7 +154,8 @@ def main():
         src = Path(tmp) / 'excl_mt.c'
         exe = Path(tmp) / ('excl_mt.exe' if os.name == 'nt' else 'excl_mt')
         src.write_text(SRC)
-        subprocess.check_call([compiler(), '-O2', '-march=x86-64-v3', '-fno-strict-aliasing', '-I', str(args.runtime),
+        arch = ['-march=x86-64-v3'] if platform.machine().lower() in ('amd64', 'x86_64') else []
+        subprocess.check_call([compiler(), '-O2', *arch, '-fno-strict-aliasing', '-I', str(args.runtime),
                                str(src), '-o', str(exe), '-lpthread'], env=env)
         return subprocess.run([str(exe), str(args.threads), str(args.iters)], env=env).returncode
 

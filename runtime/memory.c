@@ -25,7 +25,8 @@
 #define STACK_SIZE 0x10000000ull
 #define HEAP_OFF (STACK_OFF + STACK_SIZE + 0x10000000ull)
 #define HEAP_CAP (4 * GiB)
-#define ALIAS_SIZE (64 * GiB)
+#define ALIAS_SIZE (64 * GiB)      // Horizon's for a 39-bit address space
+#define ALIAS_MIN (8 * GiB)        // the smallest one mem_init settles for (the game maps the pool, about 3.3 GiB)
 #define ALIAS_ALIGN (4 * GiB)
 #define ALIAS_PAGES (ALIAS_SIZE / PAGE)
 #define DEFAULT_POOL 0xCD500000ull       // retail application pool
@@ -47,6 +48,7 @@ enum { ATTR_PERMISSION_LOCKED = 16 };
 #define R_LIMIT_REACHED 0x10801u
 
 static RtGuestLayout L;
+static uint64_t low_base;           // the stack and heap block: L.aslr starts there unless the modules lie below it
 static uint64_t mods_lo, mods_hi;   // fixed module window
 static PlatMutex lock = PLAT_MUTEX_INIT;
 static uint64_t heap_size, alias_bytes;
@@ -78,8 +80,8 @@ static volatile int64_t frz_count[4];   // freezes; thaws by a write fault, by m
 
 static int watched(uint64_t addr, uint64_t size) {
     const RtGuestLayout *g = &L;
-    return (addr >= g->aslr.base && size <= LOW_SIZE && addr - g->aslr.base <= LOW_SIZE - size) ||
-           (addr >= g->alias.base && size <= ALIAS_SIZE && addr - g->alias.base <= ALIAS_SIZE - size);
+    return (addr >= low_base && size <= LOW_SIZE && addr - low_base <= LOW_SIZE - size) ||
+           (addr >= g->alias.base && size <= g->alias.size && addr - g->alias.base <= g->alias.size - size);
 }
 
 // frz_lock held exclusively. why: 1 a write fault, 2 mem_thaw (holds the region thawed), 3 a mapping change here.
@@ -143,8 +145,10 @@ static int hold_release_locked(uint64_t a, uint64_t n) {
     return any;
 }
 
+// A hold covers whole host pages (platform.h plat_mem_grain): a smaller one shares its host page with accessible
+// memory there, and its first access would not fault.
 int mem_hold(uint64_t a, uint64_t n, MemFetch fetch, void *ctx) {
-    if (!n || ((a | n) & (PAGE - 1)) || !watched(a, n)) return 0;
+    if (!n || ((a | n) & (PAGE - 1)) || ((a | n) & (plat_mem_grain() - 1)) || !watched(a, n)) return 0;
     plat_mutex_lock(&frz_lock);
     for (int i = 0; i < nholds; i++)
         if (holds[i].lo == a && holds[i].hi == a + n && holds[i].fetch == fetch && holds[i].ctx == ctx) {
@@ -323,13 +327,24 @@ void mem_init(void) {
     if (!reserve_at(RT_HOSTFN_BASE, RT_HOSTFN_SIZE, 0)) reexec_or_fail("the host-function window");
 
     // Stack and heap block, then the alias region above it, both searched below the module window.
-    uint64_t low = 0, alias = 0;
+    uint64_t low = 0, alias = 0, alias_size = ALIAS_SIZE;
     for (uint64_t at = LOW_SEARCH_FROM; at + LOW_SIZE <= mods_lo && !low; at += GiB)
         if (reserve_at(at, LOW_SIZE, 1)) low = at;
-    if (!low) reexec_or_fail("a 6 GiB stack and heap block below 2^39");
+    if (!low) {
+        // Apple Silicon has no such space below the modules (0x70_0000_0000): the shared cache fills 6-63 GiB, the GPU
+        // carve-out takes 64-448 GiB, and libmalloc reserves about 24 GiB at a random place in the 64 GiB left below
+        // 2^39 before main runs. As MacNativeGames does on macOS 27 (games/totk/runtime/services.c), the block and an
+        // alias region right after it go into one free hole anywhere below 2^39, the alias region shrinking in 4 GiB
+        // steps until they fit; a fresh process (reexec_or_fail) gets libmalloc's reservation elsewhere.
+        for (uint64_t g = ALIAS_SIZE; g >= ALIAS_MIN && !low; g -= 4 * GiB)
+            for (uint64_t at = LOW_SEARCH_FROM; at + LOW_SIZE + g <= RT_ADDRESS_LIMIT && !low; at += GiB)
+                if (reserve_at(at, LOW_SIZE + g, 1)) low = at, alias = at + LOW_SIZE, alias_size = g;
+        if (!low) reexec_or_fail("a 6 GiB stack and heap block and an alias region of 8 GiB or more below 2^39");
+    }
     for (uint64_t at = align_up(low + LOW_SIZE, ALIAS_ALIGN); at + ALIAS_SIZE <= mods_lo && !alias; at += ALIAS_ALIGN)
         if (reserve_at(at, ALIAS_SIZE, 1)) alias = at;
     if (!alias) reexec_or_fail("a 64 GiB alias region below 2^39");
+    low_base = low;
 
     plat_mem_fault_hook(thaw_fault);   // before the crash handler
     plat_mem_read_fault_hook(hold_read_fault);
@@ -339,11 +354,12 @@ void mem_init(void) {
     // depends on AC_APP_POOL and on the resolution settings (resolution.c decides them once, on this first call).
     cfg_init();
     const char *pool = cfg_get("AC_APP_POOL");
+    uint64_t aslr = low < mods_lo ? low : mods_lo;   // the modules are inside the ASLR region, as on Horizon
     L = (RtGuestLayout){
-        .aslr = {low, RT_ADDRESS_LIMIT - low},
+        .aslr = {aslr, RT_ADDRESS_LIMIT - aslr},
         .stack = {low + STACK_OFF, STACK_SIZE},
         .heap = {low + HEAP_OFF, HEAP_CAP},
-        .alias = {alias, ALIAS_SIZE},
+        .alias = {alias, alias_size},
         .kernel = {RT_KERNEL_BASE, RT_KERNEL_SIZE},
         .hostfn = {RT_HOSTFN_BASE, RT_HOSTFN_SIZE},
         .pool = pool ? strtoull(pool, NULL, 0) : DEFAULT_POOL + res_heap_extra_bytes(),   // resolution.c
@@ -613,7 +629,7 @@ static void taken_gap(uint64_t a, uint64_t *base, uint64_t *size) {
     uint64_t lo = 0, hi = RT_ADDRESS_LIMIT;
     RtRange known[3 + MOD_COUNT + 2];
     int n = 0;
-    known[n++] = (RtRange){L.aslr.base, LOW_SIZE};
+    known[n++] = (RtRange){low_base, LOW_SIZE};
     known[n++] = L.alias;
     known[n++] = L.kernel;
     known[n++] = L.hostfn;
@@ -645,18 +661,18 @@ static uint64_t run_start(const uint8_t *p, uint64_t i, uint8_t v) {   // first 
 
 uint32_t mem_query(uint64_t a, RtMemoryInfo *out) {
     RtMemoryInfo r = {.base = a & ~(PAGE - 1), .size = PAGE};
-    uint64_t low = L.aslr.base;
+    uint64_t low = low_base;
     plat_mutex_lock_shared(&lock);
     int mi;
     if (a >= RT_ADDRESS_LIMIT) {
         r.base = RT_ADDRESS_LIMIT;
         r.size = 0 - RT_ADDRESS_LIMIT;
         r.state = ST_INACCESSIBLE;
-    } else if (a < low) {
+    } else if (a < L.aslr.base) {
         r.base = 0;
-        r.size = low;
+        r.size = L.aslr.base;
         r.state = ST_FREE;
-    } else if (a < low + LOW_SIZE) {
+    } else if (a - low < LOW_SIZE) {
         uint64_t heap = L.heap.base;
         if (a >= heap && a < heap + heap_size) {
             r = (RtMemoryInfo){.base = heap, .size = heap_size, .state = ST_NORMAL, .perm = PERM_RW};
@@ -668,7 +684,7 @@ uint32_t mem_query(uint64_t a, RtMemoryInfo *out) {
     } else if (a - L.alias.base < L.alias.size) {
         uint64_t p = (a - L.alias.base) / PAGE;
         uint8_t v = alias_pages[p];
-        uint64_t s = run_start(alias_pages, p, v), e = run_end(alias_pages, p, ALIAS_PAGES, v);
+        uint64_t s = run_start(alias_pages, p, v), e = run_end(alias_pages, p, L.alias.size / PAGE, v);
         r = (RtMemoryInfo){.base = L.alias.base + s * PAGE, .size = (e - s) * PAGE, .state = v ? ST_NORMAL : ST_FREE,
                            .perm = v ? PERM_RW : PERM_NONE};
     } else if ((mi = module_index(a)) >= 0) {

@@ -86,9 +86,28 @@
 //   of a Deck: it leaves the L3 at 16 MiB, and the largest gains were misaligned rep movsb copies, slow on Zen 4.
 // Not measured: a real Steam Deck (Zen 2, 4 MiB of L3), a desktop, and a --release-opt build, whose PGO and ThinLTO
 // make the lifted functions (generated code) faster and the gain smaller.
-#include <immintrin.h>
 #include <stdint.h>
 #include <string.h>
+#if defined(__aarch64__)
+// The SSE2 operations below on AdvSIMD, as the x86 build uses them: a byte compare gives 0xff for each equal byte, and
+// movemask packs each byte's top bit into a 16-bit mask (byte i in bit i).
+#include <arm_neon.h>
+typedef uint8x16_t __m128i;
+static inline __m128i _mm_loadu_si128(const __m128i *p) { return vld1q_u8((const uint8_t *)p); }
+static inline __m128i _mm_load_si128(const __m128i *p) { return vld1q_u8((const uint8_t *)p); }
+static inline void _mm_storeu_si128(__m128i *p, __m128i v) { vst1q_u8((uint8_t *)p, v); }
+static inline __m128i _mm_cmpeq_epi8(__m128i a, __m128i b) { return vceqq_u8(a, b); }
+static inline __m128i _mm_and_si128(__m128i a, __m128i b) { return vandq_u8(a, b); }
+static inline __m128i _mm_setzero_si128(void) { return vdupq_n_u8(0); }
+static inline __m128i _mm_set1_epi8(char v) { return vdupq_n_u8((uint8_t)v); }
+static inline int _mm_movemask_epi8(__m128i v) {
+    static const int8_t lane[16] = {0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7};
+    uint8x16_t bits = vshlq_u8(vshrq_n_u8(v, 7), vld1q_s8(lane));
+    return vaddv_u8(vget_low_u8(bits)) | vaddv_u8(vget_high_u8(bits)) << 8;
+}
+#else
+#include <immintrin.h>
+#endif
 
 #include "cfg.h"
 #include "gfx.h"

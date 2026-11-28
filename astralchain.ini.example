@@ -267,10 +267,11 @@
 # ao = off
 
 # The 3D scene's temporal upscaler, in place of the game's anti-aliasing: off (the default), auto (DLSS where it can
-# run, FSR 3 elsewhere), dlss (NVIDIA DLSS: NVIDIA RTX GPUs, with nvngx_dlss.dll from NVIDIA's DLSS SDK next to
+# run, MetalFX on macOS, FSR 3 elsewhere), dlss (NVIDIA DLSS: NVIDIA RTX GPUs, with nvngx_dlss.dll from NVIDIA's DLSS SDK next to
 # astralchain.exe; on Linux the SDK's libnvidia-ngx-dlss.so.<version> next to astralchain, run through the NVIDIA
 # driver's libnvidia-ngx.so.1), xess (Intel XeSS: most GPUs of the last years, with libxess.dll next to astralchain.exe, which the
-# installer puts there, and the Microsoft Visual C++ runtime), fsr3 (AMD FSR 3: any GPU, built in) or fsr4 (AMD FSR 4,
+# installer puts there, and the Microsoft Visual C++ runtime), metalfx (Apple MetalFX Temporal Scaler: macOS Apple
+# Silicon via MoltenVK VK_EXT_metal_objects), fsr3 (AMD FSR 3: any GPU, built in) or fsr4 (AMD FSR 4,
 # the machine-learning upscaler: AMD Radeon RX 6000 series or newer, and Ryzen processors with RDNA 2 or newer
 # graphics; the installer puts AMD's amd_fidelityfx_loader_vk.dll and amd_fidelityfx_upscaler_vk.dll next to
 # astralchain.exe, on Linux with libffx_vk_linux.so, which runs them there, and the menu offers it on those GPUs only;

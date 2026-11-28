@@ -8,6 +8,9 @@ many other astralchain.exe and ninja.exe processes ran, because timings taken ne
     python tools/run_game.py build/v143 --save <backup> --script <input.txt> --seconds 18 --tag fight --quiet \
         --env AC_TRACE=perf,sched
 
+    python tools/run_game.py build/v101 --fresh --script tools/input/new_game.txt --seconds 90 --tag new-game \
+        --shot build/new-game.png                      # title to the motorway on an empty profile
+
 <backup> is a folder of build/save-backup; --script defaults to tools/input/load_save.txt (title screen to the first
 save slot), and a recording made with AC_INPUT_RECORD replays the same way.
 """
@@ -32,16 +35,21 @@ SAVES = ROOT / 'build' / 'save-backup'
 SLOTS = ROOT / 'build' / 'run-slots'
 GPU_LOCK = ROOT / 'build' / '.gpu-run.lock'
 LOCK_OFFSET = 1 << 16   # Windows byte-range lock sits past the holder text, so other processes can still read it
+EXE = 'astralchain.exe' if os.name == 'nt' else 'astralchain'
+NINJA = 'ninja.exe' if os.name == 'nt' else 'ninja'
 MAX_RUNS = int(os.environ.get('AC_MAX_RUNS', '3'))   # more parallel runs exhaust device memory (16 GB RX 9070)
 
 
 def count(image):
+    if os.name != 'nt':
+        out = subprocess.run(['pgrep', '-x', image], capture_output=True, text=True).stdout
+        return len(out.split())
     out = subprocess.run(['tasklist', '/FI', f'IMAGENAME eq {image}', '/NH'], capture_output=True, text=True).stdout
     return sum(line.lower().startswith(image) for line in out.splitlines())
 
 
 def busy():
-    return count('astralchain.exe') + count('ninja.exe')
+    return count(EXE) + count(NINJA)
 
 
 def keep_in_background(proc):
@@ -75,11 +83,9 @@ def take_slot():
     while True:
         for i in range(MAX_RUNS):
             f = open(SLOTS / f'slot{i}.lock', 'a+b')
-            try:
-                msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+            if try_lock(f):
                 return f
-            except OSError:
-                f.close()
+            f.close()
         time.sleep(5)
 
 
@@ -165,6 +171,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('exe_dir', type=Path, help='build directory holding astralchain.exe')
     ap.add_argument('--profile', type=Path, help='profile to copy; default: build/profile-<exe dir name>, else build/profile')
+    ap.add_argument('--fresh', action='store_true',
+                    help='start from an empty profile, no save and no settings (tools/input/new_game.txt)')
     ap.add_argument('--save', help='directory name under build/save-backup; default: the profile as it is')
     ap.add_argument('--script', type=Path, default=ROOT / 'tools' / 'input' / 'load_save.txt', help='AC_INPUT_SCRIPT')
     ap.add_argument('--seconds', type=float, required=True,
@@ -188,7 +196,11 @@ def main():
             while busy():
                 time.sleep(10)
         prof = exe_dir / f'prof-{a.tag}'
-        profile_copy(profile_of(exe_dir, a.profile), prof, a.save)
+        if a.fresh:
+            shutil.rmtree(prof, ignore_errors=True)
+            prof.mkdir(parents=True)
+        else:
+            profile_copy(profile_of(exe_dir, a.profile), prof, a.save)
 
         env = dict(os.environ, AC_ASSUME_FOCUS='1', AC_INPUT='none', AC_INPUT_SCRIPT=str(a.script.resolve()))
         if not a.show:
@@ -196,20 +208,20 @@ def main():
         for kv in a.env:
             k, _, v = kv.partition('=')
             env[k] = v
-        args = [str(exe_dir / 'astralchain.exe'), '--profile', str(prof), '--seconds', str(a.seconds)]
+        args = [str(exe_dir / EXE), '--profile', str(prof), '--seconds', str(a.seconds)]
         if a.shot:
             args += ['--shot', str(a.shot.resolve())]
         try:
             with open(log, 'w', encoding='utf-8', errors='replace') as f:
-                f.write(f'run_game: others running before: astralchain.exe {count("astralchain.exe")}, ninja.exe {count("ninja.exe")}\n')
+                f.write(f'run_game: others running before: {EXE} {count(EXE)}, {NINJA} {count(NINJA)}\n')
                 f.flush()
                 start = time.time()
                 proc = subprocess.Popen(args, cwd=exe_dir, env=env, stdout=f, stderr=subprocess.STDOUT)
-                if not a.show:
+                if not a.show and os.name == 'nt':   # elsewhere AC_BACKGROUND_WINDOW alone
                     threading.Thread(target=keep_in_background, args=(proc,), daemon=True).start()
                 rc = proc.wait()
                 f.write(f'run_game: rc={rc} wall={time.time() - start:.0f}s; others running after: '
-                        f'astralchain.exe {count("astralchain.exe")}, ninja.exe {count("ninja.exe")}\n')
+                        f'{EXE} {count(EXE)}, {NINJA} {count(NINJA)}\n')
         finally:
             shutil.rmtree(prof, ignore_errors=True)
     finally:

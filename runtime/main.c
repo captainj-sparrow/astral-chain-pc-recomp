@@ -291,12 +291,16 @@ static double now_s(void) { return (double)plat_now_ns() / 1e9; }
 static volatile int host_probe_hits;
 static void host_probe(Cpu *c) { host_probe_hits++; c->x[0] = 42; }
 
-// The instruction set build_game.py --cpu compiled for: v3 (AVX2/FMA/BMI2, the default) or v2 (SSE4.2/POPCNT).
+// The instruction set build_game.py --cpu compiled for: v3 (AVX2/FMA/BMI2, the default) or v2 (SSE4.2/POPCNT). Every
+// ARM64 host has what the lifted code needs (AdvSIMD and FP are part of ARMv8-A).
 #ifndef RT_CPU_LEVEL
 #define RT_CPU_LEVEL 3
 #endif
 
 static void check_cpu(void) {
+#if defined(__aarch64__)
+    printf("cpu: ARMv8-A (AdvSIMD, FP) present\n");
+#else
     __builtin_cpu_init();
 #if RT_CPU_LEVEL >= 3
     int ok = __builtin_cpu_supports("avx2") && __builtin_cpu_supports("fma") && __builtin_cpu_supports("bmi2");
@@ -306,6 +310,7 @@ static void check_cpu(void) {
     int ok = __builtin_cpu_supports("sse4.2") && __builtin_cpu_supports("popcnt");
     printf("cpu: x86-64-v2 (SSE4.2, POPCNT) %s\n", ok ? "present" : "MISSING");
     CHECK(ok, "the lifted code is built for x86-64-v2");
+#endif
 #endif
 }
 
@@ -333,7 +338,11 @@ static void check_layout(void) {
            (unsigned long long)g->aslr.base, (unsigned long long)g->aslr.size, (unsigned long long)g->stack.base,
            (unsigned long long)g->heap.base, (unsigned long long)g->alias.base, (unsigned long long)g->alias.size,
            (unsigned long long)g->kernel.base, (unsigned long long)g->hostfn.base);
-    CHECK(g->alias.base + g->alias.size <= lay[0].base && g->heap.base + g->heap.size <= g->alias.base,
+    // The stack and heap block and the alias region above it lie below the modules, or (Apple Silicon, memory.c) above
+    // the host-function window; the ASLR region holds them all.
+    CHECK((g->alias.base + g->alias.size <= lay[0].base || g->stack.base >= g->hostfn.base + g->hostfn.size) &&
+              g->heap.base + g->heap.size <= g->alias.base && g->aslr.base <= lay[0].base &&
+              g->aslr.base <= g->stack.base && g->aslr.base + g->aslr.size == RT_ADDRESS_LIMIT,
           "guest regions overlap");
 }
 
@@ -510,7 +519,7 @@ static void portable_paths(RtConfig *c) {
     c->profile = portable_path(exe, "AC_PROFILE_DIR", "profile", NULL, pp_profile, sizeof pp_profile, c->profile);
 }
 
-int main(int argc, char **argv) {
+static int main_body(int argc, char **argv) {
     mem_init();   // first: claim the guest address space before anything else can land there; reads astralchain.ini
     // A restart from the settings menu (gfx_present.c gfx_window_closed) starts this process while the one it replaces
     // is still exiting: its log, RomFS and saves are free once it is gone.
@@ -603,4 +612,15 @@ int main(int argc, char **argv) {
     if (!strcmp(mode, "--warm-shaders")) return vk_pipeline_warm_shaders();
     if (!strcmp(mode, "--boot")) { cfg.boot = 1; rt_boot(); return 0; }
     return usage(argv[0]);
+}
+
+// macOS runs AppKit (the window) on the first thread only: the program runs on a thread of its own (platform.h). The
+// guest address space is claimed before that thread's stack is mapped.
+int main(int argc, char **argv) {
+#ifdef __APPLE__
+    mem_init();
+    plat_main_handoff(main_body, argc, argv);
+#else
+    return main_body(argc, argv);
+#endif
 }
