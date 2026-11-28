@@ -273,6 +273,100 @@ static void intr_tests(void) {
     CHECK(1, "thread ran on after resume");
 }
 
+// ---- redirection (kern_ap_stub's path on ARM64): a thread sent through a detour that ends with plat_intr_continue goes
+// on with every register as it was. The target loop keeps values in x16, x17, x30 and v31 and checks them, and the
+// flags between a compare and its branch, on every iteration.
+typedef struct { volatile uint64_t stop, fail, iters; } ApLoop;
+uint64_t ap_test_rip, ap_test_hits;   // read by ap_test_stub (assembly)
+void ap_target(ApLoop *l);
+void ap_target_end(void);
+void ap_test_stub(void);
+__asm__(".text\n"
+        ".globl _ap_target\n.globl _ap_target_end\n.p2align 2\n"
+        "_ap_target:\n"
+        "    mov x9, x30\n"
+        "    mov x30, #0x1234\n"
+        "    mov x16, #0\n"
+        "    mvn x17, x16\n"
+        "    movi v31.16b, #0x5a\n"
+        "    mov x13, #0x1234\n"
+        "    mov x14, #0x5a5a\n"
+        "    movk x14, #0x5a5a, lsl #16\n"
+        "    movk x14, #0x5a5a, lsl #32\n"
+        "    movk x14, #0x5a5a, lsl #48\n"
+        "1:  add x16, x16, #1\n"
+        "    sub x17, x17, #1\n"
+        "    add x10, x16, x17\n"
+        "    cmn x10, #1\n"            // Z set while x16 + x17 == -1
+        "    b.ne 2f\n"
+        "    cmp x30, x13\n"
+        "    b.ne 2f\n"
+        "    umov x11, v31.d[1]\n"
+        "    cmp x11, x14\n"
+        "    b.ne 2f\n"
+        "    str x16, [x0, #16]\n"
+        "    ldr x12, [x0]\n"
+        "    cbz x12, 1b\n"
+        "    mov x30, x9\n"
+        "    ret\n"
+        "2:  str x16, [x0, #8]\n"
+        "    mov x30, x9\n"
+        "    ret\n"
+        "_ap_target_end:\n"
+        "    nop\n"
+        ".globl _ap_test_stub\n.p2align 2\n"
+        "_ap_test_stub:\n"
+        "    sub sp, sp, #848\n"
+        "    stp x0, x1, [sp]\n"
+        "    adrp x0, _ap_test_rip@PAGE\n"
+        "    ldr x0, [x0, _ap_test_rip@PAGEOFF]\n"
+        "    str x0, [sp, #712]\n"       // the continue slot: entry sp - PLAT_INTR_SLOT
+        "    adrp x0, _ap_test_hits@PAGE\n"
+        "    add x0, x0, _ap_test_hits@PAGEOFF\n"
+        "    ldr x1, [x0]\n"
+        "    add x1, x1, #1\n"
+        "    str x1, [x0]\n"
+        "    ldp x0, x1, [sp]\n"
+        "    add sp, sp, #848\n"
+        "    b _plat_intr_continue\n");
+
+typedef struct { ApLoop *loop; PlatIntr *intr; atomic_int ready; } ApArg;
+static void ap_thread(void *arg) {
+    ApArg *a = arg;
+    a->intr = plat_intr_self();
+    atomic_store(&a->ready, 1);
+    ap_target(a->loop);
+    while (atomic_load(&a->ready) != 2) plat_yield();   // the handle outlives the last interruption
+    plat_intr_free(a->intr);
+}
+
+static void redirect_tests(void) {
+    plat_crash_hook(NULL);   // installs the handler that serves plat_intr_continue
+    static ApLoop loop;
+    ApArg a = {&loop, NULL, 0};
+    PlatThread *t = plat_thread_new(ap_thread, &a, "ap-target");
+    while (!atomic_load(&a.ready)) plat_yield();
+    int sent = 0, stops = 0;
+    for (uint64_t t0 = plat_now_ns(); plat_now_ns() - t0 < 300000000ull && !loop.fail;) {
+        uint64_t pc, sp;
+        if (!plat_intr_stop(a.intr, &pc, &sp)) continue;
+        stops++;
+        int in = pc >= (uintptr_t)ap_target && pc < (uintptr_t)ap_target_end;
+        if (in) ap_test_rip = pc, sent++;
+        plat_intr_resume(a.intr, in ? (uint64_t)(uintptr_t)ap_test_stub : 0);
+        plat_wait_ns(20000);
+    }
+    loop.stop = 1;
+    atomic_store(&a.ready, 2);
+    plat_thread_join(t);
+    printf("redirection: %d stops, %d detours, %llu arrived, %llu iterations\n", stops, sent,
+           (unsigned long long)ap_test_hits, (unsigned long long)loop.iters);
+    CHECK(!loop.fail, "registers and flags intact after detours (failed at iteration %llu)",
+          (unsigned long long)loop.fail);
+    CHECK(sent > 100 && ap_test_hits == (uint64_t)sent, "every detour ran and came back (%d sent, %llu ran)", sent,
+          (unsigned long long)ap_test_hits);
+}
+
 // ---- fibers
 
 typedef struct { PlatFiber *back; uint64_t seq; uint32_t fpcr, fpsr; } FiberCtx;
@@ -630,6 +724,7 @@ int main(void) {
     printf("host page size: %ld\n", sysconf(_SC_PAGESIZE));
     sched_tests();
     intr_tests();
+    redirect_tests();
     fiber_tests();
     mem_tests();
     printf("macos platform test: %d checks, %d failures\n", checks, failures);

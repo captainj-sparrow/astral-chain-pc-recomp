@@ -51,6 +51,14 @@ int plat_intr_stop(PlatIntr *t, uint64_t *rip, uint64_t *rsp);
 // Lets a stopped t go on: at to when to is nonzero, else where it stopped. 0 when the redirection failed (t then goes
 // on where it stopped).
 int plat_intr_resume(PlatIntr *t, uint64_t to);
+#if defined(__aarch64__)
+// ARM64: code sent to by plat_intr_resume cannot jump back without a free register (compiled code may keep values in
+// x16, x17 and x30; x18 is the OS's). It ends with a branch to plat_intr_continue, every register as the interrupted
+// code had them and the address to go on at stored PLAT_INTR_SLOT bytes below sp, under the 128-byte red zone; a trap
+// there goes on at that address with all registers, flags and FP state as they are.
+#define PLAT_INTR_SLOT 136
+void plat_intr_continue(void);
+#endif
 
 // Fibers: execution contexts with stacks of their own that threads switch between; a fiber may resume on another
 // thread. Each switch keeps the callee-saved registers and the floating-point control state.

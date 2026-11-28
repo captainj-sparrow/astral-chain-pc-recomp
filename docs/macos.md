@@ -97,19 +97,24 @@ generated chunks and both dispatch tables compile to Mach-O ARM64 objects at
 `-O1`. This does not yet link a game executable or verify scheduling or gameplay.
 
 Runtime sources for arm64 macOS (`clang -target arm64-apple-macos14.4`, 2026-11-28):
-114 of the 118 C files compile. Host-function tables use Mach-O sections
-(`__DATA,ac_ovr`, bounded by ld64's `section$start$`/`section$end$` symbols; checked
-across object files, with `-dead_strip`, and with no entries). What remains:
+all C files compile but `vk_ffxfg.c` and `vk_fsr3.c`, which need the SPIR-V headers
+the build generates. Host-function tables use Mach-O sections (`__DATA,ac_ovr`,
+bounded by ld64's `section$start$`/`section$end$` symbols; checked across object
+files, with `-dead_strip`, and with no entries). `ov_libc.c` runs its SSE2 paths on
+the nine AdvSIMD equivalents it needs (`movemask` checked against SSE2 on 200,000
+random vectors).
 
-- `ov_libc.c` and `vk_rec.c` use SSE/AVX intrinsics and need NEON or portable paths.
-- `kernel.c`'s `kern_ap_stub` (asynchronous preemption) is x86 assembly. An ARM64
-  stub cannot jump back without a free register: x16/x17 may be live in compiled
-  code, and Darwin reserves x18. It needs a different return path (for example a
-  trap whose handler restores the full context).
-- `vk_ffxfg.c` and `vk_fsr3.c` need their generated SPIR-V headers, which the build
-  makes.
-- The C++ sources (`runtime/ui`) are not checked yet.
-- The build selects x86 flags and Linux linking on every non-Windows host.
+Asynchronous preemption (`kern_ap_stub`) has an ARM64 version. An ARM64 detour
+cannot jump back without a free register (compiled code may keep values in x16,
+x17 and x30; Darwin reserves x18), so the stub restores everything and branches to
+`plat_intr_continue`, whose `brk` the platform's SIGTRAP handler serves: it sets pc
+to the address stored under the red zone, and `sigreturn` restores every register,
+the flags and the FP state. `tests/macos_platform_test.c` interrupts an assembly
+loop that checks x16, x17, x30, v31 and the flags every iteration: about 6,900
+detours in 0.3 s with none corrupted; a stub that clobbers x16 fails at once.
+
+`tools/build_game.py` builds on macOS (Homebrew's clang-compatible Apple clang,
+ld64, Ninja, SDL3, Vulkan loader and MoltenVK, Opus, libvpx, zstd).
 
 ## Address space on Apple Silicon
 

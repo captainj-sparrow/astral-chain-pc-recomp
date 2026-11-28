@@ -97,6 +97,7 @@ from build_shaders import stale as stale_shaders
 from check_content import GENERATED_MARKER
 
 WIN = os.name == 'nt'
+MAC = sys.platform == 'darwin'   # Apple Silicon only (docs/macos.md)
 if not WIN:
     import resource
 ROOT = Path(__file__).resolve().parent.parent
@@ -139,6 +140,14 @@ def set_cpu(cpu):
     GEN_FLAGS[GEN_FLAGS.index('-march=x86-64-v3')] = march
     RT_FLAGS[RT_FLAGS.index('-march=x86-64-v3')] = march
     RT_FLAGS.append(f'-DRT_CPU_LEVEL={3 if cpu == "v3" else 2}')
+# Homebrew's prefix: SDL3, Vulkan (the loader and MoltenVK), Opus, libvpx and zstd on macOS (docs/macos.md).
+BREW = Path(os.environ.get('HOMEBREW_PREFIX', '/opt/homebrew'))
+if MAC:
+    # Every Apple Silicon Mac has the M1's instruction set. macOS 14.4: os_sync_wait_on_address (platform/macos.c).
+    for flags in (GEN_FLAGS, RT_FLAGS):
+        flags[flags.index('-march=x86-64-v3')] = '-mcpu=apple-m1'
+        flags.append('-mmacosx-version-min=14.4')
+    RT_FLAGS.append(f'-I{BREW / "include"}')
 if WIN:
     # _WIN32_WINNT: Windows 10, the port's minimum. MSYS2's headers default to it, llvm-mingw's (the release toolchain)
     # to Windows 7, which hides the per-monitor DPI functions gfx_window_win.c and dpi_probe_win.c call.
@@ -147,6 +156,14 @@ if WIN:
     LINK_FLAGS = ['-fuse-ld=lld', '-Wl,--stack,16777216', '-Xlinker', '"--Map=$builddir/totk.map"']   # the map feeds tools/prof_report.py
     LINK_LIBS = ['-lpsapi', '-lbcrypt', '-lvulkan-1', '-luser32', '-lgdi32', '-ldwmapi', '-limm32', '-lwinmm', '-lole32', '-lSDL3', '-lopus', '-l:libvpx.a', '-l:libzstd.a', '-l:libstdc++.a', '-l:libwinpthread.a']   # ole32: WASAPI (audio_out_win.c); Vulkan back end; libvpx static (movies); libzstd static (resolution.c)
     VMA_INCLUDE = UCRT.parent / 'include' / 'vma'   # vk_mem_alloc.h; MSYS2 package vulkan-memory-allocator
+elif MAC:
+    # ld64: arm64 executables are position-independent, so the function tables get their pointers from chained fixups
+    # at load. The main thread gets the 16 MiB stack it has on Windows.
+    LINK_FLAGS = ['-mmacosx-version-min=14.4', '-Wl,-stack_size,0x1000000', "'-Wl,-rpath,@executable_path'",
+                  '"-Wl,-map,$builddir/totk.map"']
+    LINK_LIBS = [f'-L{BREW / "lib"}', '-lvulkan', '-lSDL3', '-lopus', '-lvpx', '-lzstd', '-lc++',
+                 '-framework CoreFoundation', '-framework CoreText', '-framework IOKit']   # platform/macos_posix.c
+    VMA_INCLUDE = BREW / 'include'   # vk_mem_alloc.h when Homebrew has it; else fetched below
 else:
     # -no-pie: the lifted modules' function tables (hundreds of thousands of pointers) need no load-time relocation.
     # $ORIGIN: a libSDL3.so.0 next to totk comes before the system's (the release's portable folder).
@@ -189,7 +206,7 @@ DEFAULT_DEPS = ROOT / 'toolchain' / 'deps-mingw'
 # functions sit on it).
 INSTALL_SIDE = {'romfs.c', 'patches.c', 'ov_zstd.c'}
 LIB_NAME = 'libacrt.a'
-AR = UCRT / 'llvm-ar.exe' if WIN else on_path('llvm-ar')
+AR = UCRT / 'llvm-ar.exe' if WIN else on_path('ar' if MAC else 'llvm-ar')
 WINDRES = UCRT / 'windres.exe'   # runtime/astralchain.rc: the manifest of astralchain.exe
 TOOLCHAIN_BIN = None   # llvm-mingw bin directory, set by main() for --toolchain
 DEPS = None            # the deps directory of an llvm-mingw build
@@ -312,11 +329,14 @@ RUNTIME = ROOT / 'runtime'   # --runtime: a copy of runtime/ lets a task build w
 
 def other_os(name):
     """A runtime file for another OS: Win32 ones (*_win.*, platform/win32.c, totk.rc) off Windows, the SDL window's
-    (*_sdl.*) and platform/linux.c on Windows."""
+    (*_sdl.*) on Windows, platform/linux.c off Linux and platform/macos*.c off macOS."""
     stem = name.rsplit('.', 1)[0]
+    darwin = stem in ('macos', 'macos_mem', 'macos_posix')
     if WIN:
-        return stem.endswith('_sdl') or name == 'linux.c'
-    return stem.endswith('_win') or name in ('win32.c', 'astralchain.rc')
+        return stem.endswith('_sdl') or name == 'linux.c' or darwin
+    if MAC:
+        return stem.endswith('_win') or name in ('win32.c', 'astralchain.rc', 'linux.c')
+    return stem.endswith('_win') or name in ('win32.c', 'astralchain.rc') or darwin
 
 
 def runtime_sources(skip=()):
@@ -694,7 +714,7 @@ def run_measured(cmd, env):
             proc.kill()
             raise
         proc.returncode = os.waitstatus_to_exitcode(status)
-        return proc.returncode, time.monotonic() - t0, usage.ru_maxrss * 1024, 0   # KiB on Linux
+        return proc.returncode, time.monotonic() - t0, usage.ru_maxrss * (1 if MAC else 1024), 0   # bytes on macOS, KiB on Linux
     k32 = ctypes.WinDLL('kernel32', use_last_error=True)
     k32.CreateJobObjectW.restype = wt.HANDLE
     k32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wt.LPCWSTR]
@@ -776,6 +796,32 @@ def elf_sections(path):
         out[name] = out.get(name, 0) + size
         lo = addr if lo is None else min(lo, addr)
         hi = max(hi, addr + size)
+    return out, hi - (lo or 0)
+
+
+def macho_sections(path):
+    """{section name: size} of a 64-bit Mach-O file, and the extent its segments span in memory (__PAGEZERO left
+    out)."""
+    import struct
+    with open(path, 'rb') as f:
+        head = f.read(32)
+        ncmds, sizeofcmds = struct.unpack_from('<II', head, 16)
+        cmds = f.read(sizeofcmds)
+    out, lo, hi, at = {}, None, 0, 0
+    for _ in range(ncmds):
+        cmd, size = struct.unpack_from('<II', cmds, at)
+        if cmd == 0x19:   # LC_SEGMENT_64
+            seg = cmds[at + 8:at + 24].rstrip(b'\0').decode(errors='replace')
+            vmaddr, vmsize = struct.unpack_from('<QQ', cmds, at + 24)
+            nsects = struct.unpack_from('<I', cmds, at + 64)[0]
+            if seg != '__PAGEZERO':
+                lo = vmaddr if lo is None else min(lo, vmaddr)
+                hi = max(hi, vmaddr + vmsize)
+            for i in range(nsects):
+                o = at + 72 + 80 * i
+                name = cmds[o:o + 16].rstrip(b'\0').decode(errors='replace')
+                out[f'{seg},{name}'] = out.get(f'{seg},{name}', 0) + struct.unpack_from('<Q', cmds, o + 40)[0]
+        at += size
     return out, hi - (lo or 0)
 
 
@@ -897,7 +943,8 @@ def main():
     ap.add_argument('--release-opt', action='store_true',
                     help='what the installer builds with: --lto thin --pgo-use auto')
     args = ap.parse_args()
-    set_cpu(args.cpu)
+    if not MAC:   # x86-64 levels; every Apple Silicon Mac has the M1's instruction set
+        set_cpu(args.cpu)
     if args.release_opt:
         args.lto = args.lto or 'thin'
         args.pgo_use = args.pgo_use or 'auto'
@@ -1092,7 +1139,7 @@ def main():
     # 36 MB); a release has the three files in bin/, the library built against its sysroot, and the installer copies
     # them. Without the DLLs or the library the game says which file is missing and runs FSR 3.
     fsr4_names = ('amd_fidelityfx_loader_vk.dll', 'amd_fidelityfx_upscaler_vk.dll')
-    if not WIN and not DEPS and not args.sysroot:
+    if not WIN and not MAC and not DEPS and not args.sysroot:
         import ffx_vk_linux
         import fsr4_sdk
         if ffx_vk_linux.build(exe.parent, quiet=True) and not all((fsr4_sdk.DEST / n).is_file() for n in fsr4_names):
@@ -1105,10 +1152,11 @@ def main():
         fsr4 = MAIN_ROOT / 'toolchain' / 'fsr4' / name
         if fsr4.is_file():
             shutil.copy2(fsr4, exe.parent / name)
-    sections, image = pe_sections(exe) if WIN else elf_sections(exe)
+    sections, image = pe_sections(exe) if WIN else macho_sections(exe) if MAC else elf_sections(exe)
     print(f'{below_root(exe)}: file {mib(exe.stat().st_size)}, '
-          f'image {mib(image)}; ' + ', '.join(f'{k} {mib(v)}' for k, v in sections.items() if k.startswith('.') and v))
-    if image > 3 * GiB // 2:
+          f'image {mib(image)}; ' + ', '.join(f'{k} {mib(v)}' for k, v in sections.items()
+                                              if k.startswith('.' if not MAC else '__') and v))
+    if image > 3 * GiB // 2 and not MAC:   # arm64's ADRP reaches 4 GiB and ld64 adds branch islands
         print('build_game: warning: image over 1.5 GiB; RIP-relative code reaches only 2 GiB', file=sys.stderr)
 
 

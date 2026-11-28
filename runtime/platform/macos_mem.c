@@ -423,6 +423,13 @@ static int own_fault(uint64_t a, int access) {
 
 static void fault_handler(int sig, siginfo_t *si, void *ucv) {
     ucontext_t *u = ucv;
+    // plat_intr_continue (platform.h): sigreturn restores every register, so only pc changes.
+    if (sig == SIGTRAP && __darwin_arm_thread_state64_get_pc(u->uc_mcontext->__ss) == (uintptr_t)plat_intr_continue) {
+        uint64_t to = *(const uint64_t *)(uintptr_t)(__darwin_arm_thread_state64_get_sp(u->uc_mcontext->__ss) -
+                                                     PLAT_INTR_SLOT);
+        __darwin_arm_thread_state64_set_pc_fptr(u->uc_mcontext->__ss, (void *)(uintptr_t)to);
+        return;
+    }
     uint64_t a = (uint64_t)(uintptr_t)si->si_addr;
     int access = sig == SIGBUS || sig == SIGSEGV ? access_of(u) : -1;
     if (access >= 0 && own_fault(a, access)) return;

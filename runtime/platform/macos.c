@@ -445,6 +445,13 @@ int plat_intr_resume(PlatIntr *t, uint64_t to) {
     return ok;
 }
 
+// The trap plat_intr_continue ends a redirected thread's detour with; macos_mem.c's handler moves it on.
+__asm__(".text\n"
+        ".globl _plat_intr_continue\n"
+        ".p2align 2\n"
+        "_plat_intr_continue:\n"
+        "    brk #0xa9\n");
+
 // ---- fibers: a stack switch of our own. fiber_swap saves what AAPCS64 makes callee-saved (x19-x30, the low halves of
 // v8-v15) and the FP control and status registers in a 176-byte frame on the current stack, stores the stack pointer
 // in *save and loads the other one. x18 is Darwin's and never touched. A new fiber's stack is laid out as fiber_swap
