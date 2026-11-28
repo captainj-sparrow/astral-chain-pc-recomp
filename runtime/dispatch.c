@@ -223,6 +223,22 @@ __attribute__((noinline, noreturn, cold)) static void dispatch_fail(Cpu *c) {
     const char *why = (pc & 3) ? "misaligned address"
                     : module_at(pc) ? "not a function start"
                     : "outside every module, no host function registered";
+    // A pc read from memory (a vtable, a callback) came from x0 or x1's object in most calls: their first words, and
+    // the guest frame chain (x29: the caller's x29, then its lr), read without faulting.
+    for (int r = 0; r < 2; r++) {
+        uint64_t w[6] = {0};
+        int ok = plat_mem_read(c->x[r], w, sizeof w);
+        rt_log("dispatch: x%d %#llx: %s %#llx %#llx %#llx %#llx %#llx %#llx", r, (unsigned long long)c->x[r],
+               ok ? "" : "(unreadable)", (unsigned long long)w[0], (unsigned long long)w[1], (unsigned long long)w[2],
+               (unsigned long long)w[3], (unsigned long long)w[4], (unsigned long long)w[5]);
+    }
+    uint64_t fp = c->x[29];
+    for (int d = 0; d < 12 && fp; d++) {
+        uint64_t fr[2];
+        if (!plat_mem_read(fp, fr, sizeof fr)) break;
+        rt_log("dispatch: frame %d: lr %s", d, rt_guest_name(fr[1], at, sizeof at));
+        fp = fr[0];
+    }
     rt_fatal("rt_dispatch: no function at guest pc %s: %s (lr %s)", rt_guest_name(pc, at, sizeof at), why,
              rt_guest_name(c->x[30], lr, sizeof lr));
 }
