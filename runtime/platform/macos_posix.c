@@ -232,7 +232,10 @@ void plat_file_close(PlatFile *f) {
     if (f) close(fd_of(f));
 }
 
+// The kernel's write into the buffer fails on a read-only page instead of faulting (EFAULT), and the write watch keeps
+// clean watched pages read-only (macos_mem.c): a read into guest memory opens and marks its pages first.
 int64_t plat_file_pread(PlatFile *f, void *buf, uint32_t n, uint64_t off) {
+    plat_mem_will_write((uint64_t)(uintptr_t)buf, n);
     ssize_t k;
     do k = pread(fd_of(f), buf, n, (off_t)off);
     while (k < 0 && errno == EINTR);

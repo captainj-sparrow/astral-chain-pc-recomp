@@ -10,9 +10,13 @@
 //
 // Write watch. Darwin has nothing like GetWriteWatch or userfaultfd, so it is done with protection: a committed
 // read-write host page of a watched reservation that nothing wrote since the last reset is kept read-only (armed). The
-// first write faults; the handler marks the host page written and makes it writable, and the write runs again.
-// plat_mem_written lists the 4 KiB pages of the written host pages and, with reset, arms them again. A write is never
-// missed; writes are seen per 16 KiB, so a written host page reports its four 4 KiB pages.
+// first write faults; the handler copies the host page into a snapshot slot (it is still read-only, so the copy is
+// what was there), opens it (makes it writable), and the write runs again. A reset query arms the page again first,
+// then compares each 4 KiB page with the snapshot, so it reports the 4 KiB pages whose bytes changed, as exactly as
+// linux.c and win32.c report written pages; the changes go into a byte per 4 KiB page (wdirty), which keeps those
+// outside the query's range for later queries. Without a snapshot (the pool of SNAP_MAX slots ran out, or the host
+// page could not be read) the whole host page counts as written. A write that leaves the bytes as they were is not
+// reported: nothing changed for the back end to upload.
 //
 // Every change of a host page's protection happens under its lock bit in hstate: the fault handler takes one host
 // page's lock and nothing else (no lock of the runtime's, no allocation), mapping changes and queries take them in
@@ -37,12 +41,18 @@
 #define PG 4096ull
 #define PS_LIMIT (1ull << 39)
 enum { PS_FREE, PS_RESERVED, PS_NONE, PS_READ, PS_RW };   // PS_NONE.. are committed: PLAT_PROT_* + PS_NONE
-enum { HS_LOCK = 1, HS_MAPPED = 2, HS_WATCH = 4, HS_DIRTY = 8 };
+enum { HS_LOCK = 1, HS_MAPPED = 2, HS_WATCH = 4, HS_OPEN = 8 };   // HS_OPEN: written since it was last armed
 #define RUN_MAX 4096u   // host pages one mapping change locks at a time
+#define SNAP_MAX 32768u // snapshot slots: 512 MiB reserved, backed as used
 
 static uint8_t *pstate;            // per 4 KiB page below PS_LIMIT
 static uint8_t *hstate;            // per host page below PS_LIMIT: HS_*
 static uint64_t hpg, hsh, nsub;    // host page size, its log2, 4 KiB pages per host page
+static uint8_t *wdirty;            // per 4 KiB page: its bytes changed since the last reset (settled, see settle)
+static uint32_t *hsnap;            // per host page: its snapshot slot + 1, 0 for none
+static uint8_t *snaps;             // the snapshot slots
+static uint32_t snap_free[SNAP_MAX], snap_nfree, snap_next;
+static volatile uint32_t snap_lock;   // a leaf: taken with a host page's lock held, around the slot lists only
 static PlatMutex vm_lock = PLAT_MUTEX_INIT;   // mapping changes, one at a time
 static pthread_once_t tables_once = PTHREAD_ONCE_INIT;
 
@@ -52,11 +62,14 @@ static void tables_init(void) {
     nsub = hpg / PG;
     void *p = mmap(NULL, PS_LIMIT / PG, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
     void *h = mmap(NULL, PS_LIMIT >> hsh, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
-    if (p == MAP_FAILED || h == MAP_FAILED) {
+    void *w = mmap(NULL, PS_LIMIT / PG, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
+    void *hs = mmap(NULL, (PS_LIMIT >> hsh) * 4, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
+    void *sn = mmap(NULL, SNAP_MAX * hpg, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
+    if (p == MAP_FAILED || h == MAP_FAILED || w == MAP_FAILED || hs == MAP_FAILED || sn == MAP_FAILED) {
         fprintf(stderr, "FATAL: platform: no memory for the page tables\n");
         _exit(70);
     }
-    pstate = p, hstate = h;
+    pstate = p, hstate = h, wdirty = w, hsnap = hs, snaps = sn;
 }
 
 static void tables(void) { pthread_once(&tables_once, tables_init); }
@@ -88,7 +101,7 @@ static int host_prot(uint64_t h) {
     for (uint64_t i = h * nsub, e = i + nsub; i < e; i++)
         if (pstate[i] > best) best = pstate[i];
     uint8_t s = __atomic_load_n(&hstate[h], __ATOMIC_RELAXED);
-    if (best == PS_RW && (s & HS_WATCH) && !(s & HS_DIRTY)) best = PS_READ;
+    if (best == PS_RW && (s & HS_WATCH) && !(s & HS_OPEN)) best = PS_READ;
     return best == PS_RW ? PROT_READ | PROT_WRITE : best == PS_READ ? PROT_READ : PROT_NONE;
 }
 
@@ -104,17 +117,63 @@ static int hosts_apply(uint64_t h0, uint64_t h1) {
     return ok;
 }
 
-// Locks the host pages of [addr, addr + n) a run at a time, optionally marks them written (watched ones only), and
-// applies their protection. 1 on success.
-static int hosts_update(uint64_t addr, uint64_t n, int written) {
+// ---- snapshots (the write watch). All with host page h's lock held.
+
+static void sl_lock(void) {
+    while (__atomic_exchange_n(&snap_lock, 1, __ATOMIC_ACQUIRE)) plat_pause();
+}
+static void sl_unlock(void) { __atomic_store_n(&snap_lock, 0, __ATOMIC_RELEASE); }
+static uint8_t *snap_of(uint64_t h) { return hsnap[h] ? snaps + (uint64_t)(hsnap[h] - 1) * hpg : NULL; }
+
+// Host page h's bytes into a snapshot slot (h must be readable), unless it has one; 0 when the pool is empty.
+static int snap_take(uint64_t h) {
+    if (hsnap[h]) return 1;
+    sl_lock();
+    uint32_t slot = snap_nfree ? snap_free[--snap_nfree] : snap_next < SNAP_MAX ? ++snap_next : 0;
+    sl_unlock();
+    if (!slot) return 0;
+    hsnap[h] = slot;
+    memcpy(snap_of(h), (const void *)(uintptr_t)(h << hsh), hpg);
+    return 1;
+}
+
+static void snap_drop(uint64_t h) {
+    uint32_t slot = hsnap[h];
+    if (!slot) return;
+    hsnap[h] = 0;
+    sl_lock();
+    snap_free[snap_nfree++] = slot;
+    sl_unlock();
+}
+
+// Opens host page h for writes (the caller applies its protection), with a snapshot to tell later which 4 KiB pages
+// changed.
+static void open_page(uint64_t h) {
+    if (hstate[h] & HS_OPEN) return;
+    snap_take(h);   // still armed, so readable; without a slot the whole host page will count as written
+    hs_set(h, HS_OPEN);
+}
+
+// Host page h written since it was armed: arms it again, then records which of its 4 KiB pages changed in wdirty and
+// drops the snapshot. A host page that cannot be read (inaccessible meanwhile) counts as written whole: reading it
+// here would fault into the handler, which waits for this lock.
+static void settle(uint64_t h) {
+    if (!(hstate[h] & HS_OPEN)) return;
+    hs_clear(h, HS_OPEN);
+    hosts_apply(h, h + 1);
+    const uint8_t *snap = host_prot(h) != PROT_NONE ? snap_of(h) : NULL;
+    for (uint64_t i = 0; i < nsub; i++)
+        if (!snap || memcmp((const void *)(uintptr_t)((h << hsh) + i * PG), snap + i * PG, PG)) wdirty[h * nsub + i] = 1;
+    snap_drop(h);
+}
+
+// Locks the host pages of [addr, addr + n) a run at a time and applies their protection. 1 on success.
+static int hosts_update(uint64_t addr, uint64_t n) {
     uint64_t h0 = addr >> hsh, h1 = (addr + n + hpg - 1) >> hsh;
     int ok = 1;
     for (uint64_t a = h0; a < h1;) {
         uint64_t b = a + RUN_MAX < h1 ? a + RUN_MAX : h1;
-        for (uint64_t h = a; h < b; h++) {
-            hs_lock(h);
-            if (written && (hstate[h] & HS_WATCH)) hs_set(h, HS_DIRTY);
-        }
+        for (uint64_t h = a; h < b; h++) hs_lock(h);
         ok &= hosts_apply(a, b);
         for (uint64_t h = a; h < b; h++) hs_unlock(h);
         a = b;
@@ -193,7 +252,7 @@ int plat_mem_commit(uint64_t addr, size_t n) {
     int ok = ours(addr, n, 0);
     if (ok) {
         ps_set(addr, n, PS_RW);
-        ok = hosts_update(addr, n, 0);
+        ok = hosts_update(addr, n);
     }
     plat_mutex_unlock(&vm_lock);
     return ok;
@@ -206,7 +265,7 @@ int plat_mem_protect(uint64_t addr, uint64_t n, int prot) {
     int ok = ours(addr, n, 1);
     if (ok) {
         ps_set(addr, n, (uint8_t)(PS_NONE + prot));
-        ok = hosts_update(addr, n, 0);
+        ok = hosts_update(addr, n);
     }
     plat_mutex_unlock(&vm_lock);
     if (ok || ((addr | n) & (PG - 1)) || !n) return ok;
@@ -232,7 +291,8 @@ static int zero_kept(uint64_t h, uint64_t lo, uint64_t hi, const uint8_t *was, i
     }
     for (uint64_t x = lo; x < hi; x += PG)
         if (was[(x - lo) / PG] >= PS_NONE) memset((void *)(uintptr_t)x, 0, PG);
-    if (hstate[h] & HS_WATCH) hs_set(h, HS_DIRTY);
+    if (hsnap[h]) memcpy(snap_of(h) + (lo - (h << hsh)), (const void *)(uintptr_t)lo, (size_t)(hi - lo));   // not a write
+    memset(wdirty + lo / PG, 0, (size_t)((hi - lo) / PG));   // decommitted pages are not written ones, as on Linux
     return 1;
 }
 
@@ -258,7 +318,8 @@ int plat_mem_decommit(uint64_t addr, uint64_t n) {
             if (mmap((void *)(uintptr_t)(h << hsh), (size_t)((e - h) << hsh), PROT_NONE,
                      MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0) == MAP_FAILED)
                 ok = 0;
-            for (uint64_t x = h; x < e; x++) hs_clear(x, HS_DIRTY);
+            for (uint64_t x = h; x < e; x++) hs_clear(x, HS_OPEN), snap_drop(x);
+            memset(wdirty + h * nsub, 0, (size_t)((e - h) * nsub));
             h = e;
         }
         ok &= hosts_apply(a, b);
@@ -284,20 +345,13 @@ int plat_mem_state(uint64_t addr, uint64_t limit, uint64_t *end) {
 
 // ---- write watch
 
-// The committed 4 KiB pages of host page h inside [lo, hi), into pages from got on, at most max in all. Returns the
-// new count; *all is set when every one fitted.
-static uint64_t list_sub(uint64_t h, uint64_t lo, uint64_t hi, uint64_t *pages, uint64_t got, uint64_t max, int *all) {
-    uint64_t a = h << hsh > lo ? h << hsh : lo, b = (h + 1) << hsh < hi ? (h + 1) << hsh : hi;
-    *all = 1;
-    for (uint64_t x = a; x < b; x += PG)
-        if (pstate[x / PG] >= PS_NONE) {
-            if (got == max) {
-                *all = 0;
-                break;
-            }
-            pages[got++] = x;
-        }
-    return got;
+// 1 when 4 KiB page i of host page h changed since the last reset: settled into wdirty, or (h open, not settled: a
+// query without reset) different from the snapshot, or written at all without one.
+static int sub_written(uint64_t h, uint64_t i) {
+    if (wdirty[h * nsub + i]) return 1;
+    if (!(hstate[h] & HS_OPEN)) return 0;
+    const uint8_t *snap = host_prot(h) != PROT_NONE ? snap_of(h) : NULL;
+    return !snap || memcmp((const void *)(uintptr_t)((h << hsh) + i * PG), snap + i * PG, PG) != 0;
 }
 
 uint64_t plat_mem_written(uint64_t addr, uint64_t n, uint64_t *pages, uint64_t max, int reset) {
@@ -307,28 +361,37 @@ uint64_t plat_mem_written(uint64_t addr, uint64_t n, uint64_t *pages, uint64_t m
     uint64_t lo = addr & ~(PG - 1), hi = (addr + n + PG - 1) & ~(PG - 1);
     uint64_t h0 = lo >> hsh, h1 = (hi + hpg - 1) >> hsh, got = 0;
     if (!(hstate[h0] & HS_WATCH) || !(hstate[h1 - 1] & HS_WATCH)) return UINT64_MAX;   // memory.c: one reservation
-    for (uint64_t h = h0; h < h1 && got < max; h++) {
-        if (!(__atomic_load_n(&hstate[h], __ATOMIC_RELAXED) & HS_DIRTY)) continue;
-        int all;
-        if (!reset) {
-            got = list_sub(h, lo, hi, pages, got, max, &all);
-            continue;
-        }
-        // Armed again before the pages are listed: a write after the re-arm faults and marks the host page again. A
-        // host page whose pages do not all fit stays marked, so the next query lists it again.
+    int full = 1;
+    for (uint64_t h = h0; h < h1 && full; h++) {
+        int any = (__atomic_load_n(&hstate[h], __ATOMIC_RELAXED) & HS_OPEN) != 0;
+        for (uint64_t i = 0; i < nsub && !any; i++) any = wdirty[h * nsub + i];
+        if (!any) continue;
+        // Under the lock: a reset arms the page again before it is compared, so a write meanwhile faults and opens it
+        // again; a query without reset compares an open page as it is.
         hs_lock(h);
-        if (hstate[h] & HS_DIRTY) {
-            got = list_sub(h, lo, hi, pages, got, max, &all);
-            if (all && (h << hsh) >= lo && ((h + 1) << hsh) <= hi) {   // only a host page the range wholly covers
-                hs_clear(h, HS_DIRTY);
-                hosts_apply(h, h + 1);
+        if (reset) settle(h);
+        uint64_t a = h << hsh > lo ? h << hsh : lo, b = (h + 1) << hsh < hi ? (h + 1) << hsh : hi;
+        for (uint64_t x = a; x < b; x += PG) {
+            uint64_t i = x / PG - h * nsub;
+            if (pstate[x / PG] < PS_NONE) {   // decommitted pages are not written ones
+                if (reset) wdirty[h * nsub + i] = 0;
+                continue;
             }
+            if (!sub_written(h, i)) continue;
+            if (got == max) {
+                full = 0;   // listed by the next query
+                break;
+            }
+            pages[got++] = x;
+            if (reset) wdirty[h * nsub + i] = 0;
         }
         hs_unlock(h);
     }
     return got;
 }
 
+// The caller writes the range next: its pages count as written, and their host pages open without a fault (keeping a
+// snapshot for the 4 KiB pages outside the range).
 void plat_mem_will_write(uint64_t addr, uint64_t n) {
     tables();
     if (!n || addr >= PS_LIMIT || n > PS_LIMIT - addr) return;
@@ -336,7 +399,22 @@ void plat_mem_will_write(uint64_t addr, uint64_t n) {
     if (!(hstate[lo >> hsh] & HS_WATCH) || !(hstate[(hi - 1) >> hsh] & HS_WATCH))
         return;   // outside the watch: its writes take no fault for it anyway
     plat_mutex_lock(&vm_lock);
-    hosts_update(lo, hi - lo, 1);
+    for (uint64_t a = lo >> hsh, h1 = (hi + hpg - 1) >> hsh; a < h1;) {
+        uint64_t b = a + RUN_MAX < h1 ? a + RUN_MAX : h1;
+        for (uint64_t h = a; h < b; h++) {
+            hs_lock(h);
+            int whole = (h << hsh) >= lo && ((h + 1) << hsh) <= hi;
+            if (!(hstate[h] & HS_OPEN)) {
+                if (!whole && host_prot(h) != PROT_NONE) snap_take(h);
+                hs_set(h, HS_OPEN);
+            }
+        }
+        memset(wdirty + (a << hsh > lo ? a << hsh : lo) / PG, 1,
+               (size_t)(((b << hsh < hi ? b << hsh : hi) - (a << hsh > lo ? a << hsh : lo)) / PG));
+        hosts_apply(a, b);
+        for (uint64_t h = a; h < b; h++) hs_unlock(h);
+        a = b;
+    }
     plat_mutex_unlock(&vm_lock);
 }
 
@@ -375,7 +453,12 @@ int plat_mem_replace(uint64_t addr, void *stage, uint64_t n) {
         }
         if (ok) ps_set(addr, n, PS_RW);
         for (uint64_t h = h0; h < h1; h++)
-            if (hstate[h] & HS_WATCH) hs_set(h, HS_DIRTY);
+            if (hstate[h] & HS_WATCH) {
+                // the pages written whole are written; a host page the range covers only partly keeps its snapshot
+                if ((h << hsh) >= addr && ((h + 1) << hsh) <= addr + n) snap_drop(h);
+                hs_set(h, HS_OPEN);
+            }
+        if (ok) memset(wdirty + addr / PG, 1, (size_t)(n / PG));
         ok &= hosts_apply(h0, h1);
         for (uint64_t h = h0; h < h1; h++) hs_unlock(h);
     }
@@ -414,7 +497,7 @@ static int own_fault(uint64_t a, int access) {
     uint8_t s = __atomic_load_n(&pstate[a / PG], __ATOMIC_RELAXED);
     int ok = access ? s == PS_RW : s >= PS_READ;
     if (ok) {
-        if (access && (hstate[h] & HS_WATCH)) hs_set(h, HS_DIRTY);
+        if (access && (hstate[h] & HS_WATCH)) open_page(h);
         ok = hosts_apply(h, h + 1);   // a failed mprotect goes on to the crash handler instead of faulting forever
     }
     hs_unlock(h);

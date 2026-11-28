@@ -659,7 +659,7 @@ static void mem_tests(void) {
     for (uint64_t a = base + 4 * g; a < base + 6 * g; a += 8) zero &= *(volatile uint64_t *)(uintptr_t)a == 0;
     CHECK(zero, "recommitted host pages read zero");
 
-    // write watch: per 4 KiB page; a write marks its host page, reset arms it again
+    // write watch: exact 4 KiB pages (the bytes a host page's 4 KiB pages changed since its snapshot); reset arms again
     uint64_t wb = reserve_somewhere(128 * g, 1), pages[64];
     CHECK(wb, "reserve a watched range");
     if (!wb) return;
@@ -668,26 +668,37 @@ static void mem_tests(void) {
     CHECK(plat_mem_written(base, g, pages, 64, 1) == UINT64_MAX, "an unwatched range is untracked");
     *(volatile uint8_t *)(uintptr_t)(wb + 3 * g + 0x1234) = 1;
     uint64_t n = plat_mem_written(wb, 16 * g, pages, 64, 0);
-    CHECK(n == g / 0x1000 && pages[0] == wb + 3 * g && contains(pages, n, wb + 3 * g + 0x1000), "peek: the written host "
-          "page's 4 KiB pages (%llu)", (unsigned long long)n);
-    CHECK(plat_mem_written(wb, 16 * g, pages, 64, 1) == g / 0x1000, "query with reset lists them");
+    CHECK(n == 1 && pages[0] == wb + 3 * g + 0x1000, "peek: the written 4 KiB page only (%llu)", (unsigned long long)n);
+    CHECK(plat_mem_written(wb, 16 * g, pages, 64, 1) == 1 && pages[0] == wb + 3 * g + 0x1000, "query with reset lists it");
     CHECK(plat_mem_written(wb, 16 * g, pages, 64, 1) == 0, "and the next one does not");
     *(volatile uint8_t *)(uintptr_t)(wb + 3 * g + 8) = 2;
-    CHECK(plat_mem_written(wb, 16 * g, pages, 64, 1) == g / 0x1000, "a write after the reset is seen again");
-    CHECK(plat_mem_written(wb, 16 * g, pages, 2, 1) == 0, "nothing pending");
-    *(volatile uint8_t *)(uintptr_t)(wb + 5 * g) = 3;
+    CHECK(plat_mem_written(wb, 16 * g, pages, 64, 1) == 1 && pages[0] == wb + 3 * g, "a write after the reset is seen");
+    *(volatile uint8_t *)(uintptr_t)(wb + 3 * g + 8) = 2;
+    CHECK(plat_mem_written(wb, 16 * g, pages, 64, 1) == 0, "a write that changes nothing is not reported");
+    // tex_probe.c's sequence: a query of one 4 KiB page, then of everything, sees nothing new
+    *(volatile uint8_t *)(uintptr_t)(wb + 4 * g + 0x2000) = 9;
+    CHECK(plat_mem_written(wb + 4 * g + 0x2000, 0x1000, pages, 64, 1) == 1, "a one-page query lists the page");
+    CHECK(plat_mem_written(wb, 16 * g, pages, 64, 1) == 0, "and a whole query after it lists nothing");
+    *(volatile uint8_t *)(uintptr_t)(wb + 4 * g + 0x2000) = 10;
+    *(volatile uint8_t *)(uintptr_t)(wb + 4 * g + 0x3000) = 11;
+    CHECK(plat_mem_written(wb + 4 * g + 0x2000, 0x1000, pages, 64, 1) == 1, "a partial query of a host page");
+    CHECK(plat_mem_written(wb, 16 * g, pages, 64, 1) == 1 && pages[0] == wb + 4 * g + 0x3000,
+          "keeps its other changed 4 KiB page for the next query");
+    for (int i = 0; i < 3; i++) *(volatile uint8_t *)(uintptr_t)(wb + 5 * g + i * 0x1000) = 3;
     CHECK(plat_mem_written(wb, 16 * g, pages, 2, 1) == 2, "a full list stops at max");
-    CHECK(plat_mem_written(wb, 16 * g, pages, 64, 1) == g / 0x1000, "and keeps the host page for the next query");
-    plat_mem_will_write(wb + 8 * g, 2 * g);
-    CHECK(plat_mem_written(wb, 16 * g, pages, 64, 1) == 2 * g / 0x1000, "plat_mem_will_write marks without a write");
+    CHECK(plat_mem_written(wb, 16 * g, pages, 64, 1) == 1, "and keeps the rest for the next query");
+    plat_mem_will_write(wb + 8 * g + 0x1000, 2 * g);
+    CHECK(plat_mem_written(wb, 16 * g, pages, 64, 1) == 2 * g / 0x1000 && pages[0] == wb + 8 * g + 0x1000,
+          "plat_mem_will_write marks exactly its range without a write");
     *(volatile uint8_t *)(uintptr_t)(wb + 8 * g) = 4;
-    CHECK(plat_mem_written(wb, 16 * g, pages, 64, 1) == g / 0x1000, "re-armed after a will_write query");
+    CHECK(plat_mem_written(wb, 16 * g, pages, 64, 1) == 1 && pages[0] == wb + 8 * g,
+          "beside a will_write range a write is still seen");
     CHECK(plat_mem_written(wb + 12 * g, 4 * g, pages, 64, 1) == 0, "an unwritten part");
     // a frozen watched host page: the write goes through the write hook, then the watch, and is reported
     CHECK(plat_mem_protect(wb + 9 * g, g, PLAT_PROT_READ), "freeze a watched host page");
     hook_writes = 0;
     *(volatile uint8_t *)(uintptr_t)(wb + 9 * g + 16) = 5;
-    CHECK(hook_writes == 1 && plat_mem_written(wb, 16 * g, pages, 64, 1) == g / 0x1000, "frozen write thawed + seen");
+    CHECK(hook_writes == 1 && plat_mem_written(wb, 16 * g, pages, 64, 1) == 1, "frozen write thawed + seen");
     // a replaced range counts as written
     void *stage = plat_mem_stage(2 * g);
     memset(stage, 0x11, 2 * g);

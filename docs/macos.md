@@ -1,7 +1,22 @@
 # macOS port work
 
-Status: feasibility work, not yet a runnable game. Target: native Apple Silicon,
-initially with the existing Vulkan renderer through MoltenVK and game version 1.0.1.
+Status: boots. Native Apple Silicon, the existing Vulkan renderer through MoltenVK,
+game version 1.0.1. On 2026-11-28 a 90-second run on an M6 Mac mini reached the
+game's start screen ("ZL + ZR"), rendered correctly: 5,377 frames at a mean of
+58-60 fps, 12 million NVN calls, none unimplemented, no shader failures and no
+validation errors. Gameplay past the start screen is not checked yet.
+
+Build and run (Apple clang from the Xcode tools; Homebrew: ninja, sdl3, vulkan-loader,
+molten-vk, opus, libvpx, zstd; the shader translator as below):
+
+```sh
+.venv/bin/python tools/build_game.py            # build/v101/astralchain
+cd build/v101 && ./astralchain --seconds 90 --shot ../shot.png
+```
+
+`tools/build_game.py` fetches VMA and AMD's FidelityFX files from GitHub on first
+use. Where IPv6 to GitHub stalls, Python waits a long time on each address; fetch
+over IPv4 (for example `curl -4`) or resolve IPv4 only for that run.
 
 ## Checkpoints
 
@@ -172,11 +187,15 @@ macOS 14.4 or newer (`os_sync_wait_on_address`). What differs from Linux:
   4 KiB state is kept in software for `plat_mem_state`. `plat_mem_grain` tells the
   runtime the host page size.
 - There is no GetWriteWatch or userfaultfd. A committed, clean, read-write host
-  page of a watched reservation is kept read-only; its first write faults, marks
-  it written and opens it. A query with reset arms it again. Writes are seen per
-  16 KiB, so a written host page reports its four 4 KiB pages. Every protection
-  change of a host page takes its lock bit, so a query's re-arm and a fault's
-  disarm cannot interleave.
+  page of a watched reservation is kept read-only; its first write faults, copies
+  the page into a snapshot slot and opens it. A query with reset arms it again,
+  then compares each 4 KiB page with the snapshot, so it reports exactly the 4 KiB
+  pages whose bytes changed, as Linux and Windows report written pages (the Vulkan
+  back end's mirror sync copies reported pages over GPU results, so a neighbour
+  reported by mistake would not be harmless). Every protection change of a host
+  page takes its lock bit, so a query's re-arm and a fault's disarm cannot
+  interleave. A kernel write into an armed page fails instead of faulting, so
+  `plat_file_pread` opens its destination first.
 - `plat_mem_replace` moves the staging pages in with `mach_vm_remap`
   (`VM_FLAGS_OVERWRITE`), atomic like linux.c's `mremap`.
 - Protection faults arrive as SIGBUS, and read, write or fetch comes from the
@@ -203,8 +222,8 @@ nothing where the grain is 4 KiB:
   accessible once main is committed: its RomFS pages are filled at start.
 - libc_probe.c puts its inaccessible guard after a host page.
 
-Observed on the M6, 2026-11-28: 116 checks pass; the stress part ran about 75,000
-faulting writes against 23,000 queries with none missed. Removing the host-page
+Observed on the M6, 2026-11-28: 124 checks pass; the stress part ran about 110,000
+faulting writes against 6,000 queries with none missed. Removing the host-page
 lock from the fault handler makes it report about 10 million missed writes, so the
 stress part does detect that race.
 
@@ -226,3 +245,19 @@ Pin source revisions and preserve per-file licenses and notices before adapting 
   Silicon/Metal target, useful for instruction lowering and platform design.
 - [MoltenVK runtime guide](https://github.com/KhronosGroup/MoltenVK/blob/main/Docs/MoltenVK_Runtime_UserGuide.md):
   portability enumeration, extension support and deployment details.
+
+## Runtime probes on the M6 (2026-11-28)
+
+Pass: `--selftest`, `--probe-kernel`, `--probe-loader`, `--probe-libc` (40,017
+checks), `--probe-fs`, `--probe-ipc`, `--probe-services`, `--probe-dlc`,
+`--probe-nvn`, `--probe-nvn-tex`, `--probe-vkdevice`, `--probe-vkmem` (write watch exact,
+file reads into watched pages seen), `--probe-window` (300
+frames, vsync 60.0 Hz), `--boot`.
+
+Not passing, and why:
+
+- `--probe-astc`: its BC encode checks need the ASTC-to-BC pipelines, which the
+  runtime builds only for a GPU without native ASTC or short of video memory; the
+  M6 samples ASTC natively.
+- `--probe-shader`, `--probe-vkexec`: need `build/v101/shaders/jobs.json` from
+  `tools/shader_census.py`.
