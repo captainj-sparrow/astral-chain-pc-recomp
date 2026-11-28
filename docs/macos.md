@@ -75,12 +75,27 @@ CPU baseline on the M6 (Apple clang 21, 2026-11-28):
   `-O1`, zero mismatches.
 - `python tests/diff/atomic.py --jobs 4`: all 198 instruction tests / 12,672
   cases pass against Unicorn. The harness uses Apple's linker on Darwin.
+- `python tests/diff/simd.py --jobs 4`: 1,048,640 encoding-validity checks agree
+  with Unicorn; 159,976 numerical cases across 20,000 encodings have no mismatches.
+- `python tests/diff/lift.py --jobs 4`: 119,982 cases across 40,000 instructions
+  sampled from the verified 1.0.1 modules have no mismatches.
+- `python tests/diff/func.py --jobs 4`: 3,477 runnable cases across 537 functions
+  have no mismatches; 5,799 attempted cases were skipped by the test harness.
+- With `--abi-trust --ipa generated/v101/ipa.json`, the same function test passes
+  3,316 runnable cases across 505 functions (5,072 skipped), covering the default
+  build's register-analysis optimization.
+- `tests/excl_mt.py` passes the changed-value and contention checks;
+  `tests/excl_windows.py` finds no unsafe exclusive windows in either game module.
+- `tests/jumptables_check.py` reports zero disagreements and zero unverified bases.
+- `tests/vlocals_check.py` checks 175,592 synchronization points and 179 patch
+  helper calls in the full generated output, with zero violations.
 
-These cover integer flags and atomic/exclusive lowering, not FP/SIMD, the
-scheduler, the generated game's functions or gameplay.
+The existing C lowering now uses ARM64 FPCR control and NEON table lookups on
+Apple Silicon, retaining the x86 implementation on x86 hosts. The 1.0.1 generator
+emitted all 61,454 discovered functions with no unsupported instructions. All 123
+generated chunks and both dispatch tables compile to Mach-O ARM64 objects at
+`-O1`. This does not yet link a game executable or verify scheduling or gameplay.
 
-- `recomp/lifter.py` contains an ARM64 assembly mode, but `recomp/gen.py` currently
-  forces the C mode, and generated chunks include the x86-specific `simd.h`.
 - `runtime/platform/` currently has Windows and Linux backends. Darwin needs its
   own memory tracking, thread interruption and fiber implementations; Linux's
   userfaultfd/PAGEMAP_SCAN cannot be used directly.

@@ -152,7 +152,15 @@ static inline uint64_t rt_get_fpcr(void) { uint64_t v; __asm__ volatile("mrs %0,
 static inline uint64_t rt_get_fpsr(void) { uint64_t v; __asm__ volatile("mrs %0, fpsr" : "=r"(v)); return v; }
 static inline void rt_set_fpcr(uint64_t v) { __asm__ volatile("msr fpcr, %0" :: "r"(v)); }
 static inline void rt_set_fpsr(uint64_t v) { __asm__ volatile("msr fpsr, %0" :: "r"(v)); }
-static inline void rt_fpcr_sync(Cpu *c) { rt_fpcr_threshold(c); }
+static inline void rt_fpcr_sync(Cpu *c) {
+    rt_fpcr_threshold(c);
+    // The C lowering handles directed rounding and NaN selection itself. Keep host
+    // arithmetic at nearest, with guest FZ, and disable default-NaN/alternate-half
+    // modes and exception traps while it runs.
+    uint64_t cur = rt_get_fpcr();
+    uint64_t want = c->fpcr & (1ull << 24);
+    if (cur != want) rt_set_fpcr(want);
+}
 #else
 // Host FP state is not the guest's here: code lifted with --simd=c keeps FPCR/FPSR in Cpu (c->fpcr, zeroed
 // with the Cpu), so the host-side reset in thread start-up has nothing to do.

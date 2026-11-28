@@ -204,7 +204,7 @@ def build_harness(work, bodies, jobs, cflags):
     for j in range(n):
         path = work / f'tests_{j}.c'
         with open(path, 'w') as f:
-            f.write('#include "cpu.h"\n')
+            f.write('#include "cpu.h"\n#include "simd.h"\n')
             for k in range(j * per, min(len(bodies), (j + 1) * per)):
                 f.write(f'void t{k}(Cpu *c) {{ {bodies[k]} }}\n')
         srcs.append(path)
