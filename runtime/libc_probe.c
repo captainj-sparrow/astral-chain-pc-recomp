@@ -303,14 +303,17 @@ static void probe_main(Cpu *c) {
     gbase = ga, hbase = ha;
     fill_random(pristine, BUF);
     memcpy(ga, pristine, BUF), memcpy(ha, pristine, BUF);
-    // page-end strings: two pages per copy, the second made inaccessible
-    page_g = plat_mem_alloc(8192), page_h = plat_mem_alloc(8192);
+    // page-end strings: two host pages per copy (platform.h plat_mem_grain), the second made inaccessible; the strings
+    // use the last 4 KiB page before it
+    uint64_t g = plat_mem_grain();
+    page_g = plat_mem_alloc(2 * g), page_h = plat_mem_alloc(2 * g);
     CHECK(page_g && page_h, "page-end blocks");
     if (!page_g || !page_h) return;
-    memset(page_g, 1, 8192), memset(page_h, 1, 8192);
-    CHECK(plat_mem_protect((uint64_t)(uintptr_t)page_g + 4096, 4096, PLAT_PROT_NONE) &&
-              plat_mem_protect((uint64_t)(uintptr_t)page_h + 4096, 4096, PLAT_PROT_NONE),
+    memset(page_g, 1, 2 * g), memset(page_h, 1, 2 * g);
+    CHECK(plat_mem_protect((uint64_t)(uintptr_t)page_g + g, g, PLAT_PROT_NONE) &&
+              plat_mem_protect((uint64_t)(uintptr_t)page_h + g, g, PLAT_PROT_NONE),
           "inaccessible page after the page-end strings");
+    page_g += g - 4096, page_h += g - 4096;
     for (int f = 0; f < F_N; f++) {
         guest[f] = ldr_symbol(names[f]);
         lifted[f] = guest[f] ? rt_dispatch_lookup(guest[f]) : NULL;

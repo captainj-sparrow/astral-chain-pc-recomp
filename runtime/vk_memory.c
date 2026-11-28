@@ -1319,7 +1319,7 @@ static void gpu_written(uint64_t addr, uint64_t size, int hold) {
         PoolRec *r = e ? e->buf : NULL;
         plat_mutex_lock(&shadow_lock);
         if (r && r->smap && addr >= r->import_lo && addr + size <= r->import_hi) {
-            uint64_t lo = (addr + 0xfff) & ~0xfffull, hi = (addr + size) & ~0xfffull;
+            uint64_t g = plat_mem_grain(), lo = (addr + g - 1) & ~(g - 1), hi = (addr + size) & ~(g - 1);   // whole host pages
             if (hold && hi > lo && hi - lo >= HOLD_MIN && mem_hold(lo, hi - lo, shadow_fetch, r)) {
                 write_back(r, addr, lo);
                 write_back(r, hi, addr + size);
@@ -1856,12 +1856,9 @@ static void mirror_fetch(void *ctx, uint64_t a, uint64_t n, void *dst) {
     plat_add64(&m_lazy_fetch_bytes, (int64_t)n);
 }
 
-// Completion thread, at the fence of a submission that left pool bytes [lo, hi) (whole pages) in the mirror: the CPU
-// loses access to them until it asks. Pages that cannot be held get their bytes now, as the copy at the end of the
-// submission would have put them, and the range is copied back from then on.
-static void mirror_hold(PoolRec *r, uint64_t lo, uint64_t hi) {
+// Pool bytes [lo, hi) from the mirror into the guest pages now, and copied back from then on.
+static void mirror_unheld(PoolRec *r, uint64_t lo, uint64_t hi) {
     uint64_t a = r->import_lo + lo, n = hi - lo;
-    if (mem_hold(a, n, mirror_fetch, r)) return;
     void *tmp = malloc(n);
     if (!tmp) rt_fatal("vk: out of memory (lazy write-back)");
     mirror_read(r, lo, n, tmp);
@@ -1869,6 +1866,21 @@ static void mirror_hold(PoolRec *r, uint64_t lo, uint64_t hi) {
     free(tmp);
     lazy_off_note(r, lo, hi);
     plat_inc64(&m_lazy_unheld);
+}
+
+// Completion thread, at the fence of a submission that left pool bytes [lo, hi) (whole pages) in the mirror: the CPU
+// loses access to them until it asks. A hold covers whole host pages (platform.h plat_mem_grain: 16 KiB on Apple
+// Silicon), so the partial host pages at the ends, and pages that cannot be held, get their bytes now, as the copy at
+// the end of the submission would have put them.
+static void mirror_hold(PoolRec *r, uint64_t lo, uint64_t hi) {
+    uint64_t g = plat_mem_grain(), a = r->import_lo + lo, b = r->import_lo + hi;
+    uint64_t ha = (a + g - 1) & ~(g - 1), hb = b & ~(g - 1);
+    if (hb <= ha || !mem_hold(ha, hb - ha, mirror_fetch, r)) {
+        mirror_unheld(r, lo, hi);
+        return;
+    }
+    if (ha > a) mirror_unheld(r, lo, ha - r->import_lo);
+    if (b > hb) mirror_unheld(r, hb - r->import_lo, hi);
 }
 
 void vk_mem_lazy_all(int on) { lazy_all = on; }

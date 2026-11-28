@@ -136,6 +136,17 @@ and the write watch. Its stress part has four threads writing a watched range
 while queries with reset run; a write that completed between two queries must be
 in the second one's list. Build and run it as its header says.
 
+Where the runtime needs a fault, it works in whole host pages, which changes
+nothing where the grain is 4 KiB:
+
+- memory.c refuses a hold that is not whole host pages; vk_memory.c holds the
+  aligned middle of a range and copies the partial host pages at its ends back, as
+  it does with any range it cannot hold.
+- romfs.c's read-fault paging fills a whole host page. `ROMFS_BASE` is only 4 KiB
+  aligned, so the image's first host page is shared with main's data and becomes
+  accessible once main is committed: its RomFS pages are filled at start.
+- libc_probe.c puts its inaccessible guard after a host page.
+
 Observed on the M6, 2026-11-28: 116 checks pass; the stress part ran about 75,000
 faulting writes against 23,000 queries with none missed. Removing the host-page
 lock from the fault handler makes it report about 10 million missed writes, so the

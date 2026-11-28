@@ -143,8 +143,10 @@ static int hold_release_locked(uint64_t a, uint64_t n) {
     return any;
 }
 
+// A hold covers whole host pages (platform.h plat_mem_grain): a smaller one shares its host page with accessible
+// memory there, and its first access would not fault.
 int mem_hold(uint64_t a, uint64_t n, MemFetch fetch, void *ctx) {
-    if (!n || ((a | n) & (PAGE - 1)) || !watched(a, n)) return 0;
+    if (!n || ((a | n) & (PAGE - 1)) || ((a | n) & (plat_mem_grain() - 1)) || !watched(a, n)) return 0;
     plat_mutex_lock(&frz_lock);
     for (int i = 0; i < nholds; i++)
         if (holds[i].lo == a && holds[i].hi == a + n && holds[i].fetch == fetch && holds[i].ctx == ctx) {

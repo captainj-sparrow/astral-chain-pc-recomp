@@ -115,12 +115,21 @@ static PlatFile *open_read(const char *path) { return plat_file_open(path); }
 // Read-fault paging for the image at ROMFS_BASE (recomp/layout.py): the game parses the image directly at that
 // fixed guest address, so the first guest read of a 4 KiB page commits it and fills it from romfs.bin.
 // MapViewOfFileEx cannot place the view there (ROMFS_BASE is not 64 KiB-aligned), hence the fault path.
+// A read faults once per host page (platform.h plat_mem_grain: 16 KiB on Apple Silicon), so the fault fills the
+// image's pages of the whole host page.
+static int romfs_fill(uint64_t addr) {
+    uint64_t g = plat_mem_grain(), end = ROMFS_BASE + ROMFS_SIZE;
+    uint64_t lo = addr & ~(g - 1), hi = lo + g;
+    if (lo < (ROMFS_BASE & ~0xfffull)) lo = ROMFS_BASE & ~0xfffull;
+    if (hi > ((end + 0xfff) & ~0xfffull)) hi = (end + 0xfff) & ~0xfffull;
+    uint64_t from = lo > ROMFS_BASE ? lo : ROMFS_BASE, to = hi < end ? hi : end;
+    if (!plat_mem_commit(lo, hi - lo)) return 0;
+    return read_at(image, (void *)(uintptr_t)from, (uint32_t)(to - from), from - ROMFS_BASE) == (int64_t)(to - from);
+}
+
 static int romfs_read_fault(uint64_t addr) {
     if (addr < ROMFS_BASE || addr >= ROMFS_BASE + ROMFS_SIZE) return 0;
-    uint64_t page = addr & ~0xfffull, off = page - ROMFS_BASE;
-    uint32_t n = (uint32_t)((ROMFS_SIZE - off < 0x1000) ? ROMFS_SIZE - off : 0x1000);
-    if (!plat_mem_commit(page, 0x1000)) return 0;
-    return read_at(image, (void *)page, n, off) == n;
+    return romfs_fill(addr);
 }
 
 static Identity identity_of(PlatFile *f) {
@@ -1093,6 +1102,12 @@ static void init_once(void *param) {
     // directly, no nn::fs calls. The range lies inside the module window reservation (PAGE_NOACCESS), so pages are
     // committed and filled from the image on the first guest read fault (romfs_read_fault).
     mem_read_fault_hook(romfs_read_fault);   // after memory.c's held ranges
+    // A host page the image shares with main's data (ROMFS_BASE is 4 KiB-aligned only) is accessible once main's
+    // pages there are committed, and its first read would not fault: such end pages are filled now.
+    uint64_t g = plat_mem_grain();
+    if (g > 0x1000 && (ROMFS_BASE & (g - 1))) need(romfs_fill(ROMFS_BASE), "filling the image's first host page");
+    if (g > 0x1000 && ((ROMFS_BASE + ROMFS_SIZE) & (g - 1)))
+        need(romfs_fill(ROMFS_BASE + ROMFS_SIZE - 1), "filling the image's last host page");
     verify_image(index_dir);
     const char *mm = cfg_get("AC_ROMFS_MMAP");
     if (mm && strcmp(mm, "0")) {
