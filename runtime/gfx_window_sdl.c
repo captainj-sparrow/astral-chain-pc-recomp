@@ -11,6 +11,9 @@
 // WINDOW_SIZE is in pixels. On a display that scales windows (Wayland, HiDPI) the window asks for its pixels in
 // the display's units (SDL_GetWindowDisplayScale), and SDL reports mouse positions in those units: input_sdl.c and the
 // menu scale them back (gfx_window_sdl_density).
+#ifdef __APPLE__
+#include <dlfcn.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -211,6 +214,16 @@ static void handle(const SDL_Event *e) {
     }
 }
 
+// The Vulkan loader for SDL: on macOS the one this executable links (Homebrew's, which dyld's default paths do not
+// hold), else SDL's own search.
+static const char *vulkan_path(void) {
+#ifdef __APPLE__
+    Dl_info d;
+    if (dladdr((void *)vkGetInstanceProcAddr, &d) && d.dli_fname) return d.dli_fname;
+#endif
+    return NULL;
+}
+
 static void window_main(void *arg) {
     (void)arg;
     g_window_tid = plat_thread_id();
@@ -220,7 +233,7 @@ static void window_main(void *arg) {
     if (!g_video_ok) rt_log("gfx: SDL video init failed (%s)", SDL_GetError());
     // SDL's Vulkan queries need its Vulkan loader, which a window would load at creation: the instance and the device
     // are made before the window.
-    else if (!SDL_Vulkan_LoadLibrary(NULL)) {
+    else if (!SDL_Vulkan_LoadLibrary(vulkan_path())) {
         rt_log("gfx: SDL cannot load Vulkan (%s)", SDL_GetError());
         g_video_ok = 0;
     } else {
@@ -240,7 +253,11 @@ static void window_main(void *arg) {
 static void video_start(void *arg) {
     (void)arg;
     plat_event_init(&g_video_ready, 1, 0);
+#ifdef __APPLE__
+    plat_main_run(window_main, NULL);   // AppKit: the process's first thread only
+#else
     if (!plat_thread_spawn(window_main, NULL, "window", 0)) rt_fatal("gfx: cannot start the window thread");
+#endif
     plat_event_wait(&g_video_ready);
 }
 

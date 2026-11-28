@@ -28,6 +28,13 @@ void plat_thread_join(PlatThread *t);     // waits for fn to return, then frees 
 // Waits at most ns for fn to return: 1 when it did (t is freed), 0 when it still runs (t stays valid).
 int plat_thread_join_ns(PlatThread *t, uint64_t ns);
 void plat_thread_detach(PlatThread *t);   // frees t; the thread runs on
+#ifdef __APPLE__
+// AppKit (SDL's window and its events) runs on the process's first thread only. main() hands its work to a thread of
+// its own (PLAT_STACK_DEFAULT, named "main"), and exits the process with body's result when body returns; the first
+// thread runs what plat_main_run gives it meanwhile. plat_main_run returns at once; fn may run forever.
+_Noreturn void plat_main_handoff(int (*body)(int argc, char **argv), int argc, char **argv);
+void plat_main_run(void (*fn)(void *arg), void *arg);
+#endif
 // Restricts t (NULL: the calling thread) to the logical processors in mask (bit n = processor n of the first group).
 // Returns the previous mask, 0 on failure.
 uint64_t plat_thread_affinity(PlatThread *t, uint64_t mask);

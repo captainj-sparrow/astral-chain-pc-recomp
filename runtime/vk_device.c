@@ -95,10 +95,14 @@ static int create_instance(void) {
     if (vk_hdr_wanted() && instance_ext_present(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME))   // HDR10 surface formats
         ext[n_ext++] = VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME;
     vk_xess_instance_exts(ext, &n_ext, 24);
+    // MoltenVK (macOS) is a portability implementation: the loader lists it only for an instance that asks for those.
+    int portability = instance_ext_present(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    if (portability) ext[n_ext++] = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
     VkApplicationInfo app = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO, .pApplicationName = "Astral Chain Recomp",
                              .pEngineName = "Astral Chain Recomp", .apiVersion = VK_API_VERSION_1_3};
     VkInstanceCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, .pApplicationInfo = &app,
                                .enabledExtensionCount = n_ext, .ppEnabledExtensionNames = ext,
+                               .flags = portability ? VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR : 0,
                                .enabledLayerCount = validate ? 1 : 0, .ppEnabledLayerNames = layers};
     rdoc_init();
     VkResult r = vkCreateInstance(&ci, NULL, &g_vk.instance);
@@ -259,6 +263,9 @@ static int create_device(void) {
     const char *ext[88];
     uint32_t n_ext = 0;
     for (size_t i = 0; i < sizeof k_required_ext / sizeof *k_required_ext; i++) ext[n_ext++] = k_required_ext[i];
+    // A portability implementation (MoltenVK) must have its subset extension enabled (vulkan_beta.h names it).
+    int portability = has_ext(ep, ne, "VK_KHR_portability_subset");
+    if (portability) ext[n_ext++] = "VK_KHR_portability_subset";
 
     FeatureChain *c = calloc(1, sizeof *c);
     void **tail = &c->f2.pNext;
@@ -387,9 +394,12 @@ static int create_device(void) {
     else if (!h->shaderInt64) miss = "shaderInt64";
     else if (!h->samplerAnisotropy) miss = "samplerAnisotropy";
     else if (!h->independentBlend) miss = "independentBlend";
-    else if (!h->geometryShader) miss = "geometryShader";
+    // No pipeline has a geometry stage (the translator makes vertex, fragment and compute shaders); the feature guards
+    // fragment shaders that read the primitive id or layer, which MoltenVK gives Metal shaders without it.
+    else if (!h->geometryShader && !portability) miss = "geometryShader";
     else if (!h->textureCompressionBC) miss = "textureCompressionBC";
     if (miss) { rt_log("vk: required feature missing on %s: %s", g_vk.props.deviceName, miss); free(c); return 0; }
+    if (!h->geometryShader) rt_log("vk: %s has no geometryShader feature (a portability implementation): going on", g_vk.props.deviceName);
     if (!c->fault.deviceFault) g_vk.has_device_fault = 0;   // vkGetDeviceFaultInfoEXT needs the feature, not just the extension
     if (g_vk.has_nv_low_latency2 && !c->pid.presentId) g_vk.has_nv_low_latency2 = 0;   // the extension alone is not enough
     if (g_vk.has_amd_anti_lag && !c->antilag.antiLag) g_vk.has_amd_anti_lag = 0;

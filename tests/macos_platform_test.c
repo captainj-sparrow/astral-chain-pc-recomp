@@ -169,9 +169,12 @@ static void sched_tests(void) {
     plat_mutex_init(&tcv.m); plat_cond_init(&tcv.c);
     tcv.ready = 0; tcv.value = 0;
     plat_mutex_lock(&tcv.m);
-    int ok = plat_cond_wait_ns(&tcv.c, &tcv.m, 1000000ull);   // 1 ms, nobody signals
+    uint64_t w0 = plat_now_ns();
+    int ok = plat_cond_wait_ns(&tcv.c, &tcv.m, 2000000ull);   // 2 ms, nobody signals
+    uint64_t waited = plat_now_ns() - w0;
     plat_mutex_unlock(&tcv.m);
     CHECK(!ok, "cond_wait_ns times out (returns 0)");
+    CHECK(waited >= 2000000ull, "cond_wait_ns waits its timeout (%.3f ms)", waited / 1e6);
 
     // reader-writer lock
     PlatMutex rw = PLAT_MUTEX_INIT;
@@ -232,6 +235,15 @@ static void sched_tests(void) {
     uint64_t b = plat_now_ns();
     CHECK(b >= a, "monotonic clock");
     CHECK(b - a >= 1000000, "sleep_ns slept at least 1ms (%llu ns)", (unsigned long long)(b - a));
+    uint64_t worst = 0;
+    for (int i = 0; i < 50; i++) {
+        uint64_t s0 = plat_now_ns();
+        plat_wait_ns(1000000);
+        uint64_t late = plat_now_ns() - s0 - 1000000;
+        if (late > worst) worst = late;
+    }
+    CHECK(worst < 4 * PLAT_WAIT_LATE_NS, "plat_wait_ns(1 ms) at most %.3f ms late (want < %.3f)", worst / 1e6,
+          4 * PLAT_WAIT_LATE_NS / 1e6);
     CHECK(plat_counter_hz() > 0, "counter_hz > 0");
 }
 

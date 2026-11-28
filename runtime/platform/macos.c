@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/event.h>
 #include <sys/sysctl.h>
 #include <time.h>
 #include <unistd.h>
@@ -48,12 +49,32 @@ void plat_timer_1ms(void) { pthread_once(&time_once, time_init); }   // Darwin's
 
 int plat_power_full(void) { return -1; }
 
-// mach_wait_until sleeps on the high-resolution timer to an absolute deadline in mach ticks.
+// Darwin coalesces timers: mach_wait_until and nanosleep wake about half the interval late (0.5 ms for 1 ms on an M6).
+// A kqueue timer with NOTE_CRITICAL and no leeway wakes 15-30 us late, inside PLAT_WAIT_LATE_NS. One kqueue per
+// thread, closed when the thread ends; mach_wait_until where there is none.
+static pthread_key_t wait_key;
+static pthread_once_t wait_once = PTHREAD_ONCE_INIT;
+static void wait_kq_close(void *v) { close((int)(intptr_t)v - 1); }
+static void wait_init(void) { pthread_key_create(&wait_key, wait_kq_close); }
+
+static int wait_kq(void) {
+    pthread_once(&wait_once, wait_init);
+    int fd = (int)(intptr_t)pthread_getspecific(wait_key) - 1;
+    if (fd < 0 && (fd = kqueue()) >= 0) pthread_setspecific(wait_key, (void *)(intptr_t)(fd + 1));
+    return fd;
+}
+
 void plat_wait_ns(uint64_t ns) {
     uint64_t end = plat_now_ns() + ns;
-    for (uint64_t now; (now = plat_now_ns()) < end;)
-        mach_wait_until(mach_absolute_time() + ((__uint128_t)(end - now) * timebase.denom + timebase.numer - 1) /
-                                                   timebase.numer);
+    int kq = wait_kq();
+    for (uint64_t now; (now = plat_now_ns()) < end;) {
+        struct kevent64_s ev;
+        EV_SET64(&ev, 1, EVFILT_TIMER, EV_ADD | EV_ONESHOT, NOTE_NSECONDS | NOTE_CRITICAL | NOTE_LEEWAY,
+                 (int64_t)(end - now), 0, 0, 0);   // ext[1] = 0: no leeway
+        if (kq < 0 || kevent64(kq, &ev, 1, &ev, 1, 0, NULL) < 0)
+            mach_wait_until(mach_absolute_time() + ((__uint128_t)(end - now) * timebase.denom + timebase.numer - 1) /
+                                                       timebase.numer);
+    }
 }
 
 void plat_sleep_ns(uint64_t ns) { plat_wait_ns(ns); }
@@ -181,6 +202,42 @@ int plat_thread_spawn(PlatThreadFn fn, void *arg, const char *name, size_t stack
     if (!t) return 0;
     plat_thread_detach(t);
     return 1;
+}
+
+// ---- the first thread (platform.h plat_main_handoff): a queue of one function at a time, which is all the window needs.
+static PlatMutex first_m = PLAT_MUTEX_INIT;
+static PlatCond first_c = PLAT_COND_INIT;
+static void (*first_fn)(void *);
+static void *first_arg;
+static int (*main_body)(int, char **);
+static int main_argc;
+static char **main_argv;
+
+static void main_thread(void *arg) {
+    (void)arg;
+    exit(main_body(main_argc, main_argv));   // atexit handlers and stdio flushes run as after main returns
+}
+
+void plat_main_handoff(int (*body)(int argc, char **argv), int argc, char **argv) {
+    main_body = body, main_argc = argc, main_argv = argv;
+    if (!plat_thread_spawn(main_thread, NULL, "main", 0)) exit(body(argc, argv));
+    for (;;) {
+        plat_mutex_lock(&first_m);
+        while (!first_fn) plat_cond_wait(&first_c, &first_m);
+        void (*fn)(void *) = first_fn, *a = first_arg;
+        first_fn = NULL;
+        plat_cond_broadcast(&first_c);
+        plat_mutex_unlock(&first_m);
+        fn(a);
+    }
+}
+
+void plat_main_run(void (*fn)(void *arg), void *arg) {
+    plat_mutex_lock(&first_m);
+    while (first_fn) plat_cond_wait(&first_c, &first_m);
+    first_fn = fn, first_arg = arg;
+    plat_cond_broadcast(&first_c);
+    plat_mutex_unlock(&first_m);
 }
 
 // ---- priorities as QoS classes, which also decide where Apple Silicon runs a thread: background work goes to the
@@ -375,11 +432,9 @@ int plat_cond_wait_ns(PlatCond *c, PlatMutex *m, uint64_t ns) {
         return changed;
     }
     ns -= spun;
-    pthread_once(&time_once, time_init);
-    // A timeout of 0 is an error to the call, and so is an early return with nobody waking us; only ETIMEDOUT is one.
+    // The timeout is in ns whatever the clock (which only anchors it); a timeout of 0 is an error to the call.
     int r = ns ? os_sync_wait_on_address_with_timeout((void *)cv(c), seq, 4, OS_SYNC_WAIT_ON_ADDRESS_NONE,
-                                                      OS_CLOCK_MACH_ABSOLUTE_TIME,
-                                                      (uint64_t)((__uint128_t)ns * timebase.denom / timebase.numer) + 1)
+                                                      OS_CLOCK_MACH_ABSOLUTE_TIME, ns)
                : -1;
     int timed_out = !ns || (r == -1 && errno == ETIMEDOUT);
     plat_mutex_lock(m);

@@ -519,7 +519,7 @@ static void portable_paths(RtConfig *c) {
     c->profile = portable_path(exe, "AC_PROFILE_DIR", "profile", NULL, pp_profile, sizeof pp_profile, c->profile);
 }
 
-int main(int argc, char **argv) {
+static int main_body(int argc, char **argv) {
     mem_init();   // first: claim the guest address space before anything else can land there; reads astralchain.ini
     // A restart from the settings menu (gfx_present.c gfx_window_closed) starts this process while the one it replaces
     // is still exiting: its log, RomFS and saves are free once it is gone.
@@ -612,4 +612,15 @@ int main(int argc, char **argv) {
     if (!strcmp(mode, "--warm-shaders")) return vk_pipeline_warm_shaders();
     if (!strcmp(mode, "--boot")) { cfg.boot = 1; rt_boot(); return 0; }
     return usage(argv[0]);
+}
+
+// macOS runs AppKit (the window) on the first thread only: the program runs on a thread of its own (platform.h). The
+// guest address space is claimed before that thread's stack is mapped.
+int main(int argc, char **argv) {
+#ifdef __APPLE__
+    mem_init();
+    plat_main_handoff(main_body, argc, argv);
+#else
+    return main_body(argc, argv);
+#endif
 }
