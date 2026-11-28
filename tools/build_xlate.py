@@ -4,6 +4,7 @@ Copies tools/vendor/ryujinx to build/xlate/ryujinx, applies tools/xlate/patches/
 byte-identical; 0001-0004 are MNG's, 0005-0011 are ours, 0012 is the TotK Recomp's motion patch), then runs `dotnet
 publish`. Needs the .NET 10 SDK, the MSVC build tools and vswhere.exe (docs/building.md). Run with .venv. On Linux it builds build/xlate/ac_xlate for linux-x64, which
 NativeAOT links with the system's clang (no MSVC); NativeAOT builds for the OS it runs on only.
+On Apple Silicon macOS it builds build/xlate/ac_xlate for osx-arm64 with Apple clang.
 
 Next to the exe it writes ac_xlate.id: the translator identity, a sha256 over everything the build reads (this script,
 Program.cs, the csproj, the patches, the vendor tree). runtime/gfx_shader.c puts it into every shader cache key, so a
@@ -18,6 +19,7 @@ translator change re-keys the cache without a hand-made KEY_VERSION bump. --id-o
 import argparse
 import hashlib
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -30,6 +32,7 @@ MNG_VENDOR = ROOT / "refs" / "MacNativeGames" / "vendor" / "ryujinx"
 XLATE = ROOT / "tools" / "xlate"
 BUILD = ROOT / "build" / "xlate"
 WIN = os.name == "nt"
+MAC = sys.platform == "darwin"
 EXE = "ac_xlate.exe" if WIN else "ac_xlate"
 VSWHERE_DIR = Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Microsoft Visual Studio" / "Installer"
 
@@ -146,6 +149,10 @@ def main() -> None:
     if a.id_only:
         write_identity(BUILD / EXE)
         return
+    if MAC and platform.machine().lower() not in ("arm64", "aarch64"):
+        sys.exit("the macOS shader translator requires native Apple Silicon Python (not Rosetta)")
+    if MAC and (a.llvm or a.sysroot):
+        sys.exit("--llvm and --sysroot are Linux options; macOS uses the Apple SDK and linker")
     started = time.time()
     dotnet = shutil.which("dotnet")
     if not dotnet:
@@ -166,7 +173,8 @@ def main() -> None:
     out = BUILD / "publish"
     shutil.rmtree(out, ignore_errors=True)
     cmd = [
-        dotnet, "publish", str(work / "ac_xlate.csproj"), "-c", "Release", "-r", "win-x64" if WIN else "linux-x64",
+        dotnet, "publish", str(work / "ac_xlate.csproj"), "-c", "Release", "-r",
+        "win-x64" if WIN else "osx-arm64" if MAC else "linux-x64",
         "-p:PublishAot=true", "-p:InvariantGlobalization=true", f"-p:RyuSrc={src}", "-o", str(out),
     ]
     if a.llvm:

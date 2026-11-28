@@ -52,6 +52,23 @@ or dirty-tracking correctness on this Mac.
 
 ## CPU and operating-system gaps
 
+The shader translator now builds for `osx-arm64`. With Homebrew's .NET 10 SDK:
+
+```sh
+export PATH="$(brew --prefix dotnet@10)/bin:$PATH"
+export DOTNET_ROOT="$(brew --prefix dotnet@10)/libexec"
+# Homebrew's SDK links against its OpenSSL and Brotli libraries.
+export LIBRARY_PATH="$(brew --prefix openssl@4)/lib:$(brew --prefix)/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
+.venv/bin/python tools/build_xlate.py
+.venv/bin/python tools/xlate_smoke.py
+```
+
+Verified locally: native ARM64 output, valid Vulkan 1.3 SPIR-V with and without
+alpha discard, and service recovery after malformed input. This local Homebrew
+build depends on installed libraries built for macOS 27; it is not a portable
+release for earlier macOS versions. If restore stalls on unreachable IPv6 routes,
+the process-local `DOTNET_SYSTEM_NET_DISABLEIPV6=1` setting allows an IPv4 retry.
+
 CPU baseline on the M6 (Apple clang 21, 2026-11-28):
 
 - `python tests/flags_check.py`: 2,000,484 operand pairs at each of `-O0` and
@@ -68,8 +85,6 @@ scheduler, the generated game's functions or gameplay.
   own memory tracking, thread interruption and fiber implementations; Linux's
   userfaultfd/PAGEMAP_SCAN cannot be used directly.
 - The build selects x86 flags and Linux linking on every non-Windows host.
-- `tools/build_xlate.py` selects linux-x64 on non-Windows hosts; macOS needs an
-  osx-arm64 build and verification of its native dependencies.
 
 ## References
 
