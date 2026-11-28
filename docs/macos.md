@@ -98,6 +98,44 @@ generated chunks and both dispatch tables compile to Mach-O ARM64 objects at
 
 - The build selects x86 flags and Linux linking on every non-Windows host.
 
+## Address space on Apple Silicon
+
+Guest addresses equal host addresses and must stay below 2^39 (IPC buffer
+descriptors encode 39 bits). On Apple Silicon a process gets little of that range.
+XNU (`osfmk/vm/vm_map.c`, `vm_map_range_configure`; `osfmk/mach/arm/vm_param.h`)
+fixes the layout:
+
+- shared region from 6 GiB (on this Mac it reaches about 63 GiB);
+- commpage at 63-64 GiB;
+- GPU carve-out at 64-448 GiB (`MACH_VM_MIN/MAX_GPU_CARVEOUT_ADDRESS`), unusable:
+  a fixed allocation there fails with `KERN_NO_SPACE`, even after deallocating;
+- before `main` runs, libmalloc reserves about 24 GiB, plus a 20 MiB region, at a
+  random place in the 64 GiB left at 448-512 GiB.
+
+A Mach-O zero-fill segment at a fixed address cannot claim the space earlier, as
+Wine does on x86: arm64 executables must be PIE, so every segment slides with the
+image, and exec kills a process whose image spans the shared region.
+
+The module window (from `0x70_0000_0000`, with RomFS at its fixed address in the
+game), the kernel region and the host-function window are at 448-460 GiB already.
+The stack and heap block (6 GiB) and the 64 GiB alias region do not fit below the
+modules. So memory.c then reserves the block and an alias region right after it in
+one free hole anywhere below 2^39, shrinking the alias region in 4 GiB steps down
+to 8 GiB, as MacNativeGames does for TOTK on macOS 27. The game maps about 3.3 GiB
+there. A process that finds no place re-executes itself (`reexec_or_fail`) and gets
+libmalloc's reservation elsewhere. The ASLR region then starts at the modules, so
+it still holds all guest memory. Windows and Linux keep their layout, since the
+search below the modules succeeds there.
+
+`tests/macos_memory_test.c` runs memory.c on the platform layer without the game:
+layout, QueryMemory around the module window, kernel region and alias region, the
+heap, physical memory, a freeze thawed by a write and a hold fetched by a read.
+Observed on the M6, 2026-11-28: every run found a layout, with the stack at
+448-500 GiB and an alias region of 8-16 GiB (44 GiB once, when libmalloc's
+reservation came after the free space), in about 0.3 s; 26 checks pass. Whether
+Astral Chain itself accepts an alias region below 64 GiB is still to be verified
+with the game.
+
 ## Darwin platform backend
 
 `runtime/platform/macos.c` (scheduling), `macos_mem.c` (memory and faults) and

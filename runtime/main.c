@@ -333,7 +333,11 @@ static void check_layout(void) {
            (unsigned long long)g->aslr.base, (unsigned long long)g->aslr.size, (unsigned long long)g->stack.base,
            (unsigned long long)g->heap.base, (unsigned long long)g->alias.base, (unsigned long long)g->alias.size,
            (unsigned long long)g->kernel.base, (unsigned long long)g->hostfn.base);
-    CHECK(g->alias.base + g->alias.size <= lay[0].base && g->heap.base + g->heap.size <= g->alias.base,
+    // The stack and heap block and the alias region above it lie below the modules, or (Apple Silicon, memory.c) above
+    // the host-function window; the ASLR region holds them all.
+    CHECK((g->alias.base + g->alias.size <= lay[0].base || g->stack.base >= g->hostfn.base + g->hostfn.size) &&
+              g->heap.base + g->heap.size <= g->alias.base && g->aslr.base <= lay[0].base &&
+              g->aslr.base <= g->stack.base && g->aslr.base + g->aslr.size == RT_ADDRESS_LIMIT,
           "guest regions overlap");
 }
 
